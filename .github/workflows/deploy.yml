@@ -1,0 +1,39 @@
+name: Wdrożenie na Kylos
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency: deploy
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pobranie plików z repo
+        uses: actions/checkout@v4
+
+      - name: Utworzenie konfiguracji z sekretów
+        env:
+          ORS_API_KEY: ${{ secrets.ORS_API_KEY }}
+          NAKORDONI_KEY: ${{ secrets.NAKORDONI_KEY }}
+        run: |
+          php -r '
+            $c = [
+              "ors_api_key"   => getenv("ORS_API_KEY") ?: "",
+              "nakordoni_key" => getenv("NAKORDONI_KEY") ?: "",
+              "deployed_at"   => gmdate("c"),
+            ];
+            file_put_contents("public/app/config.php", "<?php\nreturn " . var_export($c, true) . ";\n");
+          '
+
+      - name: Wysyłka na serwer przez FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ${{ vars.FTP_PROTOCOL || 'ftps' }}
+          local-dir: ./public/
+          server-dir: ./
