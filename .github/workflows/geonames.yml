@@ -1,0 +1,26 @@
+name: Baza miast GeoNames
+
+# Ręcznie, np. raz na kwartał: Actions → „Baza miast GeoNames” → Run workflow.
+# Buduje cloudflare/miasta.json i zapisuje go w repo. Potem trzeba wdrożyć Workera.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Pobranie plików z repo
+        uses: actions/checkout@v5
+
+      - name: Budowa bazy miast z GeoNames
+        run: python3 scripts/geonames.py
+
+      - name: Zapis do repo
+        run: |
+          git config user.name "Baza miast (GitHub Actions)"
+          git config user.email "actions@users.noreply.github.com"
+          git add cloudflare/miasta.json
+          git diff --cached --quiet && echo "Bez zmian" || (git commit -m "Baza miast GeoNames: aktualizacja" && git push)
