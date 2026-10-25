@@ -629,15 +629,17 @@ async function handleRoute(request, env, cors) {
     await caches.default.put(cacheKey, new Response(JSON.stringify(route), { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'max-age=' + CACHE_SECONDS } }));
   } else {
     // limit ORS wyczerpany – nie pytamy do północy UTC (każde kolejne zapytanie i tak by odbiło)
-    if (env.NK && await env.NK.get('ors:quota')) {
-      return json({ error: 'Dzienny limit wyznaczania tras został wyczerpany. Nowe trasy będą dostępne po północy UTC (ok. 1:00–2:00 w Polsce). Zapisane i wcześniej liczone trasy działają.', quota: true }, 429, cors);
+    const q = env.NK && await env.NK.get('ors:quota');
+    if (q) {
+      return json({ error: q === '429' ? 'Za dużo tras naraz – spróbuj ponownie za minutę.' : 'Limit wyznaczania tras w OpenRouteService został wyczerpany. Spróbuj później – zapisane i wcześniej liczone trasy działają.', quota: true }, 429, cors);
     }
     const res = await orsRoute(buildPayload(variant, { points, avoidHighways, avoidFerries, avoidCountries, dims }), env, heavy);
     if (!res.ok) {
-      if (env.NK && (res.status === 403 || res.status === 429) && /quota|limit/i.test(String(res.error))) {
-        const now = new Date(), mid = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
-        await env.NK.put('ors:quota', now.toISOString(), { expirationTtl: Math.max(60, Math.round((mid - now) / 1000)) });
-        return json({ error: 'Dzienny limit wyznaczania tras został wyczerpany. Nowe trasy będą dostępne po północy UTC (ok. 1:00–2:00 w Polsce).', quota: true }, 429, cors);
+      if (env.NK && (res.status === 403 || res.status === 429)) {
+        // 429 = limit na minutę (40/min) – przerwa 1 min; 403 = limit dzienny – przerwa 30 min, potem próbujemy znowu
+        const ttl = res.status === 429 ? 60 : 1800;
+        await env.NK.put('ors:quota', String(res.status), { expirationTtl: ttl });
+        return json({ error: res.status === 429 ? 'Za dużo tras naraz – spróbuj ponownie za minutę.' : 'Limit wyznaczania tras w OpenRouteService został wyczerpany. Spróbuj później – zapisane i wcześniej liczone trasy działają.', quota: true }, 429, cors);
       }
       return json({ error: res.error }, res.status || 502, cors);
     }
