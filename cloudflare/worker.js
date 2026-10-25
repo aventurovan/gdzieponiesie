@@ -1,4 +1,5 @@
 // gdzieponiesie.pl — pośrednik do OpenRouteService (Cloudflare Worker), wersja 15
+// v27: własna baza ok. 20 tys. miejscowości z GeoNames (polskie nazwy), ORS tylko gdy w bazie nic nie ma.
 // v26: ok. 450 miast i miejscowości turystycznych Europy w słowniku nazw.
 // v25: tylko miejscowości (bez ulic i miejsc), ok. 250 polskich nazw miast Europy.
 // v24: wyszukiwanie miejsc: polskie nazwy miast (Londyn, Ateny…), najpierw miejscowości bez ulic i stacji, etykiety po polsku.
@@ -18,11 +19,13 @@
 // Jedno zapytanie = jeden wariant trasy, żeby wolna trasa nie blokowała pozostałych.
 // Sekret w ustawieniach Workera: ORS_API_KEY
 
+import MIASTA from './miasta.json';   // baza miejscowości z GeoNames (scripts/geonames.py)
+
 const ORS_URL = 'https://api.openrouteservice.org/v2/directions/driving-car/geojson';
 const ORS_URL_HGV = 'https://api.openrouteservice.org/v2/directions/driving-hgv/geojson';
 const ALLOWED_ORIGINS = ['https://gdzieponiesie.pl', 'https://www.gdzieponiesie.pl'];
 const CACHE_SECONDS = 6 * 3600;
-const CACHE_VERSION = 'v26';
+const CACHE_VERSION = 'v27';
 const GEOCODE_URL = 'https://api.openrouteservice.org/geocode/autocomplete';
 const GEOCODE_CACHE_SECONDS = 24 * 3600;
 const ORS_TIMEOUT_MS = 40000;
@@ -447,6 +450,49 @@ const EXONYMS = Object.fromEntries(Object.entries({
   'Kusadasi': 'Kuşadası',
 }).map(([pl, local]) => [pl.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/ł/g, 'l'), [local, pl]]));
 
+const KRAJ_PL = { AD: 'Andora', AL: 'Albania', AT: 'Austria', BA: 'Bośnia i Hercegowina', BE: 'Belgia', BG: 'Bułgaria', BY: 'Białoruś',
+  CH: 'Szwajcaria', CY: 'Cypr', CZ: 'Czechy', DE: 'Niemcy', DK: 'Dania', EE: 'Estonia', ES: 'Hiszpania', FI: 'Finlandia', FR: 'Francja',
+  GB: 'Wielka Brytania', GE: 'Gruzja', GI: 'Gibraltar', GR: 'Grecja', HR: 'Chorwacja', HU: 'Węgry', IE: 'Irlandia', IS: 'Islandia', IT: 'Włochy',
+  LI: 'Liechtenstein', LT: 'Litwa', LU: 'Luksemburg', LV: 'Łotwa', MC: 'Monako', MD: 'Mołdawia', ME: 'Czarnogóra', MK: 'Macedonia Północna',
+  MT: 'Malta', NL: 'Holandia', NO: 'Norwegia', PL: 'Polska', PT: 'Portugalia', RO: 'Rumunia', RS: 'Serbia', SE: 'Szwecja', SI: 'Słowenia',
+  SK: 'Słowacja', SM: 'San Marino', TR: 'Turcja', UA: 'Ukraina', VA: 'Watykan', XK: 'Kosowo' };
+const foldName = (s) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/ł/g, 'l').replace(/ß/g, 'ss');
+
+// indeks miejscowości budowany raz na instancję Workera
+let CITY_IDX = null;
+function cityIndex() {
+  if (CITY_IDX) return CITY_IDX;
+  // polska nazwa → nazwa lokalna ze słownika (np. Wiedeń → Wien), żeby działało też „Wien”
+  const exLocalByPl = {}, exPlByLocal = {};
+  for (const [, [local, pl]] of Object.entries(EXONYMS)) { exLocalByPl[foldName(pl)] = local; exPlByLocal[foldName(local)] = pl; }
+  CITY_IDX = MIASTA.miasta.map(([name, pl, ascii, lat, lon, cc, pop]) => {
+    const plName = pl || exPlByLocal[foldName(name)] || exPlByLocal[foldName(ascii || name)] || '';
+    const keys = new Set([name, pl, ascii, plName, exLocalByPl[foldName(plName)] || ''].filter(Boolean).map(foldName));
+    return { name, pl: plName, lat, lon, cc, pop, keys: [...keys] };
+  });
+  return CITY_IDX;
+}
+function searchCities(q) {
+  const fq = foldName(q.trim());
+  if (fq.length < 2) return [];
+  const hits = [];
+  for (const c of cityIndex()) {
+    let s = 0;
+    for (const k of c.keys) {
+      if (k === fq) { s = 3; break; }
+      if (k.startsWith(fq)) s = Math.max(s, 2);
+      else if (s < 1 && (k.includes(' ' + fq) || k.includes('-' + fq))) s = 1;
+    }
+    if (s) hits.push([s, c]);
+  }
+  hits.sort((a, b) => b[0] - a[0] || b[1].pop - a[1].pop);
+  return hits.slice(0, 6).map(([, c]) => {
+    const shown = c.pl || c.name;
+    return { name: shown, label: shown + (c.pl && foldName(c.pl) !== foldName(c.name) ? ' (' + c.name + ')' : '') + ', ' + (KRAJ_PL[c.cc] || c.cc),
+      lon: c.lon, lat: c.lat, country: c.cc };
+  });
+}
+
 async function handleGeocode(url, env, cors) {
   if (!env.ORS_API_KEY) {
     return json({ error: 'Worker nie ma sekretu ORS_API_KEY.' }, 500, cors);
@@ -459,6 +505,10 @@ async function handleGeocode(url, env, cors) {
   const cacheKey = new Request('https://cache.gdzieponiesie.internal/geo/' + await sha256('g5|' + q.toLowerCase()));
   const cached = await caches.default.match(cacheKey);
   if (cached) return json(await cached.json(), 200, cors, { 'X-Cache': 'HIT' });
+
+  // 0) własna baza miejscowości (GeoNames): polskie i oryginalne nazwy, duże miasta na górze
+  const local = searchCities(q);
+  if (local.length) return json({ results: local, source: 'geonames' }, 200, cors, { 'X-Source': 'geonames' });
 
   // 1) polskie nazwy miast (Londyn, Ateny, Wiedeń…) → nazwa, którą zna geokoder
   const fold = (s) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/ł/g, 'l');

@@ -541,7 +541,7 @@ const geoCache = {};
 async function geocode(q){
   if(geoCache[q]) return geoCache[q];
   const r = await getJSON(CONFIG.routeApi + '/geocode?q=' + encodeURIComponent(q));
-  return (geoCache[q] = (r.results || []).map(x => ({...x, name: x.label.split(',')[0]})));
+  return (geoCache[q] = (r.results || []).map(x => ({...x, name: x.name || x.label.split(',')[0]})));
 }
 let sugFor = null, sugT;
 function bindSuggest(inp){
@@ -551,7 +551,8 @@ function bindSuggest(inp){
     if(q.length < 3){ $('#sug').hidden = true; return; }
     sugT = setTimeout(async () => {
       try{ const res = await geocode(q); sugFor = inp;
-        $('#sug').innerHTML = res.slice(0, 6).map((r, i) => `<li><button type="button" data-i="${i}">${esc(r.name)}<small>${esc(r.label)}</small></button></li>`).join('');
+        $('#sug').innerHTML = res.slice(0, 6).map((r, i) => `<li><button type="button" data-i="${i}">${esc(r.name)}<small>${esc(r.label)}</small></button></li>`).join('')
+          + '<li class="sug-src">Miejscowości: GeoNames (CC BY 4.0)</li>';
         $('#sug').hidden = !res.length; $('#sug')._res = res;
       }catch(e){ $('#sug').hidden = true; }
     }, 350);
