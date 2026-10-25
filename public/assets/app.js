@@ -324,7 +324,7 @@ function drawML(){
   mlMarker('', 'mk-a', [a[1], a[2]], R.fromName); mlMarker('', 'mk-b', [z[1], z[2]], R.toName);
   (R.via || []).forEach((p, i) => mlMarker(String(i + 1), 'mk-via', [p.lon, p.lat], 'Przez: ' + p.name));
   nights().stops.forEach((s, i) => mlMarker(`<span>${i + 1}</span>`, 'mk-night', [s.lon, s.lat], `Nocleg ${i + 1}: ${s.place}`));
-  if(S.tab === 'noclegi') campsAll().forEach(x => mlMarker(x.kind === 'kamper' ? 'P' : '⛺', 'mk-camp ' + x.kind, [x.lon, x.lat], (x.name || 'Kemping') + ` (${x.kind === 'kamper' ? 'dla kamperów' : 'kemping'})`));
+  if(false) campsAll().forEach(x => mlMarker(x.kind === 'kamper' ? 'P' : '⛺', 'mk-camp ' + x.kind, [x.lon, x.lat], (x.name || 'Kemping') + ` (${x.kind === 'kamper' ? 'dla kamperów' : 'kemping'})`));
   if(LPG.show && LPG.items && LPG.key === lpgKey()) LPG.items.forEach(x => mlMarker('LPG', 'mk-lpg', [x.lon, x.lat], 'LPG: ' + (x.name || 'stacja')));
   // dopasowanie widoku do trasy
   const b = new maplibregl.LngLatBounds(); R.chain.forEach(p => b.extend([p[1], p[2]]));
@@ -1277,10 +1277,10 @@ function renderExtras(){
   $('#nights').innerHTML = `<div class="nt-lim"><span>Dziennie jadę do</span><span class="st-ctl"><button class="round sm" data-dz="-50" aria-label="Mniej km dziennie">−</button><b>${fmt(S.dzien)} km</b><button class="round sm" data-dz="50" aria-label="Więcej km dziennie">+</button></span></div>
       <ol class="days">${n.days.map((d, i) => { const s = n.stops[i] || {lat: R.chain[R.chain.length - 1][2], lon: R.chain[R.chain.length - 1][1]};
         const from = i === 0 ? R.fromName : stopName(n.stops[i - 1]), to = i < n.stops.length ? stopName(n.stops[i]) : R.toName;
-        return `<li><span class="dn">${i + 1}</span><span class="dd"><b>${esc(from)} → ${esc(to)}</b><small>${fmt(Math.round(d.km))} km, ok. ${fmt(d.h, 1)} h jazdy${d.ferry ? ', z promem' : ''}</small>${campsHtml(s.lat, s.lon)}${p4n(s.lat, s.lon)}</span></li>`; }).join('')}</ol>
-      <p class="fine">Miejsca noclegów są orientacyjne – punkty na trasie po przejechaniu dziennego limitu.${API() ? ' Kempingi i miejsca dla kamperów w promieniu 15 km: © współtwórcy OpenStreetMap.' : ''}</p>`;
+        return `<li><span class="dn">${i + 1}</span><span class="dd"><b>${esc(from)} → ${esc(to)}</b><small>${fmt(Math.round(d.km))} km, ok. ${fmt(d.h, 1)} h jazdy${d.ferry ? ', z promem' : ''}</small>${p4n(s.lat, s.lon)}</span></li>`; }).join('')}</ol>
+      <p class="fine">X</p>`;
   if(S.tab === 'noclegi') loadNames(n.stops);
-  if(S.tab === 'noclegi') loadCamps(n.stops.concat([{lat: R.chain[R.chain.length - 1][2], lon: R.chain[R.chain.length - 1][1]}]));
+  if(false) loadCamps(n.stops.concat([{lat: R.chain[R.chain.length - 1][2], lon: R.chain[R.chain.length - 1][1]}]));
   // profil wysokości
   const pr = profile(), ev = $('#elev');
   if(!pr){ ev.hidden = true; ev.innerHTML = ''; }
