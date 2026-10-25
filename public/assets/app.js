@@ -909,7 +909,7 @@ function renderDeskExtra(f, t, fc){
   box.innerHTML = `<div class="sum-card"><div><small>Koszt podróży w jedną stronę</small><b>${money(total)}${t.open ? '+' : ''}</b>
       <span>paliwo ${money(f.e)}, opłaty ${money(t.e)}${fc ? `, prom od ${money(fc.od)}` : ''}</span></div>
       <button class="btn" id="printBtn">Drukuj plan</button></div>${cmp}`;
-  $('#printBtn').onclick = () => window.print();
+  $('#printBtn').onclick = printPlan;
   box.querySelectorAll('[data-war]').forEach(b => b.onclick = () => { S.route.war = {...(S.route.war || {}), [R.dest]: b.dataset.war}; store.set('route', S.route); setRoute(true); });
 }
 
@@ -1298,6 +1298,7 @@ function renderSaved(){
 document.addEventListener('click', e => {
   if(e.target.closest('#shareBtn')) shareTrip();
   if(e.target.closest('#saveBtn')) saveTrip();
+  if(e.target.closest('#printBtn2')) printPlan();
   if(e.target.closest('.sv-t')){ savedOpen = !savedOpen; renderSaved(); }
   const o = e.target.closest('[data-sv]'); if(o){ const x = SAVED.find(s => s.id === o.dataset.sv); if(x){ applyTrip(x.st); window.scrollTo(0, 0); } }
   const d = e.target.closest('[data-svdel]'); if(d){ SAVED = SAVED.filter(s => s.id !== d.dataset.svdel); store.set('saved', SAVED); renderSaved(); }
@@ -1309,7 +1310,8 @@ const nightsOpenNow = () => S.nightsOpen == null ? isDesk() : S.nightsOpen;
 function renderExtras(){
   // przyciski
   $('#actions').innerHTML = `<button class="btn ghost" id="shareBtn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7M16 6l-4-4-4 4M12 2v13"/></svg>Udostępnij</button>
-    <button class="btn ghost" id="saveBtn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-6-4-6 4z"/></svg>Zapisz trasę</button>`;
+    <button class="btn ghost" id="saveBtn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-6-4-6 4z"/></svg>Zapisz trasę</button>
+    <button class="btn ghost" id="printBtn2" aria-label="Drukuj plan"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9V3h12v6M6 18H4v-7h16v7h-2M6 14h12v7H6z"/></svg><span class="pr-l">Drukuj</span></button>`;
   // noclegi – osobna zakładka
   const n = nights();
   $('#nightsHead').innerHTML = `<small>${esc(R.fromName)} – ${esc(R.toName)}, ${fmt(Math.round(R.km))} km</small><b>${n.stops.length ? `${n.stops.length} ${n.stops.length === 1 ? 'nocleg' : n.stops.length < 5 ? 'noclegi' : 'noclegów'}` : 'Bez noclegu'}</b><span>${n.days.length} ${n.days.length === 1 ? 'dzień' : 'dni'} jazdy po maks. ${fmt(S.dzien)} km</span>`;
@@ -1334,6 +1336,78 @@ function renderExtras(){
       c.addEventListener('mouseleave', () => { if(hoverMk) hoverMk.remove(); }); }
   }
   renderSaved();
+}
+
+
+/* ---------- wydruk planu: strona 1 – podsumowanie, strona 2 – lista do odhaczenia ---------- */
+function printPlan(){ buildPrint(); window.print(); }
+addEventListener('beforeprint', () => { if(R) buildPrint(); });
+function buildPrint(){
+  let el = document.getElementById('printDoc'); if(!el){ el = document.createElement('div'); el.id = 'printDoc'; document.body.append(el); }
+  const v = V(), c = costsOf(R), n = nights(), fc = ferryCost();
+  const alt = R.api ? ((ALTS.find(([k]) => ALT[k] === R) || [, ''])[1]) : R.war.n;
+  const fn = S.fuel === 'on' ? 'ON' : 'Pb 95';
+  const date = new Date().toLocaleDateString('pl-PL');
+  const head = sub => `<header class="pd-h"><div><small>Plan podróży${sub}</small><h1>${esc(R.fromName)} → ${esc(R.toName)}</h1>
+    <small>${esc(alt || '')}${alt ? ', ' : ''}${TYP_N[v.typ].toLowerCase()}, ${fmt(+v.wys, 2)} m wys., ${fmt(+v.dl, 1)} m dł., ${fn} ${fmt(+S.cons, 1)} l/100 km</small></div>
+    <div class="pd-brand"><b>gdzieponiesie.pl</b><small>wydruk ${date}</small></div></header>`;
+  const stat = (b, s) => `<div class="pd-stat"><small>${s}</small><b>${b}</b></div>`;
+  const sec = t => `<h2>${t}</h2>`;
+  const box = (t, s) => `<div class="pd-box"><i></i><span>${esc(t)}${s ? `<small>${esc(s)}</small>` : ''}</span></div>`;
+  const stopNm = i => i < n.stops.length ? stopName(n.stops[i]) : R.toName;
+  // opłaty
+  const tolls = R.order.flatMap(cc => tollsFor(cc).map(x => ({cc, ...x})));
+  const tsum = tollSum();
+  const tRows = tolls.map(x => `<tr><td>${esc(KR[x.cc].n)}</td><td>${esc(x.k || '')}</td><td class="r"><b>${x.free ? money(0, false) : x.e != null ? 'ok. ' + money(x.e, false) : 'wg km'}</b></td></tr>`).join('');
+  // paliwo
+  const cs = R.order.filter(cc => KR[cc][S.fuel]); const min = Math.min(...cs.map(cc => KR[cc][S.fuel]));
+  const cheap = cs.find(cc => KR[cc][S.fuel] === min);
+  const fRows = cs.map(cc => `<tr><td>${esc(KR[cc].n)}</td><td class="r">${litre(KR[cc][S.fuel])} ${curUnit()}</td></tr>`).join('');
+  // noclegi
+  const dRows = n.days.map((d, i) => `<tr><td><b>${i + 1}</b></td><td>${esc(i === 0 ? R.fromName : stopNm(i - 1))} → ${esc(stopNm(i))}</td><td class="r">${fmt(Math.round(d.km))} km</td><td class="r">${fmt(d.h, 1)} h</td></tr>`).join('');
+  // granice
+  const B = R.borders;
+  const bRows = B.map(b => { const w = b.cps ? b.cps[0] : waitOf(b);
+    return `<tr><td>${esc(KR[b.nk ? b.nk[0] : 'PL'] ? (b.nk ? KR[b.nk[0]].n + ' → ' + KR[b.nk[1]].n : b.a + ' – ' + b.b) : '')}</td><td>${esc(b.cps ? (b.cps[0].name || '') : b.a + ' – ' + b.b)}</td><td class="r">${w.tam != null ? mins(w.tam) : '–'}</td><td class="r">${w.powrot != null ? mins(w.powrot) : '–'}</td></tr>`; }).join('');
+  const gc = greenCard();
+  const countries = R.order.map(cc => KR[cc].schengen ? esc(KR[cc].n) : `<b>${esc(KR[cc].n)}*</b>`).join(' › ');
+  const nonS = R.order.some(cc => !KR[cc].schengen);
+  // strona 2 – do kupienia
+  const buy = tolls.filter(x => x.link && !x.free).map(x => box(`${KR[x.cc].n}: ${x.k}`, x.link.replace(/^https?:\/\//, '')));
+  if(R.war.prom) buy.push(box(`Bilet na prom ${R.war.prom.trasa}`, R.war.prom.operator));
+  if(R.order.some(cc => ['RS', 'ME', 'HR', 'IT', 'FR', 'ES', 'PT', 'TR'].includes(cc))) buy.push(box('Gotówka lub karta na bramki'));
+  const eq = (LST.listy.find(g => g.id === 'eq') || {p: []}).p.map(p => box(p[0], p[1] && p[1].length < 60 ? p[1] : ''));
+  const start = (LST.listy.find(g => g.id === 'start') || {p: []}).p.slice(0, 7).map(p => box(p[0]));
+  const docs = [box('Paszport lub dowód dla każdego'), box('Prawo jazdy, dowód rejestracyjny'), box('Polisa OC i assistance', gc ? gc[0] : ''), box('EKUZ i ubezpieczenie turystyczne')];
+  const foot = `<footer class="pd-f">Kwoty orientacyjne – przed zakupem sprawdź na stronach operatorów.${B.length ? ' Kolejki na granicach: Data by nakordoni.eu.' : ''} Mapy: © OpenStreetMap.</footer>`;
+  el.innerHTML = `<section class="pd-page">${head('')}
+    <div class="pd-stats">${stat(fmt(Math.round(R.km)) + ' km', 'dystans')}${stat(Math.round(c.h) + ' h', 'czas w drodze')}${stat(money(c.total) + (tsum.open ? '+' : ''), fc ? 'paliwo, opłaty i prom' : 'paliwo i opłaty')}${stat(n.days.length + ' ' + (n.days.length === 1 ? 'dzień' : 'dni'), 'po maks. ' + fmt(S.dzien) + ' km')}</div>
+    <p class="pd-c"><b>Kraje:</b> ${countries}${nonS ? ' <span>(* poza Schengen – kontrola paszportowa)</span>' : ''}</p>
+    <div class="pd-2">
+      <div>${sec('Winiety i opłaty – razem ' + money(tsum.e) + (tsum.open ? ' + wg km' : ''))}<table><tr><th>Kraj</th><th>Co</th><th class="r">Kwota</th></tr>${tRows}</table></div>
+      <div>${sec(`Paliwo ${fn} – razem ${money(c.f.e)}`)}<table><tr><th>Kraj</th><th class="r">cena</th></tr>${fRows}</table>${cheap ? `<p class="pd-n">Najtaniej: <b>${esc(KR[cheap].n)}</b> – tam zatankuj do pełna.</p>` : ''}</div>
+    </div>
+    ${fc ? `<div>${sec('Prom')}<p class="pd-n"><b>${esc(R.war.prom.trasa)}</b>, ${esc(R.war.prom.operator)} – od ok. ${money(fc.od)}, w sezonie ok. ${money(fc.sezon)}</p></div>` : ''}
+    <div>${sec('Noclegi')}<table><tr><th>Dzień</th><th>Odcinek</th><th class="r">km</th><th class="r">jazda</th></tr>${dRows}</table></div>
+    ${B.length ? `<div>${sec('Granice poza Schengen')}<table><tr><th>Granica</th><th>Przejście (najkrótsza kolejka)</th><th class="r">tam</th><th class="r">powrót</th></tr>${bRows}</table></div>` : ''}
+    ${gc ? `<p class="pd-n">${esc(gc[0])}. ${esc(gc[1] || '')}</p>` : ''}
+    ${foot}</section>
+  <section class="pd-page">${head(' – lista przed wyjazdem')}
+    <div class="pd-cols">
+      <div class="pd-l">
+        <div class="pd-stats v">${stat(fmt(Math.round(R.km)) + ' km', 'dystans, ok. ' + Math.round(c.h) + ' h w drodze')}${stat(money(c.total), 'koszt w jedną stronę')}</div>
+        <div>${sec('Trasa')}<ol class="pd-days">${n.days.map((d, i) => `<li>${i === 0 ? esc(R.fromName) + ' → ' : '→ '}${esc(stopNm(i))}, ${fmt(Math.round(d.km))} km</li>`).join('')}</ol></div>
+        ${B.length ? `<div>${sec('Granice poza Schengen')}<p class="pd-n">${B.map(b => b.nk ? esc(KR[b.nk[0]].n + ' → ' + KR[b.nk[1]].n) : esc(b.a + ' – ' + b.b)).join('<br>')}<br><span>kolejki sprawdź w dniu wyjazdu na gdzieponiesie.pl</span></p></div>` : ''}
+        <div>${sec('Ważne numery')}<p class="pd-lines">Assistance: ______________________<br>Ubezpieczenie: ___________________<br>Nocleg dzień 1: ___________________<br>Kontakt w kraju: __________________</p></div>
+      </div>
+      <div class="pd-r">
+        ${buy.length ? `<div>${sec('Do kupienia przed wyjazdem')}${buy.join('')}</div>` : ''}
+        <div>${sec('Dokumenty')}${docs.join('')}</div>
+        <div>${sec('Wyposażenie')}${eq.join('')}</div>
+        <div>${sec('Zanim ruszysz')}${start.join('')}</div>
+      </div>
+    </div>
+    ${foot}</section>`;
 }
 
 /* ---------- całość ---------- */

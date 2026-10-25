@@ -329,15 +329,7 @@ h2.sub{margin:4px 0 0;font-weight:800;font-size:16px}
 @media (min-width:1440px){ main{width:540px} .dock{left:540px} }
 
 /* ---------- druk planu ---------- */
-@media print{
-  .nav,.top-btns,.fromto .round,.vehline::after,#printBtn,.buy,.add,.del,.rowbtns,.segs,.stepper button,.variants{display:none!important}
-  .view{display:flex!important;break-inside:avoid}
-  #v-gaz,#v-serwis{display:none!important}
-  .dock{position:static;padding:0}
-  .dock .mapbox{height:420px}
-  main{width:auto}
-  body{background:#fff;color:#000}
-}
+
 
 /* flagi */
 .fl{display:block;border-radius:2px;box-shadow:0 0 0 1px rgba(0,0,0,.18);flex:none}
@@ -458,7 +450,7 @@ body.loading .tiles{opacity:.45;transition:opacity .2s}
   .saved .sv-t{pointer-events:none}
   .saved .sv-t span::after{content:""}
 }
-@media print{.actions,#saved{display:none!important}}
+
 .ro-toggle.nt-t,.ro-toggle.sv-t{display:flex;justify-content:space-between;align-items:center;width:100%;border:0;background:var(--tile);border-radius:12px;padding:10px 14px;font-weight:800;font-size:14.5px;color:var(--ink)}
 .ro-toggle.nt-t span,.ro-toggle.sv-t span{font-weight:600;color:var(--mut);font-size:13px}
 .ro-toggle.nt-t span::after{content:" ▾"}
@@ -503,3 +495,40 @@ html,body,button,input,select{font-variant-numeric:normal;font-feature-settings:
 .cps tr.best td{font-weight:800}
 .q-okt{color:var(--ok)} .q-midt{color:var(--amb-ink)} .q-badt{color:var(--bad)}
 :root[data-theme="dark"] .q-midt{color:var(--amb)}
+
+/* ---------- wydruk: tylko #printDoc (strona 1 podsumowanie, strona 2 lista) ---------- */
+#printDoc{display:none}
+@media (max-width:420px){.actions .pr-l{display:none}.actions #printBtn2{flex:none;width:48px;padding:0}}
+@page{size:A4;margin:12mm}
+@media print{
+  html,body{background:#fff!important;color:#111!important}
+  body>*:not(#printDoc){display:none!important}
+  #printDoc{display:block;font:11.5pt/1.35 "Schibsted Grotesk",system-ui,sans-serif;color:#111}
+  .pd-page{display:flex;flex-direction:column;gap:12px;min-height:270mm;break-after:page}
+  .pd-page:last-child{break-after:auto}
+  .pd-h{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2.5px solid #111;padding-bottom:8px}
+  .pd-h h1{margin:0;font-size:22pt;font-weight:900;letter-spacing:-.02em;line-height:1.1}
+  .pd-h small{display:block;font-size:9pt;color:#555}
+  .pd-brand{text-align:right}.pd-brand b{font-size:10.5pt}
+  .pd-stats{display:flex;gap:8px}
+  .pd-stats.v{flex-direction:column}
+  .pd-stat{flex:1;border:1.5px solid #111;border-radius:6px;padding:6px 10px}
+  .pd-stat small{display:block;font-size:8.5pt;color:#555}
+  .pd-stat b{font-size:17pt;font-weight:900;letter-spacing:-.02em}
+  .pd-c{margin:0;font-size:10pt}.pd-c span{color:#555}
+  .pd-2{display:grid;grid-template-columns:1.3fr 1fr;gap:18px}
+  #printDoc h2{margin:0 0 4px;font-size:11pt;font-weight:800;border-bottom:1px solid #111;padding-bottom:2px}
+  #printDoc table{width:100%;border-collapse:collapse}
+  #printDoc th{text-align:left;font-size:8.5pt;color:#555;font-weight:700;padding:3px 5px;border-bottom:1.5px solid #111}
+  #printDoc td{font-size:10pt;padding:4px 5px;border-bottom:1px solid #ccc;vertical-align:top}
+  #printDoc .r{text-align:right}
+  .pd-n{margin:4px 0 0;font-size:9.5pt}.pd-n span{color:#555}
+  .pd-cols{display:grid;grid-template-columns:1fr 1.25fr;gap:22px}
+  .pd-l,.pd-r{display:flex;flex-direction:column;gap:12px}
+  .pd-days{margin:0;padding-left:18px;font-size:10pt;line-height:1.7}
+  .pd-lines{margin:0;font-size:10pt;line-height:2.1}
+  .pd-box{display:flex;gap:8px;align-items:flex-start;padding:4px 0;border-bottom:1px solid #ccc;font-size:10pt}
+  .pd-box i{width:11px;height:11px;border:1.5px solid #111;border-radius:2px;flex:none;margin-top:2px}
+  .pd-box small{display:block;font-size:8.5pt;color:#555}
+  .pd-f{margin-top:auto;font-size:8pt;color:#555;border-top:1px solid #ccc;padding-top:5px}
+}
