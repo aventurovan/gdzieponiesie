@@ -1,12 +1,17 @@
 name: Baza miast GeoNames
 
-# Ręcznie, np. raz na kwartał: Actions → „Baza miast GeoNames” → Run workflow.
-# Buduje cloudflare/miasta.json i zapisuje go w repo. Potem trzeba wdrożyć Workera.
+# Automatycznie raz na 3 miesiące (1 stycznia, kwietnia, lipca i października, 03:00 UTC),
+# a w razie potrzeby ręcznie: Actions → „Baza miast GeoNames” → Run workflow.
+# Buduje cloudflare/miasta.json, zapisuje go w repo i – jeśli baza się zmieniła – wdraża Workera.
 on:
+  schedule:
+    - cron: '0 3 1 1,4,7,10 *'
   workflow_dispatch:
 
 permissions:
   contents: write
+
+concurrency: worker
 
 jobs:
   build:
@@ -19,8 +24,22 @@ jobs:
         run: python3 scripts/geonames.py
 
       - name: Zapis do repo
+        id: zapis
         run: |
           git config user.name "Baza miast (GitHub Actions)"
           git config user.email "actions@users.noreply.github.com"
           git add cloudflare/miasta.json
-          git diff --cached --quiet && echo "Bez zmian" || (git commit -m "Baza miast GeoNames: aktualizacja" && git push)
+          if git diff --cached --quiet; then
+            echo "Baza bez zmian"; echo "zmiana=0" >> "$GITHUB_OUTPUT"
+          else
+            git commit -m "Baza miast GeoNames: aktualizacja $(date -u +%Y-%m-%d)" && git push
+            echo "zmiana=1" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Wdrożenie Workera z nową bazą
+        if: steps.zapis.outputs.zmiana == '1'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          workingDirectory: cloudflare
+          command: deploy
