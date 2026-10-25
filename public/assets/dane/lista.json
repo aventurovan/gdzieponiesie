@@ -1,0 +1,233 @@
+{
+ "listy": [
+  {
+   "id": "start",
+   "n": "Zanim ruszysz",
+   "p": [
+    [
+     "Antena satelitarna złożona",
+     "Najczęściej urywana część kampera"
+    ],
+    [
+     "Stopień wejściowy schowany"
+    ],
+    [
+     "Okna i świetliki dachowe zamknięte"
+    ],
+    [
+     "Szafki, szuflady i lodówka zablokowane"
+    ],
+    [
+     "Zawór gazu zamknięty",
+     "Chyba że masz czujnik zderzeniowy i grzejesz w trasie"
+    ],
+    [
+     "Kabel 230 V odłączony i schowany"
+    ],
+    [
+     "Najazdy i kliny zebrane"
+    ],
+    [
+     "Markiza zwinięta i zablokowana"
+    ],
+    [
+     "Zawór szarej wody zamknięty"
+    ],
+    [
+     "Pompa wody wyłączona"
+    ],
+    [
+     "Rowery zapięte"
+    ],
+    [
+     "Drzwi garażu i klapy serwisowe zamknięte"
+    ]
+   ]
+  },
+  {
+   "id": "docs",
+   "n": "Dokumenty i pieniądze",
+   "p": [
+    [
+     "Dowód osobisty lub paszport dla każdego"
+    ],
+    [
+     "Prawo jazdy"
+    ],
+    [
+     "Dowód rejestracyjny"
+    ],
+    [
+     "Polisa OC i assistance",
+     "Numer alarmowy ubezpieczyciela w telefonie"
+    ],
+    [
+     "EKUZ dla każdego"
+    ],
+    [
+     "Ubezpieczenie turystyczne"
+    ],
+    [
+     "Upoważnienie do kierowania",
+     "Gdy kamper jest w leasingu lub na firmę"
+    ],
+    [
+     "Karta płatnicza i gotówka w euro"
+    ]
+   ]
+  },
+  {
+   "id": "eq",
+   "n": "Wyposażenie",
+   "p": [
+    [
+     "Gaśnica",
+     "Obowiązkowa w Polsce – z ważnym przeglądem"
+    ],
+    [
+     "Trójkąt ostrzegawczy",
+     "Obowiązkowy w Polsce"
+    ],
+    [
+     "Kamizelki odblaskowe dla wszystkich",
+     "Zalecane. W wielu krajach trzeba ją założyć przy wyjściu z auta na drogę – trzymaj w kabinie"
+    ],
+    [
+     "Apteczka",
+     "Zalecana"
+    ],
+    [
+     "Zapasowe żarówki",
+     "Zalecane"
+    ],
+    [
+     "Koło zapasowe lub zestaw naprawczy",
+     "Zalecane"
+    ]
+   ],
+   "uwaga": "Auto zarejestrowane w Polsce musi mieć za granicą wyposażenie wymagane w Polsce (konwencja wiedeńska). Policja w innych krajach czasem interpretuje to inaczej, dlatego resztę warto mieć."
+  },
+  {
+   "id": "media",
+   "n": "Woda, gaz, prąd",
+   "p": [
+    [
+     "Butla gazowa pełna, zapasowa pełna"
+    ],
+    [
+     "Przejściówki LPG do butli tankowalnej"
+    ],
+    [
+     "Woda czysta napełniona",
+     "Albo pusta na drogę, jeśli jesteś blisko 3,5 t"
+    ],
+    [
+     "Szara woda i kaseta WC opróżnione"
+    ],
+    [
+     "Środek do kasety WC"
+    ],
+    [
+     "Przedłużacz z wtyczką CEE, min. 25 m"
+    ],
+    [
+     "Przejściówka CEE na zwykłe gniazdko"
+    ],
+    [
+     "Wąż do wody z końcówkami"
+    ]
+   ]
+  },
+  {
+   "id": "road",
+   "n": "Na drogę",
+   "p": [
+    [
+     "Mapy offline pobrane"
+    ],
+    [
+     "Ładowarki i uchwyt na telefon"
+    ],
+    [
+     "Poziomica i najazdy"
+    ],
+    [
+     "Latarka czołowa"
+    ],
+    [
+     "Zapas leków"
+    ]
+   ]
+  }
+ ],
+ "przeglady": [
+  [
+   "gas",
+   "Kontrola instalacji gazowej",
+   12,
+   0
+  ],
+  [
+   "hose",
+   "Węże gazowe",
+   60,
+   0
+  ],
+  [
+   "reg",
+   "Reduktor gazu",
+   120,
+   0
+  ],
+  [
+   "seal",
+   "Kontrola szczelności zabudowy",
+   12,
+   0,
+   "Warunek gwarancji u większości producentów"
+  ],
+  [
+   "tyre",
+   "Opony (data produkcji DOT)",
+   72,
+   0,
+   "Wpisz datę produkcji z opony"
+  ],
+  [
+   "oil",
+   "Olej i filtry silnika",
+   12,
+   30000
+  ],
+  [
+   "brake",
+   "Hamulce i podwozie",
+   12,
+   0
+  ],
+  [
+   "water",
+   "Dezynfekcja zbiornika wody",
+   12,
+   0
+  ],
+  [
+   "batt",
+   "Akumulator zabudowy – test",
+   12,
+   0
+  ],
+  [
+   "ext",
+   "Gaśnica i czujniki CO/gazu",
+   12,
+   0
+  ],
+  [
+   "belt",
+   "Pasek rozrządu / napędu",
+   60,
+   120000
+  ]
+ ]
+}

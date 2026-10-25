@@ -1,0 +1,1526 @@
+{
+ "starty": [
+  "Kraków",
+  "Katowice",
+  "Warszawa",
+  "Wrocław",
+  "Poznań",
+  "Gdańsk"
+ ],
+ "drogi": {
+  "wezly": {
+   "Gdańsk": [
+    18.65,
+    54.35
+   ],
+   "Gdynia": [
+    18.53,
+    54.52
+   ],
+   "Elbląg": [
+    19.4,
+    54.16
+   ],
+   "Ostróda": [
+    19.96,
+    53.7
+   ],
+   "Płońsk": [
+    20.38,
+    52.63
+   ],
+   "Warszawa": [
+    21.01,
+    52.23
+   ],
+   "Grudziądz": [
+    18.75,
+    53.48
+   ],
+   "Toruń": [
+    18.6,
+    53.01
+   ],
+   "Włocławek": [
+    19.07,
+    52.65
+   ],
+   "Łódź": [
+    19.46,
+    51.76
+   ],
+   "Piotrków Tryb.": [
+    19.7,
+    51.4
+   ],
+   "Częstochowa": [
+    19.12,
+    50.81
+   ],
+   "Katowice": [
+    19.02,
+    50.26
+   ],
+   "Kraków": [
+    19.94,
+    50.06
+   ],
+   "Gliwice": [
+    18.67,
+    50.29
+   ],
+   "Opole": [
+    17.93,
+    50.67
+   ],
+   "Wrocław": [
+    17.04,
+    51.11
+   ],
+   "Legnica": [
+    16.16,
+    51.21
+   ],
+   "Bolesławiec": [
+    15.57,
+    51.26
+   ],
+   "Zgorzelec": [
+    15.0,
+    51.15
+   ],
+   "Konin": [
+    18.25,
+    52.22
+   ],
+   "Poznań": [
+    16.93,
+    52.41
+   ],
+   "Radom": [
+    21.15,
+    51.4
+   ],
+   "Kielce": [
+    20.63,
+    50.87
+   ],
+   "Myślenice": [
+    19.94,
+    49.83
+   ],
+   "Rabka-Zdrój": [
+    19.96,
+    49.61
+   ],
+   "Chyżne": [
+    19.67,
+    49.43
+   ],
+   "Tychy": [
+    18.97,
+    50.13
+   ],
+   "Bielsko-Biała": [
+    19.04,
+    49.82
+   ],
+   "Cieszyn": [
+    18.63,
+    49.75
+   ],
+   "Leszno": [
+    16.57,
+    51.84
+   ],
+   "Gorzów Wlkp.": [
+    15.23,
+    52.73
+   ],
+   "Szczecin": [
+    14.55,
+    53.43
+   ],
+   "Kołbaskowo": [
+    14.43,
+    53.34
+   ],
+   "Zielona Góra": [
+    15.51,
+    51.94
+   ],
+   "Gniezno": [
+    17.6,
+    52.53
+   ],
+   "Bydgoszcz": [
+    18.01,
+    53.12
+   ],
+   "Słupsk": [
+    17.03,
+    54.46
+   ],
+   "Koszalin": [
+    16.17,
+    54.19
+   ]
+  },
+  "drogi": [
+   [
+    "Gdańsk",
+    "Gdynia"
+   ],
+   [
+    "Gdańsk",
+    "Elbląg"
+   ],
+   [
+    "Elbląg",
+    "Ostróda"
+   ],
+   [
+    "Ostróda",
+    "Płońsk"
+   ],
+   [
+    "Płońsk",
+    "Warszawa"
+   ],
+   [
+    "Gdańsk",
+    "Grudziądz",
+    "A1"
+   ],
+   [
+    "Grudziądz",
+    "Toruń",
+    "A1"
+   ],
+   [
+    "Toruń",
+    "Włocławek"
+   ],
+   [
+    "Włocławek",
+    "Łódź"
+   ],
+   [
+    "Łódź",
+    "Piotrków Tryb."
+   ],
+   [
+    "Piotrków Tryb.",
+    "Częstochowa"
+   ],
+   [
+    "Częstochowa",
+    "Katowice"
+   ],
+   [
+    "Katowice",
+    "Kraków",
+    "A4"
+   ],
+   [
+    "Katowice",
+    "Gliwice"
+   ],
+   [
+    "Gliwice",
+    "Opole"
+   ],
+   [
+    "Opole",
+    "Wrocław"
+   ],
+   [
+    "Wrocław",
+    "Legnica"
+   ],
+   [
+    "Legnica",
+    "Bolesławiec"
+   ],
+   [
+    "Bolesławiec",
+    "Zgorzelec"
+   ],
+   [
+    "Warszawa",
+    "Łódź"
+   ],
+   [
+    "Łódź",
+    "Konin"
+   ],
+   [
+    "Konin",
+    "Poznań",
+    "A2"
+   ],
+   [
+    "Warszawa",
+    "Piotrków Tryb."
+   ],
+   [
+    "Warszawa",
+    "Radom"
+   ],
+   [
+    "Radom",
+    "Kielce"
+   ],
+   [
+    "Kielce",
+    "Kraków"
+   ],
+   [
+    "Kraków",
+    "Myślenice"
+   ],
+   [
+    "Myślenice",
+    "Rabka-Zdrój"
+   ],
+   [
+    "Rabka-Zdrój",
+    "Chyżne"
+   ],
+   [
+    "Katowice",
+    "Tychy"
+   ],
+   [
+    "Tychy",
+    "Bielsko-Biała"
+   ],
+   [
+    "Bielsko-Biała",
+    "Cieszyn"
+   ],
+   [
+    "Gliwice",
+    "Tychy"
+   ],
+   [
+    "Poznań",
+    "Leszno"
+   ],
+   [
+    "Leszno",
+    "Wrocław"
+   ],
+   [
+    "Poznań",
+    "Gorzów Wlkp."
+   ],
+   [
+    "Gorzów Wlkp.",
+    "Szczecin"
+   ],
+   [
+    "Szczecin",
+    "Kołbaskowo"
+   ],
+   [
+    "Legnica",
+    "Zielona Góra"
+   ],
+   [
+    "Zielona Góra",
+    "Gorzów Wlkp."
+   ],
+   [
+    "Poznań",
+    "Gniezno"
+   ],
+   [
+    "Gniezno",
+    "Bydgoszcz"
+   ],
+   [
+    "Bydgoszcz",
+    "Toruń"
+   ],
+   [
+    "Bydgoszcz",
+    "Grudziądz"
+   ],
+   [
+    "Gdańsk",
+    "Słupsk"
+   ],
+   [
+    "Słupsk",
+    "Koszalin"
+   ],
+   [
+    "Koszalin",
+    "Szczecin"
+   ]
+  ]
+ },
+ "cele": {
+  "split": {
+   "n": "Split",
+   "warianty": [
+    {
+     "id": "a",
+     "n": "Przez Czechy, Austrię i Słowenię",
+     "bramka": "Cieszyn",
+     "punkty": [
+      [
+       "Ostrava",
+       18.29,
+       49.83,
+       "CZ"
+      ],
+      [
+       "Brno",
+       16.61,
+       49.19,
+       "CZ"
+      ],
+      [
+       "Mikulov",
+       16.64,
+       48.8,
+       "CZ"
+      ],
+      [
+       "Wien",
+       16.37,
+       48.21,
+       "AT"
+      ],
+      [
+       "Graz",
+       15.44,
+       47.07,
+       "AT"
+      ],
+      [
+       "Maribor",
+       15.65,
+       46.55,
+       "SI"
+      ],
+      [
+       "Zagreb",
+       15.98,
+       45.81,
+       "HR"
+      ],
+      [
+       "Karlovac",
+       15.55,
+       45.49,
+       "HR"
+      ],
+      [
+       "Gospić",
+       15.37,
+       44.55,
+       "HR"
+      ],
+      [
+       "Zadar",
+       15.48,
+       44.13,
+       "HR"
+      ],
+      [
+       "Šibenik",
+       15.98,
+       43.74,
+       "HR"
+      ],
+      [
+       "Split",
+       16.44,
+       43.51,
+       "HR"
+      ]
+     ],
+     "bramki": {
+      "HR": {
+       "k": "A1 Zagreb – Split",
+       "I": 21
+      }
+     },
+     "granice": [],
+     "predkosc": 85
+    }
+   ]
+  },
+  "garda": {
+   "n": "Jezioro Garda",
+   "warianty": [
+    {
+     "id": "a",
+     "n": "Przez Austrię i Brenner",
+     "bramka": "Cieszyn",
+     "punkty": [
+      [
+       "Ostrava",
+       18.29,
+       49.83,
+       "CZ"
+      ],
+      [
+       "Brno",
+       16.61,
+       49.19,
+       "CZ"
+      ],
+      [
+       "Mikulov",
+       16.64,
+       48.8,
+       "CZ"
+      ],
+      [
+       "Wien",
+       16.37,
+       48.21,
+       "AT"
+      ],
+      [
+       "Linz",
+       14.29,
+       48.31,
+       "AT"
+      ],
+      [
+       "Salzburg",
+       13.04,
+       47.81,
+       "AT"
+      ],
+      [
+       "Rosenheim",
+       12.12,
+       47.86,
+       "DE"
+      ],
+      [
+       "Kufstein",
+       12.17,
+       47.58,
+       "AT"
+      ],
+      [
+       "Innsbruck",
+       11.4,
+       47.27,
+       "AT"
+      ],
+      [
+       "Brenner",
+       11.51,
+       47.0,
+       "AT"
+      ],
+      [
+       "Bolzano",
+       11.35,
+       46.5,
+       "IT"
+      ],
+      [
+       "Trento",
+       11.12,
+       46.07,
+       "IT"
+      ],
+      [
+       "Riva del Garda",
+       10.84,
+       45.89,
+       "IT"
+      ]
+     ],
+     "bramki": {
+      "IT": {
+       "k": "A22 Brenner – Rovereto",
+       "I": 18
+      }
+     },
+     "brenner": true,
+     "granice": [],
+     "predkosc": 85
+    }
+   ]
+  },
+  "budva": {
+   "n": "Budva",
+   "warianty": [
+    {
+     "id": "wybrzeze",
+     "n": "Przez Czechy, Austrię i wybrzeże Chorwacji",
+     "bramka": "Cieszyn",
+     "predkosc": 92,
+     "punkty": [
+      [
+       "Ostrava",
+       18.29,
+       49.83,
+       "CZ"
+      ],
+      [
+       "Brno",
+       16.61,
+       49.19,
+       "CZ"
+      ],
+      [
+       "Mikulov",
+       16.64,
+       48.8,
+       "CZ"
+      ],
+      [
+       "Wien",
+       16.37,
+       48.21,
+       "AT"
+      ],
+      [
+       "Graz",
+       15.44,
+       47.07,
+       "AT"
+      ],
+      [
+       "Maribor",
+       15.65,
+       46.55,
+       "SI"
+      ],
+      [
+       "Zagreb",
+       15.98,
+       45.81,
+       "HR"
+      ],
+      [
+       "Karlovac",
+       15.55,
+       45.49,
+       "HR"
+      ],
+      [
+       "Gospić",
+       15.37,
+       44.55,
+       "HR"
+      ],
+      [
+       "Zadar",
+       15.48,
+       44.13,
+       "HR"
+      ],
+      [
+       "Šibenik",
+       15.98,
+       43.74,
+       "HR"
+      ],
+      [
+       "Split",
+       16.44,
+       43.51,
+       "HR"
+      ],
+      [
+       "Makarska",
+       17.02,
+       43.3,
+       "HR"
+      ],
+      [
+       "Komarna",
+       17.53,
+       42.93,
+       "HR"
+      ],
+      [
+       "Ston",
+       17.7,
+       42.84,
+       "HR"
+      ],
+      [
+       "Dubrovnik",
+       18.09,
+       42.65,
+       "HR"
+      ],
+      [
+       "Debeli Brijeg",
+       18.49,
+       42.46,
+       "ME"
+      ],
+      [
+       "Herceg Novi",
+       18.54,
+       42.45,
+       "ME"
+      ],
+      [
+       "Kotor",
+       18.77,
+       42.42,
+       "ME"
+      ],
+      [
+       "Budva",
+       18.84,
+       42.29,
+       "ME"
+      ]
+     ],
+     "bramki": {
+      "HR": {
+       "k": "A1 Zagreb – Ploče",
+       "I": 27
+      }
+     },
+     "granice": [
+      {
+       "id": "karasovici-debeli-brijeg",
+       "a": "Karasovići",
+       "b": "Debeli Brijeg",
+       "lon": 18.48,
+       "lat": 42.46,
+       "tam": 30,
+       "powrot": 60
+      }
+     ]
+    },
+    {
+     "id": "a",
+     "n": "Przez Słowację, Węgry i Serbię",
+     "bramka": "Chyżne",
+     "punkty": [
+      [
+       "Ružomberok",
+       19.3,
+       49.08,
+       "SK"
+      ],
+      [
+       "Banská Bystrica",
+       19.15,
+       48.74,
+       "SK"
+      ],
+      [
+       "Šahy",
+       18.95,
+       48.07,
+       "SK"
+      ],
+      [
+       "Budapest",
+       19.04,
+       47.5,
+       "HU"
+      ],
+      [
+       "Kecskemét",
+       19.69,
+       46.91,
+       "HU"
+      ],
+      [
+       "Röszke",
+       20.04,
+       46.18,
+       "HU"
+      ],
+      [
+       "Novi Sad",
+       19.84,
+       45.27,
+       "RS"
+      ],
+      [
+       "Beograd",
+       20.46,
+       44.79,
+       "RS"
+      ],
+      [
+       "Čačak",
+       20.35,
+       43.89,
+       "RS"
+      ],
+      [
+       "Užice",
+       19.84,
+       43.86,
+       "RS"
+      ],
+      [
+       "Prijepolje",
+       19.65,
+       43.39,
+       "RS"
+      ],
+      [
+       "Dobrakovo",
+       19.77,
+       43.12,
+       "ME"
+      ],
+      [
+       "Kolašin",
+       19.52,
+       42.82,
+       "ME"
+      ],
+      [
+       "Podgorica",
+       19.26,
+       42.44,
+       "ME"
+      ],
+      [
+       "Budva",
+       18.84,
+       42.29,
+       "ME"
+      ]
+     ],
+     "bramki": {
+      "RS": {
+       "k": "Horgoš – Preljina",
+       "I": 12
+      },
+      "ME": {
+       "k": "Mateševo – Smokovac",
+       "I": 3.5
+      }
+     },
+     "granice": [
+      {
+       "id": "roszke-horgos",
+       "a": "Röszke",
+       "b": "Horgoš",
+       "lon": 20.04,
+       "lat": 46.18,
+       "tam": 35,
+       "powrot": 80
+      },
+      {
+       "id": "gostun-dobrakovo",
+       "a": "Gostun",
+       "b": "Dobrakovo",
+       "lon": 19.77,
+       "lat": 43.12,
+       "tam": 20,
+       "powrot": 45
+      }
+     ],
+     "predkosc": 66
+    }
+   ]
+  },
+  "stambul": {
+   "n": "Stambuł",
+   "warianty": [
+    {
+     "id": "a",
+     "n": "Przez Węgry, Serbię i Bułgarię",
+     "bramka": "Chyżne",
+     "punkty": [
+      [
+       "Ružomberok",
+       19.3,
+       49.08,
+       "SK"
+      ],
+      [
+       "Banská Bystrica",
+       19.15,
+       48.74,
+       "SK"
+      ],
+      [
+       "Šahy",
+       18.95,
+       48.07,
+       "SK"
+      ],
+      [
+       "Budapest",
+       19.04,
+       47.5,
+       "HU"
+      ],
+      [
+       "Kecskemét",
+       19.69,
+       46.91,
+       "HU"
+      ],
+      [
+       "Röszke",
+       20.04,
+       46.18,
+       "HU"
+      ],
+      [
+       "Novi Sad",
+       19.84,
+       45.27,
+       "RS"
+      ],
+      [
+       "Beograd",
+       20.46,
+       44.79,
+       "RS"
+      ],
+      [
+       "Niš",
+       21.9,
+       43.32,
+       "RS"
+      ],
+      [
+       "Gradina",
+       22.86,
+       42.98,
+       "BG"
+      ],
+      [
+       "Sofia",
+       23.32,
+       42.7,
+       "BG"
+      ],
+      [
+       "Plovdiv",
+       24.75,
+       42.15,
+       "BG"
+      ],
+      [
+       "Kapitan Andreevo",
+       26.31,
+       41.72,
+       "BG"
+      ],
+      [
+       "Edirne",
+       26.56,
+       41.68,
+       "TR"
+      ],
+      [
+       "Stambuł",
+       28.98,
+       41.01,
+       "TR"
+      ]
+     ],
+     "bramki": {
+      "RS": {
+       "k": "Horgoš – Dimitrovgrad",
+       "I": 20
+      },
+      "TR": {
+       "k": "Edirne – Stambuł z mostem",
+       "I": 8
+      }
+     },
+     "granice": [
+      {
+       "id": "roszke-horgos",
+       "a": "Röszke",
+       "b": "Horgoš",
+       "lon": 20.04,
+       "lat": 46.18,
+       "tam": 35,
+       "powrot": 80
+      },
+      {
+       "id": "gradina-kalotina",
+       "a": "Gradina",
+       "b": "Kalotina",
+       "lon": 22.86,
+       "lat": 42.98,
+       "tam": 45,
+       "powrot": 30
+      },
+      {
+       "id": "kapitan-andreevo-kapikule",
+       "a": "Kapitan Andreevo",
+       "b": "Kapıkule",
+       "lon": 26.31,
+       "lat": 41.72,
+       "tam": 110,
+       "powrot": 60
+      }
+     ],
+     "predkosc": 85
+    }
+   ]
+  },
+  "lizbona": {
+   "n": "Lizbona",
+   "warianty": [
+    {
+     "id": "a",
+     "n": "Przez Niemcy, Francję i Hiszpanię",
+     "bramka": "Zgorzelec",
+     "punkty": [
+      [
+       "Dresden",
+       13.74,
+       51.05,
+       "DE"
+      ],
+      [
+       "Erfurt",
+       11.03,
+       50.98,
+       "DE"
+      ],
+      [
+       "Frankfurt",
+       8.68,
+       50.11,
+       "DE"
+      ],
+      [
+       "Saarbrücken",
+       7.0,
+       49.24,
+       "DE"
+      ],
+      [
+       "Metz",
+       6.18,
+       49.12,
+       "FR"
+      ],
+      [
+       "Paris",
+       2.35,
+       48.86,
+       "FR"
+      ],
+      [
+       "Orléans",
+       1.91,
+       47.9,
+       "FR"
+      ],
+      [
+       "Tours",
+       0.69,
+       47.39,
+       "FR"
+      ],
+      [
+       "Bordeaux",
+       -0.58,
+       44.84,
+       "FR"
+      ],
+      [
+       "Bayonne",
+       -1.47,
+       43.49,
+       "FR"
+      ],
+      [
+       "San Sebastián",
+       -1.98,
+       43.32,
+       "ES"
+      ],
+      [
+       "Burgos",
+       -3.7,
+       42.34,
+       "ES"
+      ],
+      [
+       "Valladolid",
+       -4.72,
+       41.65,
+       "ES"
+      ],
+      [
+       "Salamanca",
+       -5.66,
+       40.97,
+       "ES"
+      ],
+      [
+       "Vilar Formoso",
+       -6.83,
+       40.61,
+       "PT"
+      ],
+      [
+       "Coimbra",
+       -8.43,
+       40.21,
+       "PT"
+      ],
+      [
+       "Lizbona",
+       -9.14,
+       38.72,
+       "PT"
+      ]
+     ],
+     "bramki": {
+      "FR": {
+       "k": "Metz – Hendaye",
+       "I": 110
+      },
+      "ES": {
+       "k": "AP-8 Irun – San Sebastián",
+       "I": 3
+      },
+      "PT": {
+       "k": "A25 i A1",
+       "I": 20
+      }
+     },
+     "granice": [],
+     "predkosc": 85
+    }
+   ]
+  },
+  "stavanger": {
+   "n": "Stavanger",
+   "warianty": [
+    {
+     "id": "hirtshals",
+     "n": "Przez Danię, prom Hirtshals – Stavanger",
+     "bramka": "Kołbaskowo",
+     "punkty": [
+      [
+       "Pasewalk",
+       13.99,
+       53.5,
+       "DE"
+      ],
+      [
+       "Neubrandenburg",
+       13.26,
+       53.56,
+       "DE"
+      ],
+      [
+       "Rostock",
+       12.1,
+       54.09,
+       "DE"
+      ],
+      [
+       "Wismar",
+       11.47,
+       53.89,
+       "DE"
+      ],
+      [
+       "Lübeck",
+       10.69,
+       53.87,
+       "DE"
+      ],
+      [
+       "Neumünster",
+       9.98,
+       54.07,
+       "DE"
+      ],
+      [
+       "Flensburg",
+       9.44,
+       54.79,
+       "DE"
+      ],
+      [
+       "Padborg",
+       9.36,
+       54.83,
+       "DK"
+      ],
+      [
+       "Kolding",
+       9.47,
+       55.49,
+       "DK"
+      ],
+      [
+       "Vejle",
+       9.53,
+       55.71,
+       "DK"
+      ],
+      [
+       "Aarhus",
+       10.2,
+       56.15,
+       "DK"
+      ],
+      [
+       "Randers",
+       10.04,
+       56.46,
+       "DK"
+      ],
+      [
+       "Aalborg",
+       9.92,
+       57.05,
+       "DK"
+      ],
+      [
+       "Hirtshals",
+       9.96,
+       57.59,
+       "DK"
+      ],
+      [
+       "Stavanger",
+       5.73,
+       58.97,
+       "NO",
+       "prom"
+      ]
+     ],
+     "prom": {
+      "trasa": "Hirtshals – Stavanger",
+      "operator": "Fjord Line",
+      "link": "https://www.fjordline.com",
+      "od": 260,
+      "sezon": 580,
+      "h": 11,
+      "opis": "Pakiet dla kampera z 2 osobami. Cena zależy od długości, wysokości i terminu."
+     },
+     "bramki": {
+      "NO": {
+       "k": "Bompenger w regionie Stavanger"
+      }
+     },
+     "granice": [],
+     "predkosc": 85
+    },
+    {
+     "id": "karlskrona",
+     "n": "Prom Gdynia – Karlskrona, dalej przez Szwecję i Norwegię",
+     "bramka": "Gdynia",
+     "punkty": [
+      [
+       "Karlskrona",
+       15.59,
+       56.16,
+       "SE",
+       "prom"
+      ],
+      [
+       "Växjö",
+       14.81,
+       56.88,
+       "SE"
+      ],
+      [
+       "Värnamo",
+       14.05,
+       57.19,
+       "SE"
+      ],
+      [
+       "Borås",
+       12.94,
+       57.72,
+       "SE"
+      ],
+      [
+       "Göteborg",
+       11.97,
+       57.71,
+       "SE"
+      ],
+      [
+       "Uddevalla",
+       11.94,
+       58.35,
+       "SE"
+      ],
+      [
+       "Svinesund",
+       11.27,
+       59.1,
+       "NO"
+      ],
+      [
+       "Oslo",
+       10.75,
+       59.91,
+       "NO"
+      ],
+      [
+       "Drammen",
+       10.2,
+       59.74,
+       "NO"
+      ],
+      [
+       "Sandefjord",
+       10.23,
+       59.13,
+       "NO"
+      ],
+      [
+       "Arendal",
+       8.77,
+       58.46,
+       "NO"
+      ],
+      [
+       "Kristiansand",
+       7.99,
+       58.15,
+       "NO"
+      ],
+      [
+       "Flekkefjord",
+       6.66,
+       58.3,
+       "NO"
+      ],
+      [
+       "Sandnes",
+       5.74,
+       58.85,
+       "NO"
+      ],
+      [
+       "Stavanger",
+       5.73,
+       58.97,
+       "NO"
+      ]
+     ],
+     "prom": {
+      "trasa": "Gdynia – Karlskrona",
+      "operator": "Stena Line",
+      "link": "https://www.stenaline.pl",
+      "od": 120,
+      "sezon": 250,
+      "h": 10,
+      "opis": "Rejs ok. 10 h, kursy dzienne i nocne. Kamper liczony wg długości."
+     },
+     "bramki": {
+      "SE": {
+       "k": "Opłata kongestyjna w Göteborgu"
+      },
+      "NO": {
+       "k": "Bompenger E6, E18, E39"
+      }
+     },
+     "granice": [],
+     "predkosc": 85
+    }
+   ]
+  }
+ },
+ "promyInne": [
+  {
+   "trasa": "Świnoujście – Ystad",
+   "operator": "Polferries",
+   "link": "https://polferries.pl"
+  },
+  {
+   "trasa": "Świnoujście – Ystad / Trelleborg",
+   "operator": "Unity Line",
+   "link": "https://unityline.pl"
+  },
+  {
+   "trasa": "Świnoujście – Trelleborg, Rostock – Trelleborg",
+   "operator": "TT-Line",
+   "link": "https://www.ttline.com"
+  },
+  {
+   "trasa": "Gdańsk – Nynäshamn",
+   "operator": "Polferries",
+   "link": "https://polferries.pl"
+  },
+  {
+   "trasa": "Hirtshals – Kristiansand / Bergen",
+   "operator": "Fjord Line",
+   "link": "https://www.fjordline.com"
+  },
+  {
+   "trasa": "Hirtshals – Kristiansand / Larvik",
+   "operator": "Color Line",
+   "link": "https://www.colorline.com"
+  }
+ ],
+ "promyPorty": [
+  {
+   "id": "swinoujscie-ystad",
+   "trasa": "Świnoujście – Ystad",
+   "operator": "POLSCA Baltic Ferries (Polferries, Unity Line)",
+   "link": "https://polferries.pl",
+   "a": [
+    14.2667,
+    53.9113
+   ],
+   "b": [
+    13.818,
+    55.428
+   ],
+   "od": 105,
+   "sezon": 260,
+   "h": 7.5,
+   "opis": "Polferries/POLSCA: oferta dla kampera powyżej 2,5 m i do 10 m z kierowcą od 451 zł w jedną stronę (promocja), standardowo drożej."
+  },
+  {
+   "id": "swinoujscie-trelleborg",
+   "trasa": "Świnoujście – Trelleborg",
+   "operator": "TT-Line / POLSCA Baltic Ferries",
+   "link": "https://www.ttline.com",
+   "a": [
+    14.2667,
+    53.9113
+   ],
+   "b": [
+    13.155,
+    55.369
+   ],
+   "od": 135,
+   "sezon": 260,
+   "h": 7,
+   "opis": "Szacunek dla kampera; POLSCA podaje dla osobówki do 2,5 m i 6 m od 300–380 zł w niskim i średnim sezonie. Rejsy dzienne i nocne."
+  },
+  {
+   "id": "gdynia-karlskrona",
+   "trasa": "Gdynia – Karlskrona",
+   "operator": "Stena Line",
+   "link": "https://www.stenaline.pl",
+   "a": [
+    18.505,
+    54.531
+   ],
+   "b": [
+    15.597,
+    56.155
+   ],
+   "od": 120,
+   "sezon": 250,
+   "h": 10.5,
+   "opis": "Rejs ok. 10 h, kursy dzienne i nocne. Kamper liczony wg długości."
+  },
+  {
+   "id": "hirtshals-kristiansand",
+   "trasa": "Hirtshals – Kristiansand",
+   "operator": "Fjord Line / Color Line",
+   "link": "https://www.fjordline.com",
+   "a": [
+    9.962,
+    57.594
+   ],
+   "b": [
+    7.997,
+    58.143
+   ],
+   "od": 200,
+   "sezon": 400,
+   "h": 3.25,
+   "tylkoNO": true,
+   "wschodNie": true,
+   "opis": "Szacunek dla kampera. Kilka rejsów dziennie, ok. 2–3,5 h."
+  },
+  {
+   "id": "hirtshals-stavanger",
+   "trasa": "Hirtshals – Stavanger",
+   "operator": "Fjord Line",
+   "link": "https://www.fjordline.com",
+   "a": [
+    9.962,
+    57.594
+   ],
+   "b": [
+    5.731,
+    58.973
+   ],
+   "od": 260,
+   "sezon": 580,
+   "h": 11,
+   "tylkoNO": true,
+   "zachod": true,
+   "opis": "Pakiet dla kampera z 2 osobami. Statek płynie dalej do Bergen."
+  },
+  {
+   "id": "rostock-trelleborg",
+   "trasa": "Rostock – Trelleborg",
+   "operator": "TT-Line / Stena Line",
+   "link": "https://www.ttline.com",
+   "a": [
+    12.112,
+    54.152
+   ],
+   "b": [
+    13.155,
+    55.369
+   ],
+   "od": 110,
+   "sezon": 220,
+   "h": 6,
+   "opis": "Kilka rejsów dziennie. Kamper ok. 7,5 m bywał po ok. 110 € poza szczytem."
+  },
+  {
+   "id": "gdansk-nynashamn",
+   "trasa": "Gdańsk – Nynäshamn",
+   "operator": "POLSCA Baltic Ferries (Polferries)",
+   "link": "https://polferries.pl",
+   "a": [
+    18.665,
+    54.398
+   ],
+   "b": [
+    17.948,
+    58.902
+   ],
+   "od": 220,
+   "sezon": 450,
+   "h": 18,
+   "opis": "Rejs nocny ok. 18 h, prosto pod Sztokholm. Oferta dla kampera do 10 m z kierowcą od 970 zł (promocja)."
+  },
+  {
+   "id": "hirtshals-larvik",
+   "trasa": "Hirtshals – Larvik",
+   "operator": "Color Line",
+   "link": "https://www.colorline.com",
+   "a": [
+    9.962,
+    57.594
+   ],
+   "b": [
+    10.035,
+    59.048
+   ],
+   "od": 200,
+   "sezon": 420,
+   "h": 3.75,
+   "tylkoNO": true,
+   "opis": "Szacunek dla kampera. Rejs ok. 3,75 h, blisko Oslo."
+  }
+ ]
+}

@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#FFFFFF" id="themeColor">
+<title>gdzieponiesie.pl – trasa kamperem po Europie</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;700;800;900&display=swap" rel="stylesheet">
+<script>
+/* motyw ustawiany przed renderem, żeby nie mrugało */
+(function(){try{var t=localStorage.getItem('gp-theme');if(!t)t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.dataset.theme=t}catch(e){}})();
+</script>
+<link rel="stylesheet" href="assets/style.css?v=20261025r">
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <a class="logo" href="#trasa"><span class="logo-mark" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#16181D" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19l7-14 7 14"/></svg></span>gdzieponiesie</a>
+    <div class="top-btns">
+    <button class="round" id="vehBtn" aria-label="Dane pojazdu" aria-haspopup="dialog">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 17V8a2 2 0 0 1 2-2h11l3.5 4H21a1 1 0 0 1 1 1v6h-2"/><path d="M2 17h3M9 17h7"/><circle cx="7" cy="17" r="2"/><circle cx="18" cy="17" r="2"/><path d="M5 10h4M11 10h3"/></svg>
+    </button>
+    <button class="round" id="themeBtn" aria-label="Włącz ciemny wygląd">
+      <svg class="i-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg>
+      <svg class="i-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#F2A900" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/></svg>
+    </button>
+    </div>
+  </header>
+
+  <main>
+    <!-- TRASA -->
+    <section class="view" id="v-trasa" aria-label="Trasa">
+      <div class="fromto">
+        <div class="ft-box">
+          <label><span>Skąd</span><input id="from" list="places" autocomplete="off" enterkeyhint="next"></label>
+          <div id="viaRows"></div>
+          <label><span>Dokąd</span><input id="to" list="places" autocomplete="off" enterkeyhint="go"></label>
+        </div>
+        <button class="round" id="swap" aria-label="Zamień kierunek"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M7 4v16M3 8l4-4 4 4M17 20V4M13 16l4 4 4-4"/></svg></button>
+      </div>
+      <datalist id="places"></datalist>
+      <ul class="sug" id="sug" hidden></ul>
+      <button type="button" class="via-add" id="viaAdd" hidden>+ Dodaj przystanek (przez)</button>
+      <button class="vehline" id="vehLine" type="button"></button>
+      <div class="variants" id="variants" role="group" aria-label="Wariant trasy"></div>
+      <div class="ropts" id="ropts" role="group" aria-label="Opcje trasy"></div>
+      <p class="msg" id="routeMsg" hidden></p>
+
+      <div class="mapbox">
+        <svg id="map" viewBox="0 0 1000 900" role="img" aria-label="Mapa poglądowa trasy"></svg>
+        <div class="codes" id="codes"></div>
+        <a class="attr" id="attr" href="https://nakordoni.eu/" target="_blank" rel="noopener" hidden>Dane o kolejkach na granicach: <b>Data by nakordoni.eu</b></a>
+      </div>
+
+      <div class="tiles" id="tiles"></div>
+      <div class="actions" id="actions"></div>
+      <div id="nights"></div>
+      <div class="elev" id="elev" hidden></div>
+      <div class="desk-only" id="deskExtra"></div>
+      <div id="borders"></div>
+      <div class="saved" id="saved"></div>
+    </section>
+
+    <!-- PALIWO -->
+    <section class="view" id="v-paliwo" aria-label="Paliwo" hidden>
+      <div class="head">
+        <h1>Paliwo</h1>
+        <div class="segs">
+          <span class="seg" data-set="fuel"><button data-v="on">ON</button><button data-v="pb">Pb 95</button></span>
+          <span class="seg" data-set="cur"><button data-v="pln">zł</button><button data-v="eur">€</button></span>
+        </div>
+      </div>
+      <div class="hero" id="fuelHero"></div>
+      <div class="stepper">
+        <span>Spalanie</span>
+        <span class="st-ctl"><button class="round sm" data-cons="-0.5" aria-label="Mniej">−</button><b id="consVal"></b><button class="round sm" data-cons="0.5" aria-label="Więcej">+</button></span>
+      </div>
+      <h2 class="sub" id="chartTitle"></h2>
+      <div class="chart" id="chart"></div>
+      <p class="tip" id="fuelTip"></p>
+      <p class="fine" id="fuelSrc"></p>
+    </section>
+
+    <!-- WINIETY -->
+    <section class="view" id="v-winiety" aria-label="Winiety" hidden>
+      <div class="head">
+        <h1>Winiety</h1>
+        <div class="segs"><span class="seg" data-set="cur"><button data-v="pln">zł</button><button data-v="eur">€</button></span></div>
+      </div>
+      <div class="hero" id="tollHero"></div>
+      <ul class="cards" id="tolls"></ul>
+      <div id="ferries"></div>
+      <p class="fine" id="tollFine"></p>
+    </section>
+
+    <!-- GAZ -->
+    <section class="view" id="v-gaz" aria-label="Gaz" hidden>
+      <div class="head">
+        <h1>Gaz</h1>
+        <div class="segs"><span class="seg" data-set="gas"><button data-v="route">Na trasie</button><button data-v="all">Wszystkie</button></span></div>
+      </div>
+      <details class="howto">
+        <summary>Jak tankować gaz za granicą</summary>
+        <p><b>Butla tankowalna.</b> Zbiornik lub butla z zaworem 80% (Gaslow, Alugas, Wigam) – tankujesz na stacji LPG z przejściówką.</p>
+        <p><b>Twój wlew to Dish.</b> Przejściówki kupuj pod gwint swojego wlewu: M10 (Tomasetto) lub M14 (Lovato, BRC).</p>
+        <p><b>Nie tankuj zwykłej butli.</b> Butla turystyczna bez zaworu 80% na dystrybutorze to ryzyko przepełnienia i w większości krajów jest zabroniona.</p>
+      </details>
+      <div class="lpgbox" id="lpgBox"></div>
+      <ul class="cards" id="gas"></ul>
+    </section>
+
+    <!-- SERWIS -->
+    <section class="view" id="v-serwis" aria-label="Serwis" hidden>
+      <div class="head">
+        <h1>Serwis</h1>
+        <div class="segs"><span class="seg" data-set="svc"><button data-v="list">Przed wyjazdem</button><button data-v="log">Przeglądy</button></span></div>
+      </div>
+      <div id="svcList">
+        <div class="rowbtns"><button class="txtbtn" id="uncheck">Odznacz wszystko</button><button class="txtbtn" id="restore">Przywróć domyślne</button></div>
+        <div id="groups"></div>
+        <div class="add newgrp"><input id="newGrp" placeholder="Nowa lista, np. Rowery albo Pies" aria-label="Nazwa nowej listy"><button id="addGrp">Dodaj listę</button></div>
+      </div>
+      <div id="svcLog" hidden>
+        <label class="stepper"><span>Aktualny przebieg</span><input id="odo" type="number" inputmode="numeric" placeholder="np. 84500" class="odo"></label>
+        <ul class="svc" id="svc"></ul>
+        <div class="svc-add">
+          <h2 class="sub">Własna pozycja</h2>
+          <label>Nazwa<input id="sName" placeholder="np. Olej w skrzyni"></label>
+          <div class="two">
+            <label>Co ile miesięcy<input id="sMon" type="number" inputmode="numeric" placeholder="12"></label>
+            <label>Co ile km<input id="sKm" type="number" inputmode="numeric" placeholder="30000"></label>
+          </div>
+          <button class="btn" id="sAdd">Dodaj pozycję</button>
+        </div>
+      </div>
+    </section>
+  </main>
+  <aside class="dock" id="dock" aria-label="Mapa trasy"></aside>
+
+  <nav class="nav" aria-label="Menu">
+    <a href="#trasa" data-tab="trasa"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="19" r="2"/><circle cx="18" cy="5" r="2"/><path d="M8 19h7a3.5 3.5 0 0 0 0-7H9a3.5 3.5 0 0 1 0-7h7"/></svg><span>Trasa</span></a>
+    <a href="#paliwo" data-tab="paliwo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21V5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v16M3 21h13M7 8h5M15 11h2a2 2 0 0 1 2 2v4a1.5 1.5 0 0 0 3 0V9l-3-3"/></svg><span>Paliwo</span></a>
+    <a href="#winiety" data-tab="winiety"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16a1 1 0 0 1 1 1v3.5a2.5 2.5 0 0 0 0 5V18a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-3.5a2.5 2.5 0 0 0 0-5V6a1 1 0 0 1 1-1z"/><path d="M15.5 5.5v2M15.5 11v2M15.5 16.5v2"/><path d="M6.5 10h5M6.5 14h3"/></svg><span>Winiety</span></a>
+    <a href="#gaz" data-tab="gaz"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6M12 3v3"/><rect x="6" y="6" width="12" height="15" rx="5"/><path d="M6 12h12"/></svg><span>Gaz</span></a>
+    <a href="#serwis" data-tab="serwis"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.2L3 17.8 6.2 21l6.3-6.3a4 4 0 0 0 5.2-5.4l-2.6 2.6-2.4-.6-.6-2.4z"/></svg><span>Serwis</span></a>
+  </nav>
+</div>
+<dialog class="sheet" id="veh" aria-labelledby="vehTitle">
+  <form method="dialog" id="vehForm">
+    <div class="sheet-h"><h2 id="vehTitle">Twój pojazd</h2><button class="round" value="cancel" aria-label="Zamknij"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+    <div class="typ" role="radiogroup" aria-label="Rodzaj pojazdu">
+      <label><input type="radio" name="typ" value="kamper"><span><b>Kamper</b><small>do 3,5 t</small></span></label>
+      <label><input type="radio" name="typ" value="ciezki"><span><b>Kamper</b><small>powyżej 3,5 t</small></span></label>
+      <label><input type="radio" name="typ" value="zestaw"><span><b>Auto + przyczepa</b><small>zestaw</small></span></label>
+    </div>
+    <div class="grid2">
+      <label class="fld"><span id="lDmc">DMC kampera</span><input name="dmc" type="number" inputmode="numeric" step="50"><i>kg</i></label>
+      <label class="fld" data-only="zestaw"><span>DMC przyczepy</span><input name="dmcP" type="number" inputmode="numeric" step="50"><i>kg</i></label>
+      <label class="fld"><span>Wysokość całkowita</span><input name="wys" type="number" inputmode="decimal" step="0.05"><i>m</i></label>
+      <label class="fld"><span id="lWysOs">Wysokość nad przednią osią</span><input name="wysOs" type="number" inputmode="decimal" step="0.05"><i>m</i></label>
+      <label class="fld"><span id="lDl">Długość</span><input name="dl" type="number" inputmode="decimal" step="0.1"><i>m</i></label>
+      <label class="fld" data-only="ciezki"><span>Liczba osi</span><input name="osie" type="number" inputmode="numeric" min="2" max="4"><i>osie</i></label>
+    </div>
+    <label class="chk" data-hide="zestaw"><input type="checkbox" name="kemp"><span>W dowodzie „samochód specjalny kempingowy”<small>W Słowenii taki kamper do 3,5 t płaci tańszą winietę 2A bez względu na wysokość.</small></span></label>
+    <div class="grid2">
+      <label class="fld"><span>Spalanie</span><input name="cons" type="number" inputmode="decimal" step="0.5"><i>l/100 km</i></label>
+      <div class="fld"><span>Paliwo</span><span class="seg" data-set="fuel"><button type="button" data-v="on">ON</button><button type="button" data-v="pb">Pb 95</button></span></div>
+    </div>
+    <button class="btn wide" value="ok">Zapisz pojazd</button>
+  </form>
+</dialog>
+<script src="assets/config.js?v=20261025r"></script>
+<script src="assets/app.js?v=20261025r"></script>
+</body>
+</html>

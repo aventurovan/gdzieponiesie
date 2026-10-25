@@ -1,0 +1,551 @@
+{
+ "kurs": 4.4,
+ "kraje": {
+  "PL": {
+   "o": "PL",
+   "n": "Polska",
+   "map": "Poland",
+   "schengen": true,
+   "on": 1.79,
+   "pb": 1.56,
+   "gaz": [
+    "Dish"
+   ],
+   "gazOpis": "Złącze talerzowe, takie jak w Twoim wlewie. Butle 11 kg wymienisz na stacjach i w punktach.",
+   "lpg": 0.81,
+   "eu": true,
+   "stawki": {
+    "A1": {
+     "k": "A1 Rusocin – Toruń (AmberOne)",
+     "zl": 29.9,
+     "link": "https://www.a1.com.pl"
+    },
+    "A4": {
+     "k": "A4 Katowice – Kraków",
+     "zl": 36,
+     "zlWyzsza": 110,
+     "link": "https://www.autostrada-a4.com.pl"
+    },
+    "A2": {
+     "k": "A2 Konin – Poznań (część odcinka koncesyjnego)",
+     "zl": 50,
+     "szacunek": true
+    },
+    "etoll": "https://etoll.gov.pl"
+   }
+  },
+  "CZ": {
+   "o": "CZ",
+   "n": "Czechy",
+   "map": "Czechia",
+   "schengen": true,
+   "on": 1.95,
+   "pb": 1.86,
+   "gaz": [
+    "Dish"
+   ],
+   "gazOpis": "Lokalne butle wymienne mają różne zawory. Najprościej tankować butlę wielokrotnego napełniania.",
+   "lpg": 0.96,
+   "eu": true,
+   "stawki": {
+    "winieta10": 12.7,
+    "lok": "310 Kč",
+    "link": "https://edalnice.cz",
+    "ciezki": "https://mytocz.eu"
+   }
+  },
+  "SK": {
+   "o": "SK",
+   "n": "Słowacja",
+   "map": "Slovakia",
+   "schengen": true,
+   "on": 1.95,
+   "pb": 1.89,
+   "gaz": [
+    "Dish"
+   ],
+   "gazOpis": "Lokalne butle wymienne mają różne zawory. Zabierz przejściówki albo butlę tankowalną.",
+   "lpg": 0.87,
+   "eu": true,
+   "stawki": {
+    "winieta10": 10.8,
+    "przyczepa10": 10.8,
+    "link": "https://eznamka.sk",
+    "ciezki": "https://www.emyto.sk"
+   }
+  },
+  "HU": {
+   "o": "H",
+   "n": "Węgry",
+   "map": "Hungary",
+   "schengen": true,
+   "on": 1.95,
+   "pb": 1.77,
+   "gaz": [
+    "Dish"
+   ],
+   "gazOpis": "LPG na większości dużych stacji. Lokalne butle z innymi zaworami.",
+   "lpg": 1.02,
+   "eu": true,
+   "stawki": {
+    "D1": 18.8,
+    "D1lok": "6 910 Ft",
+    "D2": 29,
+    "D2lok": "10 660 Ft",
+    "U": 18.8,
+    "Ulok": "6 910 Ft",
+    "link": "https://ematrica.nemzetiutdij.hu"
+   }
+  },
+  "AT": {
+   "o": "A",
+   "n": "Austria",
+   "map": "Austria",
+   "schengen": true,
+   "on": 2.13,
+   "pb": 1.82,
+   "gaz": [
+    "Dish",
+    "ACME"
+   ],
+   "gazOpis": "Spotkasz oba złącza. Butle wymienne zwykle z gwintem jak w Niemczech – sprawdź przed zakupem.",
+   "eu": true,
+   "stawki": {
+    "winieta10": 12.8,
+    "brenner": 12,
+    "link": "https://shop.asfinag.at",
+    "ciezki": "https://www.go-maut.at"
+   }
+  },
+  "SI": {
+   "o": "SLO",
+   "n": "Słowenia",
+   "map": "Slovenia",
+   "schengen": true,
+   "on": 1.89,
+   "pb": 1.75,
+   "gaz": [
+    "Dish"
+   ],
+   "gazOpis": "Autoplin na wielu stacjach. Butle lokalnych dystrybutorów wymagają przejściówki.",
+   "lpg": 0.99,
+   "eu": true,
+   "stawki": {
+    "2A": 16,
+    "2B": 32,
+    "link": "https://evinjeta.dars.si",
+    "ciezki": "https://www.darsgo.si"
+   }
+  },
+  "HR": {
+   "o": "HR",
+   "n": "Chorwacja",
+   "map": "Croatia",
+   "schengen": true,
+   "on": 1.95,
+   "pb": 1.81,
+   "gaz": [
+    "Dish"
+   ],
+   "gazOpis": "Autoplin popularny przy autostradach. Butle lokalne – potrzebna przejściówka.",
+   "lpg": 0.98,
+   "eu": true,
+   "stawki": {
+    "mn": {
+     "I": 1,
+     "II": 1.55,
+     "III": 3.5
+    },
+    "kmI": 0.07
+   }
+  },
+  "RS": {
+   "o": "SRB",
+   "n": "Serbia",
+   "map": "Serbia",
+   "schengen": false,
+   "on": 2.01,
+   "pb": 1.76,
+   "gaz": [
+    "Dish"
+   ],
+   "gazOpis": "Polskiej butli nie wymienisz. Szukaj punktów „punjenje plina” albo tankuj butlę wielokrotnego napełniania.",
+   "lpg": 0.94,
+   "eu": false,
+   "stawki": {
+    "mn": {
+     "I": 1,
+     "II": 1.5,
+     "III": 2.6
+    },
+    "kmI": 0.05
+   }
+  },
+  "ME": {
+   "o": "MNE",
+   "n": "Czarnogóra",
+   "map": "Montenegro",
+   "schengen": false,
+   "on": 1.98,
+   "pb": 1.8,
+   "gaz": [
+    "Dish"
+   ],
+   "gazOpis": "Mało stacji LPG poza wybrzeżem i Podgoricą. Zatankuj gaz wcześniej.",
+   "eu": false,
+   "stawki": {
+    "mn": {
+     "I": 1,
+     "II": 1.5,
+     "III": 2.6
+    },
+    "kmI": 0.1
+   }
+  },
+  "BG": {
+   "o": "BG",
+   "n": "Bułgaria",
+   "map": "Bulgaria",
+   "schengen": true,
+   "on": 1.88,
+   "pb": 1.65,
+   "gaz": [
+    "Dish"
+   ],
+   "gazOpis": "LPG tanie i łatwo dostępne. Lokalne butle z innymi zaworami.",
+   "lpg": 0.61,
+   "eu": true,
+   "stawki": {
+    "tydzien": 8,
+    "link": "https://web.bgtoll.bg"
+   }
+  },
+  "TR": {
+   "o": "TR",
+   "n": "Turcja",
+   "map": "Turkey",
+   "schengen": false,
+   "on": 1.74,
+   "pb": 1.37,
+   "gaz": [
+    "Dish"
+   ],
+   "gazOpis": "Otogaz na prawie każdej stacji. Lokalne butle nie pasują do polskiego reduktora.",
+   "eu": false,
+   "stawki": {
+    "mn": {
+     "1": 1,
+     "2": 1.25,
+     "3": 1.65
+    },
+    "kmI": 0.03
+   }
+  },
+  "DE": {
+   "o": "D",
+   "n": "Niemcy",
+   "map": "Germany",
+   "schengen": true,
+   "on": 2.27,
+   "pb": 2.18,
+   "gaz": [
+    "ACME",
+    "Dish"
+   ],
+   "gazOpis": "Szare butle 5 i 11 kg z kaucją, na stacjach i w marketach budowlanych. Gwint jak w Polsce (W21,8 LH), więc pasuje polski reduktor.",
+   "lpg": 1.1,
+   "eu": true
+  },
+  "IT": {
+   "o": "I",
+   "n": "Włochy",
+   "map": "Italy",
+   "schengen": true,
+   "on": 2.24,
+   "pb": 2.02,
+   "gaz": [
+    "Dish"
+   ],
+   "gazOpis": "GPL na wielu stacjach, często tankuje pracownik. Butle lokalne z innym zaworem.",
+   "lpg": 0.79,
+   "eu": true,
+   "stawki": {
+    "mn": {
+     "A": 0.98,
+     "B": 1,
+     "3": 1.35
+    },
+    "link": "https://www.autostrade.it",
+    "kmI": 0.075
+   }
+  },
+  "FR": {
+   "o": "F",
+   "n": "Francja",
+   "map": "France",
+   "schengen": true,
+   "on": 2.35,
+   "pb": 2.23,
+   "gaz": [
+    "Dish"
+   ],
+   "gazOpis": "Butle Butagaz, Antargaz i Primagaz mają inne złącza. Zimą bierz propan, butan nie odparowuje w mrozie.",
+   "lpg": 1.03,
+   "eu": true,
+   "stawki": {
+    "mn": {
+     "1": 1,
+     "2": 1.5,
+     "3": 2.2
+    },
+    "link": "https://www.autoroutes.fr",
+    "kmI": 0.11
+   }
+  },
+  "ES": {
+   "o": "E",
+   "n": "Hiszpania",
+   "map": "Spain",
+   "schengen": true,
+   "on": 1.89,
+   "pb": 1.78,
+   "gaz": [
+    "Euronozzle",
+    "Dish"
+   ],
+   "gazOpis": "Nowsze stacje mają Euronozzle, starsze Dish. Butle Repsol i Cepsa z własnymi zaworami.",
+   "lpg": 1.1,
+   "eu": true,
+   "stawki": {
+    "mn": {
+     "Ligeros": 1,
+     "Pesados 1": 1.7
+    },
+    "kmI": 0.1
+   }
+  },
+  "PT": {
+   "o": "P",
+   "n": "Portugalia",
+   "map": "Portugal",
+   "schengen": true,
+   "on": 2.18,
+   "pb": 2.1,
+   "gaz": [
+    "Euronozzle",
+    "Dish"
+   ],
+   "gazOpis": "GPL na większych stacjach. Butle Galp i Rubis wymagają przejściówki.",
+   "lpg": 0.95,
+   "eu": true,
+   "stawki": {
+    "mn": {
+     "1": 1,
+     "2": 1.75,
+     "3": 2.25
+    },
+    "link": "https://www.portugaltolls.com",
+    "kmI": 0.09
+   }
+  },
+  "NL": {
+   "o": "NL",
+   "n": "Holandia",
+   "map": "Netherlands",
+   "schengen": true,
+   "gaz": [
+    "Bayonet"
+   ],
+   "gazOpis": "Złącze bagnetowe – bez przejściówki nie zatankujesz.",
+   "pb": 2.39,
+   "on": 2.46,
+   "lpg": 0.98,
+   "eu": true
+  },
+  "BE": {
+   "o": "B",
+   "n": "Belgia",
+   "map": "Belgium",
+   "schengen": true,
+   "gaz": [
+    "ACME"
+   ],
+   "gazOpis": "Złącze ACME, jak w Niemczech.",
+   "pb": 1.99,
+   "on": 2.35,
+   "lpg": 1.08,
+   "eu": true
+  },
+  "CH": {
+   "o": "CH",
+   "n": "Szwajcaria",
+   "map": "Switzerland",
+   "schengen": true,
+   "gaz": [
+    "ACME",
+    "Dish"
+   ],
+   "gazOpis": "Mało stacji LPG. Przy granicy z Włochami i Francją bywa Dish.",
+   "pb": 2.32,
+   "on": 2.65,
+   "lpg": 1.29,
+   "eu": false
+  },
+  "GR": {
+   "o": "GR",
+   "n": "Grecja",
+   "map": "Greece",
+   "schengen": true,
+   "gaz": [
+    "Dish"
+   ],
+   "gazOpis": "Autogas popularny. Butle lokalne z innymi zaworami.",
+   "pb": 2.19,
+   "on": 2.13,
+   "eu": true
+  },
+  "DK": {
+   "o": "DK",
+   "n": "Dania",
+   "map": "Denmark",
+   "schengen": true,
+   "gaz": [
+    "ACME",
+    "Dish"
+   ],
+   "gazOpis": "Mało stacji autogazu. Butle Kosan Gas z własnym zaworem – potrzebna przejściówka.",
+   "pb": 2.6,
+   "on": 2.5,
+   "eu": true
+  },
+  "SE": {
+   "o": "S",
+   "n": "Szwecja",
+   "map": "Sweden",
+   "schengen": true,
+   "gaz": [
+    "Dish",
+    "ACME"
+   ],
+   "gazOpis": "Gasol w butlach AGA i Kosan, z własnymi zaworami. Stacji autogazu jest niewiele.",
+   "kontrole": "Szwecja przedłużyła kontrole na granicach co najmniej do listopada 2026 – miej dowód lub paszport.",
+   "pb": 1.64,
+   "on": 2.04,
+   "eu": true,
+   "stawki": {
+    "link": "https://www.epass24.com"
+   }
+  },
+  "NO": {
+   "o": "N",
+   "n": "Norwegia",
+   "map": "Norway",
+   "schengen": true,
+   "eu": false,
+   "gaz": [
+    "Dish",
+    "ACME"
+   ],
+   "gazOpis": "Butle AGA i Primus w punktach Circle K i Uno-X. Autogaz praktycznie niedostępny.",
+   "kontrole": "Norwegia jest w Schengen, ale poza UE – na granicy możliwa kontrola celna (alkohol, mięso, nabiał).",
+   "pb": 2.79,
+   "on": 2.65,
+   "stawki": {
+    "link": "https://www.epass24.com"
+   }
+  },
+  "BA": {
+   "o": "BIH",
+   "n": "Bośnia i Hercegowina",
+   "map": "Bosnia and Herz.",
+   "schengen": false,
+   "eu": false,
+   "pb": 1.75,
+   "on": 1.92,
+   "lpg": 0.73,
+   "gaz": [
+    "Dish"
+   ],
+   "gazOpis": "LPG na większych stacjach. Polskiej butli nie wymienisz."
+  },
+  "AL": {
+   "o": "AL",
+   "n": "Albania",
+   "map": "Albania",
+   "schengen": false,
+   "eu": false,
+   "pb": 2.14,
+   "on": 2.4,
+   "lpg": 0.75,
+   "gaz": [
+    "Dish"
+   ],
+   "gazOpis": "LPG popularne i tanie."
+  },
+  "MK": {
+   "o": "NMK",
+   "n": "Macedonia Północna",
+   "map": "Macedonia",
+   "schengen": false,
+   "eu": false,
+   "pb": 1.56,
+   "on": 1.62,
+   "lpg": 0.81,
+   "gaz": [
+    "Dish"
+   ],
+   "gazOpis": "LPG popularne."
+  },
+  "RO": {
+   "o": "RO",
+   "n": "Rumunia",
+   "map": "Romania",
+   "schengen": true,
+   "eu": true,
+   "pb": 1.9,
+   "on": 2.04,
+   "lpg": 0.89,
+   "gaz": [
+    "Dish"
+   ],
+   "gazOpis": "LPG na wielu stacjach."
+  },
+  "LU": {
+   "o": "L",
+   "n": "Luksemburg",
+   "map": "Luxembourg",
+   "schengen": true,
+   "eu": true,
+   "pb": 1.79,
+   "on": 2.08,
+   "lpg": 0.95,
+   "gaz": [
+    "ACME"
+   ],
+   "gazOpis": "Złącze ACME."
+  }
+ },
+ "paliwoZrodlo": "tolls.eu, średnie z 19.10.2026",
+ "zielonaKarta": {
+  "wymagana": [
+   "AL",
+   "MK",
+   "MD",
+   "TR",
+   "UA",
+   "MA",
+   "TN",
+   "AZ"
+  ],
+  "nazwy": {
+   "AL": "Albania",
+   "MK": "Macedonia Północna",
+   "MD": "Mołdawia",
+   "TR": "Turcja",
+   "UA": "Ukraina",
+   "MA": "Maroko",
+   "TN": "Tunezja",
+   "AZ": "Azerbejdżan"
+  }
+ }
+}
