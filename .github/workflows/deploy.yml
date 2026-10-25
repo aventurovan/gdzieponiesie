@@ -9,10 +9,10 @@ concurrency: deploy
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04   # stała wersja – bez niespodzianek przy przejściu ubuntu-latest na Ubuntu 26
     steps:
       - name: Pobranie plików z repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Utworzenie konfiguracji z sekretów
         env:

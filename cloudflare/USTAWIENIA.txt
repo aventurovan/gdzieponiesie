@@ -1,0 +1,25 @@
+Worker gdzieponiesie-api v20 – ustawienia w Cloudflare (jednorazowo)
+====================================================================
+
+1. KV (magazyn na dane z nakordoni.eu)
+   Storage & Databases → KV → Create namespace → nazwa: gdzieponiesie-nk
+   Workers → gdzieponiesie-api → Settings → Bindings → Add → KV namespace
+     Variable name: NK      KV namespace: gdzieponiesie-nk
+
+2. Cron (jedyne miejsce, które pyta nakordoni.eu)
+   Workers → gdzieponiesie-api → Settings → Triggers → Cron Triggers → Add
+     0 */3 * * *        (co 3 godziny)
+   Kolejki: przy każdym uruchomieniu, paliwo: raz na dobę.
+
+3. Kod: Edit code → wklej worker.js → Deploy.
+   Sekrety bez zmian: ORS_API_KEY, NAKORDONI_KEY.
+
+Sprawdzenie: https://ADRES-WORKERA/nk/status
+   – kiedy był ostatni cron, ile zapytań poszło dziś, błędy, próbka danych.
+   Ten adres NIE wysyła nic do nakordoni.eu.
+
+Pierwsze dane pojawią się po pierwszym uruchomieniu crona (najpóźniej po 3 h).
+Można go wywołać od razu: Settings → Triggers → przy cronie „Test” / w zakładce Schedule.
+
+Zużycie: ok. 14 zapytań co 3 h (kolejki) + 33 raz na dobę (paliwo) ≈ 145 dziennie,
+niezależnie od liczby użytkowników strony.
