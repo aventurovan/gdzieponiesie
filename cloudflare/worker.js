@@ -1,4 +1,5 @@
 // gdzieponiesie.pl — pośrednik do OpenRouteService (Cloudflare Worker), wersja 15
+// v22: paliwo porcjami (8 krajów na uruchomienie, każdy raz na dobę), pomijanie krajów bez danych (404), 2 s odstępu.
 // v21: /reverse (nazwy miejsc noclegów), więcej serwerów Overpass, krótsze limity czasu.
 // v20: /poi (kempingi i miejsca dla kamperów przy noclegach) i /poi/lpg (stacje LPG wzdłuż trasy) z OpenStreetMap (Overpass), cache 7 dni.
 // v19: wysokości punktów (elevation) do profilu trasy.
@@ -17,7 +18,7 @@ const ORS_URL = 'https://api.openrouteservice.org/v2/directions/driving-car/geoj
 const ORS_URL_HGV = 'https://api.openrouteservice.org/v2/directions/driving-hgv/geojson';
 const ALLOWED_ORIGINS = ['https://gdzieponiesie.pl', 'https://www.gdzieponiesie.pl'];
 const CACHE_SECONDS = 6 * 3600;
-const CACHE_VERSION = 'v21';
+const CACHE_VERSION = 'v22';
 const GEOCODE_URL = 'https://api.openrouteservice.org/geocode/autocomplete';
 const GEOCODE_CACHE_SECONDS = 24 * 3600;
 const ORS_TIMEOUT_MS = 40000;
@@ -755,16 +756,17 @@ async function handleBorder(url, env, cors) {
 
 // ===================== CRON: jedyne miejsce, które pyta nakordoni.eu =====================
 // Kraje, dla których pobieramy ceny paliwa (raz na dobę). Każdy kraj = 1 zapytanie.
-const FUEL_COUNTRIES = ['PL', 'CZ', 'SK', 'HU', 'AT', 'SI', 'HR', 'BA', 'RS', 'ME', 'AL', 'MK', 'BG', 'RO', 'GR', 'TR',
+const FUEL_COUNTRIES = ['PL', 'CZ', 'SK', 'HU', 'AT', 'SI', 'HR', 'MK', 'BG', 'RO', 'GR', 'TR',
   'DE', 'IT', 'FR', 'ES', 'PT', 'NL', 'BE', 'LU', 'CH', 'DK', 'SE', 'NO', 'LT', 'LV', 'EE', 'UA', 'MD'];
 // Pary granic poza Schengen pobierane co 3 h (oba kierunki osobno). Każda para = 1 zapytanie.
 // Lista celowo krótka: tylko granice z tras planera. Dopisz parę, gdy dojdzie nowy kierunek.
 const BORDER_PAIRS = ['HU>RS', 'RS>HU', 'HR>RS', 'RS>HR', 'HR>BA', 'BA>HR', 'HR>ME', 'ME>HR',
   'RS>ME', 'ME>RS', 'RS>BG', 'BG>RS', 'BG>TR', 'TR>BG'];
 const FUEL_EVERY_H = 24;   // paliwo: raz na dobę
+const FUEL_PER_RUN = 8;    // ile krajów paliwa na jedno uruchomienie crona (reszta w kolejnych)
 const FUEL_HOUR_UTC = 4;   // …o tej godzinie UTC (pierwsze uruchomienie crona po niej)
 const BORDERS_EVERY_H = 3; // kolejki: nie częściej niż co 3 h
-const PAUSE_MS = 400;      // odstęp między zapytaniami, żeby nie robić serii
+const PAUSE_MS = 2000;     // 2 s między zapytaniami – nakordoni.eu odcina serie (429)
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function nkFetch(path, key) {
@@ -817,13 +819,15 @@ async function runNakordoniCron(env, now) {
     await env.NK.put('borders', JSON.stringify({ pairs, updated: now.toISOString() }));
   } else log.borders = 'pominięte – dane z ' + prev.updated;
 
-  // --- paliwo: raz na dobę, w pierwszym uruchomieniu po FUEL_HOUR_UTC (awaryjnie, gdy dane starsze niż 30 h) ---
+  // --- paliwo: każdy kraj raz na dobę, porcjami po FUEL_PER_RUN krajów na uruchomienie (bez serii zapytań) ---
+  // Kraje, których nakordoni.eu nie obsługuje (404), pomijamy przez 30 dni.
   const fuelPrev = (await env.NK.get('fuel', 'json')) || { byCountry: {} };
-  const age = hoursSince(fuelPrev.updated);
-  const dueToday = now.getUTCHours() >= FUEL_HOUR_UTC && (!fuelPrev.updated || fuelPrev.updated.slice(0, 10) !== today);
-  if (!stop && (dueToday && age >= 12 || age >= 30)) {
+  const skip = fuelPrev.skip || {};
+  const fetchedAt = fuelPrev.fetchedAt || {};
+  const due = FUEL_COUNTRIES.filter((c) => !(skip[c] && new Date(skip[c]) > now) && hoursSince(fetchedAt[c]) >= 23).slice(0, FUEL_PER_RUN);
+  if (!stop && due.length) {
     const byCountry = { ...fuelPrev.byCountry };
-    for (const c of FUEL_COUNTRIES) {
+    for (const c of due) {
       try {
         log.fuel_calls++;
         const payload = await nkFetch('/api/v1/data/fuel?lang=en&country=' + c, key);
@@ -832,15 +836,17 @@ async function runNakordoniCron(env, now) {
           byCountry[c] = { country: c, currency: d.currency || null, diesel: d.diesel ?? null, petrol: d.petrol ?? null,
             lpg: d.lpg ?? null, lpg_eur: d.lpg_eur ?? null, updated: d.updated || null };
         }
+        fetchedAt[c] = now.toISOString();
       } catch (e) {
         log.errors.push('paliwo ' + c + ': ' + e.message);
-        if (/HTTP (401|403|429)/.test(e.message)) break;
+        if (/HTTP 404/.test(e.message)) { skip[c] = new Date(now.getTime() + 30 * 864e5).toISOString(); fetchedAt[c] = now.toISOString(); }
+        if (/HTTP (401|403|429)/.test(e.message)) break;   // limit – reszta w następnym uruchomieniu
       }
       await sleep(PAUSE_MS);
     }
-    await env.NK.put('fuel', JSON.stringify({ byCountry, updated: now.toISOString() }));
+    await env.NK.put('fuel', JSON.stringify({ byCountry, fetchedAt, skip, updated: now.toISOString() }));
     status.fuel_at = now.toISOString();
-  } else log.fuel = 'pominięte – ostatnio ' + (fuelPrev.updated || 'nigdy');
+  } else log.fuel = due.length ? 'pominięte – blokada po błędzie kolejek' : 'wszystkie kraje aktualne';
 
   status.last_run = log;
   status.border_calls_today += log.border_calls;

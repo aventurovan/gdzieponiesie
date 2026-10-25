@@ -496,3 +496,10 @@ html,body,button,input,select{font-variant-numeric:normal;font-feature-settings:
 @media (max-width:420px){.nav{padding-left:8px;padding-right:8px}.nav a{min-width:40px;padding:0 8px}.nav a[aria-current="page"]{padding:0 12px}}
 
 .p4n{display:flex;width:max-content;align-items:center;gap:4px;margin-top:6px;font-size:13px;font-weight:700;color:var(--ink);text-decoration:underline;text-underline-offset:3px}
+
+.cps{width:100%;border-collapse:collapse;margin-top:6px;font-size:14px}
+.cps th{text-align:left;font-size:12px;color:var(--mut);font-weight:700;padding:4px 4px}
+.cps td{padding:6px 4px;border-top:1px solid var(--rule)}
+.cps tr.best td{font-weight:800}
+.q-okt{color:var(--ok)} .q-midt{color:var(--amb-ink)} .q-badt{color:var(--bad)}
+:root[data-theme="dark"] .q-midt{color:var(--amb)}

@@ -758,8 +758,16 @@ async function loadBorderWaits(r){
       const withPos = L.filter(c => c.lat != null && c.lon != null);
       return withPos.length ? withPos.sort((x, y) => hav([x.lon, x.lat], [b.lon, b.lat]) - hav([y.lon, y.lat], [b.lon, b.lat]))[0] : L[0]; };
     const t = best(there), k = best(back);
-    if(t){ b.tam = t.wait_min; if(t.name) b.a = t.name; }
-    if(k){ b.powrot = k.wait_min; }
+    // nakordoni.eu podaje wszystkie przejścia na tej granicy – pokazujemy listę (bez współrzędnych nie wiemy, które jest na trasie)
+    const L = ((there && there.checkpoints) || []).filter(c => c.wait_min != null);
+    const backBy = {}; ((back && back.checkpoints) || []).forEach(c => { if(c.name) backBy[c.name] = c.wait_min; });
+    if(L.length && !L.some(c => c.lat != null)){
+      b.cps = L.slice().sort((x, y) => x.wait_min - y.wait_min).slice(0, 6).map(c => ({name: c.name, tam: c.wait_min, powrot: backBy[c.name] ?? null}));
+      b.tam = b.cps[0].tam; b.a = KR[b.nk[0]].n; b.b = KR[b.nk[1]].n;
+    } else {
+      if(t){ b.tam = t.wait_min; if(t.name) b.a = t.name; }
+      if(k){ b.powrot = k.wait_min; }
+    }
     if(there && there.fetched_at) borderSrc = 'aktualizacja ' + new Date(there.fetched_at * 1000).toLocaleTimeString('pl-PL', {hour: '2-digit', minute: '2-digit'});
   }));
   if(R === r) renderTrasa();
@@ -863,11 +871,14 @@ function renderTrasa(){
   const q = m => m < 30 ? 'q-ok' : m < 90 ? 'q-mid' : 'q-bad';
   $('#borders').innerHTML = `
     <button class="amber" id="bBtn" aria-expanded="${bordersOpen}" aria-controls="bList">
-      <span><b>${B.length} ${B.length === 1 ? 'granica' : 'granice'} poza Schengen</b><small>${B.map(b => `${esc(b.a)}${waitOf(b).tam != null ? ' ' + mins(waitOf(b).tam) : ''}`).join(', ')}</small></span>
+      <span><b>${B.length} ${B.length === 1 ? 'granica' : 'granice'} poza Schengen</b><small>${B.map(b => b.cps ? `${esc(KR[b.nk[0]].o)}→${esc(KR[b.nk[1]].o)} od ${mins(b.cps[0].tam)}` : `${esc(b.a)}${waitOf(b).tam != null ? ' ' + mins(waitOf(b).tam) : ''}`).join(', ')}</small></span>
       <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M6 3l5 5-5 5"/></svg>
     </button>
     <ul class="blist" id="bList" ${bordersOpen ? '' : 'hidden'}>
-      ${B.map(b => { const w = waitOf(b); return `<li><div class="bn">${esc(b.a)} – ${esc(b.b)}</div><div class="bs">kontrola paszportowa, osobowe i kampery</div>
+      ${B.map(b => { const w = waitOf(b);
+        if(b.cps) return `<li><div class="bn">${esc(b.a)} → ${esc(b.b)}</div><div class="bs">przejścia na tej granicy, osobowe i kampery – wybierz najkrótszą kolejkę</div>
+          <table class="cps"><thead><tr><th>Przejście</th><th>tam</th><th>powrót</th></tr></thead><tbody>${b.cps.map((c, i) => `<tr${i === 0 ? ' class="best"' : ''}><td>${esc(c.name || '–')}</td><td><b class="${q(c.tam)}t">${mins(c.tam)}</b></td><td>${c.powrot != null ? mins(c.powrot) : '–'}</td></tr>`).join('')}</tbody></table></li>`;
+        return `<li><div class="bn">${esc(b.a)} – ${esc(b.b)}</div><div class="bs">kontrola paszportowa, osobowe i kampery</div>
         <div class="q"><span>Tam</span><span class="tr"><i class="${q(w.tam || 0)}" style="width:${Math.min(100, (w.tam || 0) / 1.5)}%"></i></span><b>${mins(w.tam)}</b>
         <span>Powrót</span><span class="tr"><i class="${q(w.powrot || 0)}" style="width:${Math.min(100, (w.powrot || 0) / 1.5)}%"></i></span><b>${mins(w.powrot)}</b></div></li>`; }).join('')}
       <li class="fine" style="background:none;padding:0 4px">Dane o kolejkach na granicach: <a class="src-link" href="https://nakordoni.eu/" target="_blank" rel="noopener">Data by nakordoni.eu</a>${borderSrc ? ', ' + borderSrc : ', odświeżane co 3 h'}</li>
