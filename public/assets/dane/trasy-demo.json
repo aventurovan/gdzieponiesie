@@ -1521,6 +1521,24 @@
    "h": 3.75,
    "tylkoNO": true,
    "opis": "Szacunek dla kampera. Rejs ok. 3,75 h, blisko Oslo."
+  },
+  {
+   "id": "kamenari-lepetane",
+   "trasa": "Kamenari – Lepetane",
+   "operator": "Morsko Dobro (prom przez Zatokę Kotorską)",
+   "a": [
+    18.683,
+    42.463
+   ],
+   "b": [
+    18.687,
+    42.476
+   ],
+   "od": 8,
+   "sezon": 15,
+   "h": 0.25,
+   "lokalny": true,
+   "opis": "Krótki prom przez Zatokę Kotorską, ok. 5 min, kursuje całą dobę. Bilet w kasie na nabrzeżu; cena dla kampera zależy od długości (osobówka ok. 5 €). Objazd zatoki przez Kotor zajmuje ok. 1 h – wybierz „Bez promów”, jeśli wolisz jechać."
   }
  ]
 }

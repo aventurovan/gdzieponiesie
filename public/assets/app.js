@@ -580,6 +580,7 @@ function ferryAlts(a, b){
   if(!north && !south || S.opt.avoid.includes('ferries')) return [];
   const dest = north ? b : a, orig = north ? a : b, out = [];
   for(const f of T.promyPorty || []){
+    if(f.lokalny) continue;   // krótkie przeprawy lokalne nie są wariantem do Skandynawii
     if(f.tylkoNO && !(dest.lon < 12.6 && dest.lat > 57.9)) continue;     // promy do Norwegii tylko gdy cel w Norwegii
     if(f.zachod && !(dest.lon < 7.5)) continue;                          // Hirtshals–Stavanger tylko dla zachodniej Norwegii
     if(f.wschodNie && dest.lon < 7.5) continue;
@@ -951,7 +952,7 @@ function renderWiniety(){
       <span class="pr">${fc ? `od ok. ${money(fc.od)}<small>w sezonie ok. ${money(fc.sezon)}</small>` : '<small>cena u przewoźnika</small>'}</span></div>
       <p>${p.opis ? esc(p.opis) + ' ' : ''}${fc ? `Szacunek dla Twojego pojazdu: ${fmt(+v.dl, 1)} m długości${v.zestaw ? ', zestaw z przyczepą' : ''}.` : 'Tej przeprawy nie mamy w cenniku – sprawdź cenę u przewoźnika.'}</p>
       ${p.link ? `<a class="buy" href="${esc(p.link)}" target="_blank" rel="noopener">Kup bilet – ${esc(p.operator)}</a>` : ''}</div>` : '')
-    + (p || scand ? `<h2 class="sub">Inne promy do Skandynawii</h2><ul class="olist">${other.map(o => `<li><span>${esc(o.trasa)}<br><small class="var-note">${esc(o.operator)}</small></span><a href="${esc(o.link)}" target="_blank" rel="noopener">Bilety</a></li>`).join('')}</ul>` : '');
+    + (scand ? `<h2 class="sub">Inne promy do Skandynawii</h2><ul class="olist">${other.map(o => `<li><span>${esc(o.trasa)}<br><small class="var-note">${esc(o.operator)}</small></span><a href="${esc(o.link)}" target="_blank" rel="noopener">Bilety</a></li>`).join('')}</ul>` : '');
   $('#tollFine').textContent = `Stawki dla: ${TYP_N[v.typ].toLowerCase()}. Kwoty „ok.” są szacunkowe – przed zakupem sprawdź na stronie operatora. Ceny promów zależą od terminu i długości pojazdu.`;
 }
 
@@ -1322,7 +1323,7 @@ function renderExtras(){
       <ol class="days">${n.days.map((d, i) => { const s = n.stops[i] || {lat: R.chain[R.chain.length - 1][2], lon: R.chain[R.chain.length - 1][1]};
         const from = i === 0 ? R.fromName : stopName(n.stops[i - 1]), to = i < n.stops.length ? stopName(n.stops[i]) : R.toName;
         return `<li><span class="dn">${i + 1}</span><span class="dd"><b>${esc(from)} → ${esc(to)}</b><small>${fmt(Math.round(d.km))} km, ok. ${fmt(d.h, 1)} h jazdy${d.ferry ? ', z promem' : ''}</small>${p4n(s.lat, s.lon)}</span></li>`; }).join('')}</ol>
-      <p class="fine">X</p>`;
+      <p class="fine">Miejsca noclegów są orientacyjne – punkty na trasie po przejechaniu dziennego limitu. Konkretne miejsca na nocleg w okolicy sprawdzisz w park4night.</p>`;
   if(S.tab === 'noclegi') loadNames(n.stops);
   if(false) loadCamps(n.stops.concat([{lat: R.chain[R.chain.length - 1][2], lon: R.chain[R.chain.length - 1][1]}]));
   // profil wysokości
