@@ -1144,6 +1144,8 @@ function loadNames(stops){
       .then(j => { NAMES[k] = j; }).catch(() => { NAMES[k] = {}; }).finally(() => { if(R && S.tab === 'noclegi') renderExtras(); }); });
 }
 const stopName = s => { const n = NAMES[campKey(s.lat, s.lon)]; return n && n.name ? (n.d > 6 ? 'okolice: ' + n.name : n.name) : s.place; };
+// park4night: mapa z miejscami w okolicy noclegu (tylko link – dane zostają u nich)
+const p4n = (lat, lon) => `<a class="p4n" href="https://park4night.com/en/search?lat=${lat.toFixed(5)}&lng=${lon.toFixed(5)}&z=11" target="_blank" rel="noopener">Miejsca w okolicy na park4night <span aria-hidden="true">↗</span></a>`;
 const gmaps = (lat, lon) => `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
 function campsHtml(lat, lon){
   if(!API()) return '';
@@ -1275,7 +1277,7 @@ function renderExtras(){
   $('#nights').innerHTML = `<div class="nt-lim"><span>Dziennie jadę do</span><span class="st-ctl"><button class="round sm" data-dz="-50" aria-label="Mniej km dziennie">−</button><b>${fmt(S.dzien)} km</b><button class="round sm" data-dz="50" aria-label="Więcej km dziennie">+</button></span></div>
       <ol class="days">${n.days.map((d, i) => { const s = n.stops[i] || {lat: R.chain[R.chain.length - 1][2], lon: R.chain[R.chain.length - 1][1]};
         const from = i === 0 ? R.fromName : stopName(n.stops[i - 1]), to = i < n.stops.length ? stopName(n.stops[i]) : R.toName;
-        return `<li><span class="dn">${i + 1}</span><span class="dd"><b>${esc(from)} → ${esc(to)}</b><small>${fmt(Math.round(d.km))} km, ok. ${fmt(d.h, 1)} h jazdy${d.ferry ? ', z promem' : ''}</small>${campsHtml(s.lat, s.lon)}</span></li>`; }).join('')}</ol>
+        return `<li><span class="dn">${i + 1}</span><span class="dd"><b>${esc(from)} → ${esc(to)}</b><small>${fmt(Math.round(d.km))} km, ok. ${fmt(d.h, 1)} h jazdy${d.ferry ? ', z promem' : ''}</small>${campsHtml(s.lat, s.lon)}${p4n(s.lat, s.lon)}</span></li>`; }).join('')}</ol>
       <p class="fine">Miejsca noclegów są orientacyjne – punkty na trasie po przejechaniu dziennego limitu.${API() ? ' Kempingi i miejsca dla kamperów w promieniu 15 km: © współtwórcy OpenStreetMap.' : ''}</p>`;
   if(S.tab === 'noclegi') loadNames(n.stops);
   if(S.tab === 'noclegi') loadCamps(n.stops.concat([{lat: R.chain[R.chain.length - 1][2], lon: R.chain[R.chain.length - 1][1]}]));

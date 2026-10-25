@@ -494,3 +494,5 @@ html,body,button,input,select{font-variant-numeric:normal;font-feature-settings:
 #v-noclegi .nt{display:flex;flex-direction:column;gap:10px}
 #v-noclegi .hero b{font-size:48px}
 @media (max-width:420px){.nav{padding-left:8px;padding-right:8px}.nav a{min-width:40px;padding:0 8px}.nav a[aria-current="page"]{padding:0 12px}}
+
+.p4n{display:inline-flex;align-items:center;gap:4px;margin-top:6px;font-size:13px;font-weight:700;color:var(--ink);text-decoration:underline;text-underline-offset:3px}
