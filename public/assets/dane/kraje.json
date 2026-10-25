@@ -523,6 +523,17 @@
     "ACME"
    ],
    "gazOpis": "Złącze ACME."
+  },
+  "XK": {
+   "o": "RKS",
+   "n": "Kosowo",
+   "map": "Kosovo",
+   "schengen": false,
+   "eu": false,
+   "gaz": [
+    "Dish"
+   ],
+   "gazOpis": "LPG popularne na stacjach."
   }
  },
  "paliwoZrodlo": "tolls.eu, średnie z 19.10.2026",

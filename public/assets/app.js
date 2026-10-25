@@ -505,7 +505,10 @@ function tollSum(){ let e = 0, open = 0; R.order.forEach(c => tollsFor(c).forEac
 function ferryCost(){ const p = R.war.prom; if(!p || !p.od) return null; const v = V();
   const f = (1 + Math.max(0, +v.dl - 6) * .15) * (v.ciezki ? 1.1 : 1);
   return {od: p.od * f, sezon: p.sezon * f}; }
-const fuelCalc = () => { let e = 0, l = 0; R.order.forEach(c => { const x = (R.perC[c] || 0) * S.cons / 100; l += x; e += x * KR[c][S.fuel]; }); return {e, l}; };
+// cena w kraju bez danych (np. Kosowo) = średnia z krajów na trasie, które mają ceny
+const fuelPrice = c => { const p = KR[c] && KR[c][S.fuel]; if(p > 0) return p;
+  const k = R.order.map(x => KR[x] && KR[x][S.fuel]).filter(v => v > 0); return k.length ? k.reduce((s, v) => s + v, 0) / k.length : 1.8; };
+const fuelCalc = () => { let e = 0, l = 0; R.order.forEach(c => { const x = (R.perC[c] || 0) * S.cons / 100; l += x; e += x * fuelPrice(c); }); return {e, l}; };
 const ovalHtml = c => `<span class="oval ${KR[c].schengen ? '' : 'x'}" title="${esc(KR[c].n)}">${KR[c].o}</span>`;
 const waitOf = b => b.id && liveBorders[b.id] ? (R.rev ? {tam: liveBorders[b.id].powrot, powrot: liveBorders[b.id].tam} : liveBorders[b.id]) : {tam: b.tam, powrot: b.powrot};
 const mins = m => m == null ? 'brak danych' : m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ' ' + m % 60 + ' min' : ''}`;
@@ -922,7 +925,7 @@ function renderPaliwo(){
   const cs = R.order.filter(c => KR[c][S.fuel]);
   const ps = cs.map(c => KR[c][S.fuel]), min = Math.min(...ps), max = Math.max(...ps), base = min * .85;
   const cheap = cs[ps.indexOf(min)];
-  $('#chart').innerHTML = cs.map((c, i) => `<div data-cc="${c}" class="col ${c === cheap ? 'c' : KR[c].schengen ? '' : 'x'}"><b>${litre(ps[i])}</b><i style="height:${Math.round(150 * (ps[i] - base) / (max - base || 1))}px"></i><span>${KR[c].o}</span></div>`).join('');
+  $('#chart').innerHTML = cs.map((c, i) => `<div data-cc="${c}" class="col ${c === cheap ? 'c' : KR[c].schengen ? '' : 'x'}"><b>${litre(ps[i])}</b><i style="height:${Math.round(150 * (ps[i] - base) / (max - base || 1))}px"></i><span class="col-c">${flagSvg(c, 20)}${KR[c].o}</span></div>`).join('');
   $('#fuelTip').innerHTML = `<span><b>${esc(KR[cheap].n)}</b> ma najtańszy ${fn} na trasie. ${cheap === R.order[R.order.length - 1] ? 'Zatankuj do pełna przed powrotem.' : 'Zatankuj tam do pełna.'}</span>`;
   $('#fuelSrc').textContent = `Ceny: ${fuelSrc}. Kurs 1 € = ${fmt(RATE, 2)} zł.`;
 }
