@@ -591,7 +591,7 @@ function ferryAlts(a, b){
   }
   return out.sort((x, y) => x[3] - y[3]).slice(0, 4);   // 4 najsensowniejsze przeprawy – oszczędzamy limit ORS
 }
-let apiSeq = 0, ALT = {}, altPts = null;
+let apiSeq = 0, ALT = {}, altPts = null, computeAlt = () => {}; const PENDING = new Set();
 async function setRouteApi(){
   const seq = ++apiSeq;
   msg(''); document.body.classList.add('loading');
@@ -646,10 +646,13 @@ async function setRouteApi(){
     if(seq !== apiSeq) return;
     if(id === sel || (!R || !R.api) && ALT[id] && !ALT[id].error) useAlt(ALT[sel] && !ALT[sel].error ? sel : id);
     else renderTrasa();
-    if(ALTS.every(([k]) => ALT[k])){ document.body.classList.remove('loading');
-      if(!ALTS.some(([k]) => ALT[k] && !ALT[k].error)) msg('Nie udało się wyznaczyć trasy: ' + ALT.fast.error); }
+    if(id === sel){ document.body.classList.remove('loading');
+      if(ALT[id] && ALT[id].error) msg('Nie udało się wyznaczyć trasy: ' + ALT[id].error); }
+    PENDING.delete(id); if(R && R.api) renderTrasa();
   };
-  ALTS.forEach(([id]) => one(id));
+  // oszczędzamy limit ORS: od razu liczymy tylko wybrany wariant, pozostałe po kliknięciu
+  computeAlt = id => { if(ALT[id] || PENDING.has(id)) return; PENDING.add(id); renderTrasa(); one(id).then(() => { if(ALT[id] && !ALT[id].error) useAlt(id); }); };
+  PENDING.clear(); PENDING.add(sel); one(sel);
 }
 function stitchLegs(legs){
   // sklejenie kilku odcinków drogowych w jedną trasę (indeksy płatnych odcinków i promów przesunięte)
@@ -834,7 +837,8 @@ $('#swap').onclick = () => { const a = $('#from').value; $('#from').value = $('#
   if((S.route.via || []).length){ const n = S.route.via.length, pts = S.route.via.map((_, i) => S.route['via' + i + 'Pt']);
     S.route.via.reverse(); pts.reverse().forEach((p, i) => { S.route['via' + i + 'Pt'] = p; }); renderVia(); void n; }
   const p = S.route.fromPt; S.route.fromPt = S.route.toPt; S.route.toPt = p; setRoute(true); };
-$('#variants').addEventListener('click', e => { const al = e.target.closest('[data-alt]'); if(al){ useAlt(al.dataset.alt); return; }
+$('#variants').addEventListener('click', e => { const cb = e.target.closest('[data-calc]'); if(cb){ computeAlt(cb.dataset.calc); return; }
+  const al = e.target.closest('[data-alt]'); if(al){ useAlt(al.dataset.alt); return; }
   const b = e.target.closest('[data-war]'); if(!b) return;
   S.opt.avoidC = []; store.set('ropt', S.opt);
   S.route.war = {...(S.route.war || {}), [R.dest]: b.dataset.war}; store.set('route', S.route); setRoute(true); });
@@ -849,8 +853,9 @@ function renderTrasa(){
     const promTried = ALTS.some(([id]) => isProm(id));
     $('#variants').innerHTML = ALTS.map(([id, n]) => { const x = ALT[id];
       // warianty promowe pokazujemy tylko wtedy, gdy ORS faktycznie poprowadził przez ten prom
-      if(isProm(id) && (!x || x.error)) return '';
-      if(!x) return `<button class="var" disabled><span>${n}<small>liczę trasę…</small></span></button>`;
+      if(isProm(id) && x && x.error) return '';
+      if(!x) return PENDING.has(id) ? `<button class="var" disabled><span>${n}<small>liczę trasę…</small></span></button>`
+        : `<button class="var calc" data-calc="${id}"><span>${n}<small>pokaż ten wariant – policzę trasę</small></span></button>`;
       if(x.error) return `<button class="var" disabled><span>${n}<small>${esc(x.error)}</small></span></button>`;
       const c = costsOf(x), eco = id === cheapestAlt();
       return `<button class="var" data-alt="${id}" aria-pressed="${R === x}"><span>${n}${eco ? ' <em class="eco">najtańsza</em>' : ''}<small>${fmt(Math.round(x.km))} km, ${Math.round(c.h)} h, ok. ${money(c.total)}${x.war.prom && !c.fc ? ' + prom' : ''}${x.tollKm && Object.keys(x.tollKm).length ? '' : ', bez płatnych odcinków'}${x.war.prom && !id.startsWith('prom-') ? `<br>${c.fc ? 'z promem ' + esc(x.war.prom.trasa) + ' (cena w sumie)' : 'trasa z promem – bilet płatny osobno, cena u przewoźnika'}` : ''}</small></span></button>`; }).join('');

@@ -541,3 +541,6 @@ html,body,button,input,select{font-variant-numeric:normal;font-feature-settings:
 .col-c{display:flex;flex-direction:column;align-items:center;gap:3px}
 
 .sug-src{font-size:11px;color:var(--mut);padding:4px 10px 2px}
+
+.var.calc{border-style:dashed}
+.var.calc small{color:var(--mut)}

@@ -1,4 +1,5 @@
 // gdzieponiesie.pl — pośrednik do OpenRouteService (Cloudflare Worker), wersja 15
+// v28: trasy zapamiętywane w KV na 30 dni (wspólnie dla wszystkich serwerowni), blokada zapytań do ORS po wyczerpaniu dziennego limitu.
 // v27: własna baza ok. 20 tys. miejscowości z GeoNames (polskie nazwy), ORS tylko gdy w bazie nic nie ma.
 // v26: ok. 450 miast i miejscowości turystycznych Europy w słowniku nazw.
 // v25: tylko miejscowości (bez ulic i miejsc), ok. 250 polskich nazw miast Europy.
@@ -25,7 +26,11 @@ const ORS_URL = 'https://api.openrouteservice.org/v2/directions/driving-car/geoj
 const ORS_URL_HGV = 'https://api.openrouteservice.org/v2/directions/driving-hgv/geojson';
 const ALLOWED_ORIGINS = ['https://gdzieponiesie.pl', 'https://www.gdzieponiesie.pl'];
 const CACHE_SECONDS = 6 * 3600;
-const CACHE_VERSION = 'v27';
+const ROUTE_KV_SECONDS = 30 * 24 * 3600;
+// Wersja formatu zapisanej trasy – zmieniaj tylko, gdy zmienia się to, co zwraca summarize().
+// (Wcześniej klucz zależał od CACHE_VERSION i każde wdrożenie Workera kasowało zapamiętane trasy.)
+const ROUTE_FORMAT = 'r1';   // trasy w KV: 30 dni (drogi zmieniają się rzadko)
+const CACHE_VERSION = 'v28';
 const GEOCODE_URL = 'https://api.openrouteservice.org/geocode/autocomplete';
 const GEOCODE_CACHE_SECONDS = 24 * 3600;
 const ORS_TIMEOUT_MS = 40000;
@@ -609,22 +614,39 @@ async function handleRoute(request, env, cors) {
 
   // W cache trzymamy samą trasę. Koszt zależy od paliwa, więc liczymy go przy każdej odpowiedzi.
   const cacheKey = new Request('https://cache.gdzieponiesie.internal/route/' + await sha256(JSON.stringify({
-    v: CACHE_VERSION, variantId, points, avoidHighways, avoidFerries, avoidCountries, dims,
+    v: ROUTE_FORMAT, variantId, points, avoidHighways, avoidFerries, avoidCountries, dims,
   })));
   let route;
   let hit = false;
+  const kvKey = 'route:' + cacheKey.url.split('/').pop();
   const cached = await caches.default.match(cacheKey);
   if (cached) {
     route = await cached.json();
     hit = true;
+  } else if (env.NK && (route = await env.NK.get(kvKey, 'json'))) {
+    // KV jest wspólny dla wszystkich serwerowni Cloudflare – ta sama trasa nie idzie drugi raz do ORS
+    hit = true;
+    await caches.default.put(cacheKey, new Response(JSON.stringify(route), { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'max-age=' + CACHE_SECONDS } }));
   } else {
+    // limit ORS wyczerpany – nie pytamy do północy UTC (każde kolejne zapytanie i tak by odbiło)
+    if (env.NK && await env.NK.get('ors:quota')) {
+      return json({ error: 'Dzienny limit wyznaczania tras został wyczerpany. Nowe trasy będą dostępne po północy UTC (ok. 1:00–2:00 w Polsce). Zapisane i wcześniej liczone trasy działają.', quota: true }, 429, cors);
+    }
     const res = await orsRoute(buildPayload(variant, { points, avoidHighways, avoidFerries, avoidCountries, dims }), env, heavy);
-    if (!res.ok) return json({ error: res.error }, res.status || 502, cors);
+    if (!res.ok) {
+      if (env.NK && (res.status === 403 || res.status === 429) && /quota|limit/i.test(String(res.error))) {
+        const now = new Date(), mid = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
+        await env.NK.put('ors:quota', now.toISOString(), { expirationTtl: Math.max(60, Math.round((mid - now) / 1000)) });
+        return json({ error: 'Dzienny limit wyznaczania tras został wyczerpany. Nowe trasy będą dostępne po północy UTC (ok. 1:00–2:00 w Polsce).', quota: true }, 429, cors);
+      }
+      return json({ error: res.error }, res.status || 502, cors);
+    }
     // profil ciężarowy ma już wolniejsze prędkości, więc bez dodatkowego mnożnika
     route = { id: variantId, title: variant.title, profile: heavy ? 'hgv' : 'car', ...summarize(res.data, heavy ? 1 : TIME_FACTOR) };
     await caches.default.put(cacheKey, new Response(JSON.stringify(route), {
       headers: { 'Content-Type': 'application/json', 'Cache-Control': 'max-age=' + CACHE_SECONDS },
     }));
+    if (env.NK) await env.NK.put(kvKey, JSON.stringify(route), { expirationTtl: ROUTE_KV_SECONDS });
   }
 
   const [fx, fuelData] = await Promise.all([getFx(), getFuelPrices(Object.keys(route.countries), env)]);
