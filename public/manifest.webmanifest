@@ -1,0 +1,22 @@
+{
+  "name": "gdzieponiesie – planer trasy kamperem",
+  "short_name": "gdzieponiesie",
+  "description": "Trasa kamperem po Europie: winiety, paliwo, promy, noclegi i kolejki na granicach.",
+  "lang": "pl",
+  "start_url": "/#trasa",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#111317",
+  "theme_color": "#F2A900",
+  "icons": [
+    {"src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+    {"src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ],
+  "shortcuts": [
+    {"name": "Noclegi", "url": "/#noclegi", "icons": [{"src": "/icons/icon-192.png", "sizes": "192x192"}]},
+    {"name": "Paliwo", "url": "/#paliwo", "icons": [{"src": "/icons/icon-192.png", "sizes": "192x192"}]},
+    {"name": "Winiety", "url": "/#winiety", "icons": [{"src": "/icons/icon-192.png", "sizes": "192x192"}]}
+  ]
+}

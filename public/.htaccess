@@ -2,6 +2,14 @@ Options -Indexes
 AddDefaultCharset UTF-8
 DirectoryIndex index.html
 
+# PWA
+AddType application/manifest+json .webmanifest
+<IfModule mod_headers.c>
+  <Files "sw.js">
+    Header set Cache-Control "no-cache"
+  </Files>
+</IfModule>
+
 <Files ".ftp-deploy-sync-state.json">
   Require all denied
 </Files>

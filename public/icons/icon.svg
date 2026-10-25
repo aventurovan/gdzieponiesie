@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="112" fill="#F2A900"/>
+  <!-- droga w perspektywie -->
+  <path d="M152 430 L236 150 H276 L360 430 Z" fill="#16181D"/>
+  <path d="M256 190 v34 M256 262 v44 M256 344 v56" stroke="#F2A900" stroke-width="14" stroke-linecap="round"/>
+  <!-- znak marki: daszek -->
+  <path d="M150 196 L256 84 L362 196" fill="none" stroke="#16181D" stroke-width="40" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

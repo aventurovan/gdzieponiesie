@@ -1442,5 +1442,7 @@ async function init(){
   if(!D) loadLive();
   let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { if(!$('#v-trasa').hidden) drawMap(); }, 150); });
 }
+// PWA: instalacja na ekranie głównym i działanie bez internetu (pliki strony)
+if('serviceWorker' in navigator && location.protocol === 'https:') addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
 init().catch(err => { document.querySelector('main').insertAdjacentHTML('afterbegin', `<p class="msg">Nie udało się wczytać danych (${esc(err.message)}).</p>`); console.error(err); });
 })();
