@@ -686,7 +686,8 @@ function stitchFerry(l1, l2, A, B, hFerry){
 }
 function cheapestAlt(){
   let best = null, bv = Infinity;
-  ALTS.forEach(([k]) => { const x = ALT[k]; if(!x || x.error) return; const t = costsOf(x).total; if(t < bv - 1){ bv = t; best = k; } });
+  ALTS.forEach(([k]) => { const x = ALT[k]; if(!x || x.error) return; const cx = costsOf(x); if(x.war.prom && !cx.fc) return;   // bez ceny promu nie da się porównać
+    const t = cx.total; if(t < bv - 1){ bv = t; best = k; } });
   return ALTS.filter(([k]) => ALT[k] && !ALT[k].error).length > 1 ? best : null;
 }
 function useAlt(id){
@@ -852,7 +853,7 @@ function renderTrasa(){
       if(!x) return `<button class="var" disabled><span>${n}<small>liczę trasę…</small></span></button>`;
       if(x.error) return `<button class="var" disabled><span>${n}<small>${esc(x.error)}</small></span></button>`;
       const c = costsOf(x), eco = id === cheapestAlt();
-      return `<button class="var" data-alt="${id}" aria-pressed="${R === x}"><span>${n}${eco ? ' <em class="eco">najtańsza</em>' : ''}<small>${fmt(Math.round(x.km))} km, ${Math.round(c.h)} h, ok. ${money(c.total)}${x.tollKm && Object.keys(x.tollKm).length ? '' : ', bez płatnych odcinków'}</small></span></button>`; }).join('');
+      return `<button class="var" data-alt="${id}" aria-pressed="${R === x}"><span>${n}${eco ? ' <em class="eco">najtańsza</em>' : ''}<small>${fmt(Math.round(x.km))} km, ${Math.round(c.h)} h, ok. ${money(c.total)}${x.war.prom && !c.fc ? ' + prom' : ''}${x.tollKm && Object.keys(x.tollKm).length ? '' : ', bez płatnych odcinków'}${x.war.prom && !id.startsWith('prom-') ? `<br>${c.fc ? 'z promem ' + esc(x.war.prom.trasa) + ' (cena w sumie)' : 'trasa z promem – bilet płatny osobno, cena u przewoźnika'}` : ''}</small></span></button>`; }).join('');
     if(promTried) $('#variants').insertAdjacentHTML('beforeend', `<p class="var-info">Do Skandynawii pływa więcej promów, np. Świnoujście – Malmö, Gdańsk – Nynäshamn, Rostock – Trelleborg czy Hirtshals – Larvik. Wybór portu sprawdź w nawigacji, a wybrany port dodaj jako przystanek <b>przez</b>. Linki do przewoźników są w zakładce <a href="#winiety">Winiety</a>.</p>`);
   } else
   $('#variants').innerHTML = W.length > 1 ? W.map(w => `<button class="var" data-war="${w.id}" aria-pressed="${w.id === R.war.id}"><span>${esc(w.n)}${w.prom ? `<small>prom ${esc(w.prom.operator)}, ok. ${w.prom.h} h rejsu</small>` : ''}</span></button>`).join('') : '';
@@ -864,7 +865,8 @@ function renderTrasa(){
     <div class="tile"><small>czas w drodze</small><b>${Math.round(h)} h</b></div>
     <a class="tile" href="#winiety"><small>${t.open ? 'opłaty, część wg km' : 'winiety i bramki'}</small><b>${money(t.e)}${t.open ? '+' : ''}</b></a>
     <a class="tile" href="#paliwo"><small>paliwo ${S.fuel === 'on' ? 'ON' : 'Pb 95'}</small><b>${money(f.e)}</b></a>
-    ${fc ? `<div class="tile wide"><span class="tw"><small>prom ${esc(R.war.prom.trasa)}, ${esc(R.war.prom.operator)}</small><b>od ok. ${money(fc.od)}</b></span><a class="buy" href="${esc(R.war.prom.link)}" target="_blank" rel="noopener">Kup bilet</a></div>` : ''}`;
+    ${fc ? `<div class="tile wide"><span class="tw"><small>prom ${esc(R.war.prom.trasa)}, ${esc(R.war.prom.operator)}</small><b>od ok. ${money(fc.od)}</b></span>${R.war.prom.link ? `<a class="buy" href="${esc(R.war.prom.link)}" target="_blank" rel="noopener">Kup bilet</a>` : ''}</div>`
+      : R.war.prom ? `<div class="tile wide"><span class="tw"><small>na trasie jest prom${R.war.prom.trasa && R.war.prom.trasa !== 'Przeprawa promowa' ? ' ' + esc(R.war.prom.trasa) : ''}</small><b style="font-size:17px">Bilet płatny osobno – nie ma go w sumie</b><small>Cenę sprawdź u przewoźnika. Linki do promów są w zakładce Winiety.</small></span></div>` : ''}`;
   renderDeskExtra(f, t, fc);
   $('#attr').hidden = !R.borders.length;
   const notes = R.order.filter(c => KR[c].kontrole).map(c => `<div class="calm"><b>${esc(KR[c].n)}</b>${esc(KR[c].kontrole)}</div>`).join('');
@@ -911,8 +913,8 @@ function renderDeskExtra(f, t, fc){
       ${rows.map(x => `<tr class="${x.w.id === R.war.id ? 'on' : ''}"><td><button data-war="${x.w.id}">${esc(x.w.n)}</button></td><td>${fmt(Math.round(x.r.km / 10) * 10)}</td><td>${Math.round(x.c.h)} h</td><td><b>${money(x.c.total)}</b>${x.c.total === best ? '<small>najtaniej</small>' : ''}</td></tr>`).join('')}
       </tbody></table></div>`;
   }
-  box.innerHTML = `<div class="sum-card"><div><small>Koszt podróży w jedną stronę</small><b>${money(total)}${t.open ? '+' : ''}</b>
-      <span>paliwo ${money(f.e)}, opłaty ${money(t.e)}${fc ? `, prom od ${money(fc.od)}` : ''}</span></div>
+  box.innerHTML = `<div class="sum-card"><div><small>Koszt podróży w jedną stronę</small><b>${money(total)}${t.open || (R.war.prom && !fc) ? '+' : ''}</b>
+      <span>paliwo ${money(f.e)}, opłaty ${money(t.e)}${fc ? `, prom od ${money(fc.od)}` : R.war.prom ? ', + bilet na prom (cena u przewoźnika)' : ''}</span></div>
       <button class="btn" id="printBtn">Drukuj plan</button></div>${cmp}`;
   $('#printBtn').onclick = printPlan;
   box.querySelectorAll('[data-war]').forEach(b => b.onclick = () => { S.route.war = {...(S.route.war || {}), [R.dest]: b.dataset.war}; store.set('route', S.route); setRoute(true); });
@@ -1386,7 +1388,7 @@ function buildPrint(){
   const docs = [box('Paszport lub dowód dla każdego'), box('Prawo jazdy, dowód rejestracyjny'), box('Polisa OC i assistance', gc ? gc[0] : ''), box('EKUZ i ubezpieczenie turystyczne')];
   const foot = `<footer class="pd-f">Kwoty orientacyjne – przed zakupem sprawdź na stronach operatorów.${B.length ? ' Kolejki na granicach: Data by nakordoni.eu.' : ''} Mapy: © OpenStreetMap.</footer>`;
   el.innerHTML = `<section class="pd-page">${head('')}
-    <div class="pd-stats">${stat(fmt(Math.round(R.km)) + ' km', 'dystans')}${stat(Math.round(c.h) + ' h', 'czas w drodze')}${stat(money(c.total) + (tsum.open ? '+' : ''), fc ? 'paliwo, opłaty i prom' : 'paliwo i opłaty')}${stat(n.days.length + ' ' + (n.days.length === 1 ? 'dzień' : 'dni'), 'po maks. ' + fmt(S.dzien) + ' km')}</div>
+    <div class="pd-stats">${stat(fmt(Math.round(R.km)) + ' km', 'dystans')}${stat(Math.round(c.h) + ' h', 'czas w drodze')}${stat(money(c.total) + (tsum.open || (R.war.prom && !fc) ? '+' : ''), fc ? 'paliwo, opłaty i prom' : R.war.prom ? 'paliwo i opłaty, bez biletu na prom' : 'paliwo i opłaty')}${stat(n.days.length + ' ' + (n.days.length === 1 ? 'dzień' : 'dni'), 'po maks. ' + fmt(S.dzien) + ' km')}</div>
     <p class="pd-c"><b>Kraje:</b> ${countries}${nonS ? ' <span>(* poza Schengen – kontrola paszportowa)</span>' : ''}</p>
     <div class="pd-2">
       <div>${sec('Winiety i opłaty – razem ' + money(tsum.e) + (tsum.open ? ' + wg km' : ''))}<table><tr><th>Kraj</th><th>Co</th><th class="r">Kwota</th></tr>${tRows}</table></div>
