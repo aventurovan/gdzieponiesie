@@ -56,7 +56,7 @@ $('#themeBtn').onclick = () => {
   const t = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
   try{ localStorage.setItem('gp-theme', t); }catch(e){}
   applyTheme(t);
-  if(ML.state === 'ready'){ ML.fitKey = ML.fitKey; ML.map.setStyle(ML_STYLE[t]); } else drawMap();
+  if(ML.state === 'ready'){ ML.fitKey = ML.fitKey; ML.map.setStyle(ML_STYLE[t], {diff: false}); } else drawMap();   // bez diff: pełne przeładowanie, przychodzi 'style.load' i dokładamy warstwy trasy
 };
 
 /* ---------- desktop ---------- */
