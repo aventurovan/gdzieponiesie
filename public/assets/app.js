@@ -176,6 +176,31 @@ const FLAG = {
   NL: H3('#AE1C28', '#fff', '#21468B'),
   BE: V3('#000', '#FDDA24', '#EF3340'),
   CH: '<rect width="30" height="20" fill="#DA291C"/><rect x="13" y="4" width="4" height="12" fill="#fff"/><rect x="9" y="8" width="12" height="4" fill="#fff"/>',
+  RO: V3('#002B7F', '#FCD116', '#CE1126'),
+  LU: H3('#EA141D', '#fff', '#51ADDA'),
+  LT: H3('#FDB913', '#006A44', '#C1272D'),
+  LV: '<rect width="30" height="20" fill="#9E3039"/><rect y="8" width="30" height="4" fill="#fff"/>',
+  EE: H3('#0072CE', '#000', '#fff'),
+  FI: NORD('#fff', '#002F6C'),
+  IS: NORD('#02529C', '#fff', '#DC1E35'),
+  IE: V3('#169B62', '#fff', '#FF883E'),
+  GB: '<rect width="30" height="20" fill="#012169"/><path d="M0 0L30 20M30 0L0 20" stroke="#fff" stroke-width="4"/><path d="M0 0L30 20M30 0L0 20" stroke="#C8102E" stroke-width="1.6"/><path d="M15 0v20M0 10h30" stroke="#fff" stroke-width="6"/><path d="M15 0v20M0 10h30" stroke="#C8102E" stroke-width="3.4"/>',
+  UA: '<rect width="30" height="20" fill="#FFD700"/><rect width="30" height="10" fill="#0057B7"/>',
+  MD: V3('#0046AE', '#FFD200', '#CC092F') + '<rect x="13" y="7" width="4" height="6" rx="1" fill="#A0522D"/>',
+  BY: '<rect width="30" height="20" fill="#4AA657"/><rect width="30" height="13.3" fill="#C8313E"/><rect width="4" height="20" fill="#fff"/><path d="M2 1v18" stroke="#C8313E" stroke-width="1.4" stroke-dasharray="2 1.5"/>',
+  RU: H3('#fff', '#0039A6', '#D52B1E'),
+  BA: '<rect width="30" height="20" fill="#002395"/><path d="M8.5 0H22V13.5z" fill="#FECB00"/><path d="M6.5 1.5h.01M8.8 3.8h.01M11.1 6.1h.01M13.4 8.4h.01M15.7 10.7h.01M18 13h.01M20.3 15.3h.01" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>',
+  AL: '<rect width="30" height="20" fill="#E41E20"/><path d="M15 4l2.6 2.4 3.2-1.2-1.6 3.4 2.4 2.6-3.2-.6L15 16l-3.4-5.4-3.2.6 2.4-2.6-1.6-3.4 3.2 1.2z" fill="#000"/>',
+  MK: '<rect width="30" height="20" fill="#D20000"/><path d="M15 10L0 0M15 10L30 0M15 10L0 20M15 10L30 20M15 10L15 0M15 10L15 20M15 10L0 10M15 10L30 10" stroke="#FFE600" stroke-width="2.2"/><circle cx="15" cy="10" r="3.4" fill="#FFE600" stroke="#D20000" stroke-width=".8"/>',
+  XK: '<rect width="30" height="20" fill="#244AA5"/><path d="M11 9l3-2 4 1 2 3-1 4-4 1-3-2z" fill="#D0A650"/><path d="M9 5.5h.01M11.5 4.5h.01M14 4h.01M16.5 4h.01M19 4.5h.01M21.5 5.5h.01" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>',
+  LI: '<rect width="30" height="20" fill="#CE1126"/><rect width="30" height="10" fill="#002B7F"/><circle cx="7" cy="5" r="2" fill="#FFD83D"/>',
+  AD: V3('#10069F', '#FEDF00', '#D50032') + '<rect x="13" y="7" width="4" height="6" rx="1" fill="#C7B37F"/>',
+  MC: '<rect width="30" height="20" fill="#fff"/><rect width="30" height="10" fill="#CE1126"/>',
+  SM: '<rect width="30" height="20" fill="#5EB6E4"/><rect width="30" height="10" fill="#fff"/>',
+  MT: '<rect width="30" height="20" fill="#CF142B"/><rect width="15" height="20" fill="#fff"/><rect x="3" y="3" width="4" height="4" fill="#999"/>',
+  CY: '<rect width="30" height="20" fill="#fff"/><path d="M9 8l5-2 7 1 2 2-5 2-6 0z" fill="#D57800"/><path d="M11 14q4 2 8 0" stroke="#4E5B31" stroke-width="1.2" fill="none"/>',
+  VA: '<rect width="30" height="20" fill="#fff"/><rect width="15" height="20" fill="#FFE000"/>',
+  GE: '<rect width="30" height="20" fill="#fff"/><path d="M15 0v20M0 10h30" stroke="#FF0000" stroke-width="4"/>',
   GR: '<rect width="30" height="20" fill="#0D5EAF"/><path d="M0 3.3h30M0 10h30M0 16.7h30" stroke="#fff" stroke-width="2.2"/><rect width="11.1" height="11.1" fill="#0D5EAF"/><path d="M5.55 0v11.1M0 5.55h11.1" stroke="#fff" stroke-width="2.2"/>'
 };
 const flagSvg = (cc, w = 22) => `<svg class="fl" width="${w}" height="${Math.round(w * 2 / 3)}" viewBox="0 0 30 20" aria-hidden="true">${FLAG[cc] || '<rect width="30" height="20" fill="#ccc"/>'}</svg>`;
@@ -668,7 +693,10 @@ function useAlt(id){
 function buildFromWorker(j, a, b){
   // kraje spoza naszej bazy – minimalny wpis, żeby nic się nie wysypało
   const SCH = new Set(['AT','BE','BG','CH','CZ','DE','DK','EE','ES','FI','FR','GR','HR','HU','IS','IT','LI','LT','LU','LV','MT','NL','NO','PL','PT','RO','SE','SI','SK']);
-  const known = c => { if(!KR[c] && /^[A-Z]{2}$/.test(c)) KR[c] = {o: c, n: c, map: '', schengen: SCH.has(c), eu: SCH.has(c), gaz: ['Dish'], gazOpis: ''}; return !!KR[c]; };
+  const PLN = {UA: 'Ukraina', MD: 'Mołdawia', BY: 'Białoruś', LT: 'Litwa', LV: 'Łotwa', EE: 'Estonia', FI: 'Finlandia', XK: 'Kosowo', LI: 'Liechtenstein',
+    AD: 'Andora', MC: 'Monako', SM: 'San Marino', IE: 'Irlandia', GB: 'Wielka Brytania', IS: 'Islandia', MT: 'Malta', CY: 'Cypr', RU: 'Rosja', GE: 'Gruzja', VA: 'Watykan'};
+  const OVAL = {UA: 'UA', MD: 'MD', BY: 'BY', LT: 'LT', LV: 'LV', EE: 'EST', FI: 'FIN', XK: 'RKS', LI: 'FL', AD: 'AND', MC: 'MC', SM: 'RSM', IE: 'IRL', GB: 'UK', IS: 'IS', MT: 'M', CY: 'CY', RU: 'RUS', GE: 'GE', VA: 'V'};
+  const known = c => { if(!KR[c] && /^[A-Z]{2}$/.test(c)) KR[c] = {o: OVAL[c] || c, n: PLN[c] || c, map: '', schengen: SCH.has(c), eu: SCH.has(c) && !['CH', 'NO', 'IS', 'LI'].includes(c), gaz: ['Dish'], gazOpis: ''}; return !!KR[c]; };
   const order = [...new Set((j.path || []).filter(known))];
   // kraj każdego punktu: idziemy po trasie i przełączamy kraj na kolejnych przejściach granicznych
   const C = j.coords, X = (j.crossings || []).slice().sort((x, y) => x.at_km - y.at_km);
