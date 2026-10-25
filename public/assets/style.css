@@ -532,3 +532,8 @@ html,body,button,input,select{font-variant-numeric:normal;font-feature-settings:
   .pd-box small{display:block;font-size:8.5pt;color:#555}
   .pd-f{margin-top:auto;font-size:8pt;color:#555;border-top:1px solid #ccc;padding-top:5px}
 }
+/* okno pojazdu na komputerze – na środku ekranu */
+@media (min-width:1024px){
+  .sheet{margin:auto;width:520px;max-width:calc(100vw - 48px);max-height:90vh;border-radius:22px;box-shadow:0 24px 64px rgba(0,0,0,.35)}
+  .sheet form{padding:22px 24px 24px}
+}
