@@ -1,5 +1,6 @@
 # Konfiguracja Workera gdzieponiesie-api (wdrażana z GitHub Actions: „Wdrożenie Workera”)
 name = "gdzieponiesie-api"
+account_id = "d9b5adecf933aaa4dcf6a8cf091a7472"
 main = "worker.js"
 compatibility_date = "2025-09-01"
 workers_dev = true
@@ -10,7 +11,7 @@ keep_vars = true          # nie kasuj zmiennych ustawionych ręcznie w panelu Cl
 [triggers]
 crons = ["0 */3 * * *"]
 
-# Magazyn KV na dane z nakordoni.eu – odkomentuj i wpisz ID po utworzeniu przestrzeni „gdzieponiesie-nk”
-# [[kv_namespaces]]
-# binding = "NK"
-# id = "WPISZ_ID_KV"
+# Magazyn KV „gdzieponiesie-nk” na dane z nakordoni.eu (zapisuje cron, czytają zapytania)
+[[kv_namespaces]]
+binding = "NK"
+id = "ff46e2bac4fa4b058eb7ca5e4b5732b3"
