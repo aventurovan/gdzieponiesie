@@ -1,18 +1,18 @@
 name: Wdrożenie na Kylos
 
+# Wysyłka na hosting TYLKO ręcznie: GitHub → Actions → „Wdrożenie na Kylos” → Run workflow.
+# Wgranie plików do repo niczego nie wdraża.
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 concurrency: deploy
 
 jobs:
   deploy:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     steps:
       - name: Pobranie plików z repo
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
 
       - name: Utworzenie konfiguracji z sekretów
         env:
@@ -28,28 +28,12 @@ jobs:
             file_put_contents("public/app/config.php", "<?php\nreturn " . var_export($c, true) . ";\n");
           '
 
-      - name: Instalacja lftp
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq lftp
-
-      - name: Wysyłka na serwer
-        env:
-          FTP_SERVER: ${{ secrets.FTP_SERVER }}
-          FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
-          LFTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
-          FTP_PROTOCOL: ${{ vars.FTP_PROTOCOL || 'ftps' }}
-        run: |
-          if [ "$FTP_PROTOCOL" = "ftp" ]; then
-            SSL="set ftp:ssl-allow false"
-          else
-            SSL="set ftp:ssl-force true; set ftp:ssl-protect-data true; set ssl:verify-certificate no"
-          fi
-          echo "Protokół: $FTP_PROTOCOL"
-          lftp --env-password -u "$FTP_USERNAME" "$FTP_SERVER" -e "
-            $SSL;
-            set ftp:passive-mode true;
-            set net:timeout 20;
-            set net:max-retries 3;
-            set net:reconnect-interval-base 5;
-            mirror --reverse --verbose --parallel=1 ./public/ ./;
-            bye
-          "
+      - name: Wysyłka na serwer przez FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ${{ vars.FTP_PROTOCOL || 'ftps' }}
+          local-dir: ./public/
+          server-dir: ./
