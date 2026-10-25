@@ -1,4 +1,5 @@
 // gdzieponiesie.pl — pośrednik do OpenRouteService (Cloudflare Worker), wersja 15
+// v24: wyszukiwanie miejsc: polskie nazwy miast (Londyn, Ateny…), najpierw miejscowości bez ulic i stacji, etykiety po polsku.
 // v23: więcej granic (m.in. Serbia–Macedonia, Macedonia–Grecja, Albania, Ukraina) – 42 kierunki co 3 h.
 // v22: paliwo porcjami (8 krajów na uruchomienie, każdy raz na dobę), pomijanie krajów bez danych (404), 2 s odstępu.
 // v21: /reverse (nazwy miejsc noclegów), więcej serwerów Overpass, krótsze limity czasu.
@@ -19,7 +20,7 @@ const ORS_URL = 'https://api.openrouteservice.org/v2/directions/driving-car/geoj
 const ORS_URL_HGV = 'https://api.openrouteservice.org/v2/directions/driving-hgv/geojson';
 const ALLOWED_ORIGINS = ['https://gdzieponiesie.pl', 'https://www.gdzieponiesie.pl'];
 const CACHE_SECONDS = 6 * 3600;
-const CACHE_VERSION = 'v23';
+const CACHE_VERSION = 'v24';
 const GEOCODE_URL = 'https://api.openrouteservice.org/geocode/autocomplete';
 const GEOCODE_CACHE_SECONDS = 24 * 3600;
 const ORS_TIMEOUT_MS = 40000;
@@ -347,6 +348,24 @@ const ISO3_TO_ISO2 = {
 };
 
 // Podpowiedzi adresów: ORS (Pelias) przez Workera, z zapamiętywaniem na 24 h.
+// Polskie nazwy miast Europy → nazwa w geokoderze (bez polskich znaków w kluczu). [szukana, wyświetlana]
+const EXONYMS = Object.fromEntries(Object.entries({
+  'Londyn': 'London', 'Ateny': 'Athens', 'Wiedeń': 'Wien', 'Rzym': 'Roma', 'Mediolan': 'Milano', 'Wenecja': 'Venezia', 'Neapol': 'Napoli',
+  'Florencja': 'Firenze', 'Turyn': 'Torino', 'Genua': 'Genova', 'Paryż': 'Paris', 'Lizbona': 'Lisboa', 'Monachium': 'München', 'Kolonia': 'Köln',
+  'Akwizgran': 'Aachen', 'Norymberga': 'Nürnberg', 'Lipsk': 'Leipzig', 'Drezno': 'Dresden', 'Ratyzbona': 'Regensburg', 'Pasawa': 'Passau',
+  'Moguncja': 'Mainz', 'Brema': 'Bremen', 'Bruksela': 'Bruxelles', 'Antwerpia': 'Antwerpen', 'Haga': 'Den Haag', 'Kopenhaga': 'København',
+  'Sztokholm': 'Stockholm', 'Goteborg': 'Göteborg', 'Helsinki': 'Helsinki', 'Genewa': 'Genève', 'Zurych': 'Zürich', 'Bazylea': 'Basel',
+  'Bratysława': 'Bratislava', 'Koszyce': 'Košice', 'Praga': 'Praha', 'Brno': 'Brno', 'Ołomuniec': 'Olomouc', 'Ostrawa': 'Ostrava',
+  'Budapeszt': 'Budapest', 'Segedyn': 'Szeged', 'Lublana': 'Ljubljana', 'Zagrzeb': 'Zagreb', 'Dubrownik': 'Dubrovnik', 'Sarajewo': 'Sarajevo',
+  'Belgrad': 'Beograd', 'Nowy Sad': 'Novi Sad', 'Nisz': 'Niš', 'Podgorica': 'Podgorica', 'Kotor': 'Kotor', 'Tirana': 'Tirana', 'Durres': 'Durrës',
+  'Szkodra': 'Shkodër', 'Skopje': 'Skopje', 'Ochryda': 'Ohrid', 'Saloniki': 'Thessaloniki', 'Bukareszt': 'București', 'Kluż': 'Cluj-Napoca',
+  'Sofia': 'Sofia', 'Warna': 'Varna', 'Burgas': 'Burgas', 'Płowdiw': 'Plovdiv', 'Stambuł': 'İstanbul', 'Kiszyniów': 'Chișinău',
+  'Lwów': 'Lviv', 'Kijów': 'Kyiv', 'Wilno': 'Vilnius', 'Kowno': 'Kaunas', 'Ryga': 'Riga', 'Tallin': 'Tallinn', 'Madryt': 'Madrid',
+  'Sewilla': 'Sevilla', 'Walencja': 'València', 'Saragossa': 'Zaragoza', 'Edynburg': 'Edinburgh', 'Dublin': 'Dublin', 'Marsylia': 'Marseille',
+  'Nicea': 'Nice', 'Strasburg': 'Strasbourg', 'Lyon': 'Lyon', 'Bordeaux': 'Bordeaux', 'Tuluza': 'Toulouse', 'Innsbruck': 'Innsbruck',
+  'Salzburg': 'Salzburg', 'Grac': 'Graz', 'Trydent': 'Trento', 'Bolonia': 'Bologna', 'Werona': 'Verona', 'Piza': 'Pisa', 'Bergen': 'Bergen',
+}).map(([pl, local]) => [pl.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/ł/g, 'l'), [local, pl]]));
+
 async function handleGeocode(url, env, cors) {
   if (!env.ORS_API_KEY) {
     return json({ error: 'Worker nie ma sekretu ORS_API_KEY.' }, 500, cors);
@@ -356,43 +375,50 @@ async function handleGeocode(url, env, cors) {
     return json({ error: 'Wpisz od 3 do 80 znaków.' }, 400, cors);
   }
 
-  const cacheKey = new Request('https://cache.gdzieponiesie.internal/geo/' + await sha256('g2|' + q.toLowerCase()));
+  const cacheKey = new Request('https://cache.gdzieponiesie.internal/geo/' + await sha256('g3|' + q.toLowerCase()));
   const cached = await caches.default.match(cacheKey);
   if (cached) return json(await cached.json(), 200, cors, { 'X-Cache': 'HIT' });
 
-  const params = new URLSearchParams({
-    api_key: env.ORS_API_KEY,
-    text: q,
-    size: '6',
-    'boundary.rect.min_lon': '-25',
-    'boundary.rect.min_lat': '30',
-    'boundary.rect.max_lon': '45',
-    'boundary.rect.max_lat': '72',
-  });
+  // 1) polskie nazwy miast (Londyn, Ateny, Wiedeń…) → nazwa, którą zna geokoder
+  const fold = (s) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/ł/g, 'l');
+  const ex = EXONYMS[fold(q)] || (fold(q).length >= 5 ? Object.entries(EXONYMS).find(([k]) => k.startsWith(fold(q)))?.[1] : null);
+  const text = ex ? ex[0] : q;
 
-  let res;
+  const ask = async (layers, txt = text) => {
+    const params = new URLSearchParams({
+      api_key: env.ORS_API_KEY, text: txt, size: '8', lang: 'pl',
+      'boundary.rect.min_lon': '-25', 'boundary.rect.min_lat': '30', 'boundary.rect.max_lon': '45', 'boundary.rect.max_lat': '72',
+    });
+    if (layers) params.set('layers', layers);
+    const res = await fetch(GEOCODE_URL + '?' + params, { signal: AbortSignal.timeout(8000) });
+    if (res.status === 429) throw Object.assign(new Error('Limit wyszukiwań adresów wyczerpany. Spróbuj później.'), { code: 429 });
+    if (!res.ok) throw Object.assign(new Error('Wyszukiwarka adresów zwróciła błąd (' + res.status + ').'), { code: 502 });
+    return (await res.json()).features || [];
+  };
+
+  // 2) najpierw miejscowości i regiony (bez ulic, sklepów i stacji), dopiero potem wszystko
+  let feats;
   try {
-    res = await fetch(GEOCODE_URL + '?' + params, { signal: AbortSignal.timeout(8000) });
+    const COARSE = 'locality,localadmin,borough,county,region,macroregion,country';
+    feats = await ask(COARSE);
+    if (ex) feats = feats.concat(await ask(COARSE, q));   // np. „Praga” – także dzielnica Warszawy
+    if (feats.length < 3) feats = feats.concat(await ask(null, q));
   } catch (e) {
-    return json({ error: 'Wyszukiwarka adresów nie odpowiedziała. Spróbuj ponownie.' }, 504, cors);
+    if (e.name === 'TimeoutError' || e.name === 'AbortError') return json({ error: 'Wyszukiwarka adresów nie odpowiedziała. Spróbuj ponownie.' }, 504, cors);
+    return json({ error: e.message }, e.code || 502, cors);
   }
-  if (res.status === 429) return json({ error: 'Limit wyszukiwań adresów wyczerpany. Spróbuj później.' }, 429, cors);
-  if (!res.ok) return json({ error: 'Wyszukiwarka adresów zwróciła błąd (' + res.status + ').' }, 502, cors);
-
-  let data;
-  try { data = await res.json(); } catch { return json({ error: 'Niepoprawna odpowiedź wyszukiwarki adresów.' }, 502, cors); }
 
   const seen = new Set();
   const results = [];
-  for (const f of data.features || []) {
+  for (const f of feats) {
     const [lon, lat] = f.geometry?.coordinates || [];
-    const label = f.properties?.label;
+    let label = f.properties?.label;
     if (typeof lon !== 'number' || typeof lat !== 'number' || !label || seen.has(label)) continue;
     seen.add(label);
-    results.push({
-      label, lon: Math.round(lon * 1e5) / 1e5, lat: Math.round(lat * 1e5) / 1e5,
-      country: ISO3_TO_ISO2[f.properties?.country_a] || null,
-    });
+    // znana polska nazwa miasta na początku etykiety (Ateny, Grecja zamiast Athens, Greece)
+    if (ex && results.length === 0 && ['locality', 'localadmin', 'borough'].includes(f.properties?.layer)) label = ex[1] + ', ' + label.split(', ').slice(1).join(', ');
+    results.push({ label, lon: Math.round(lon * 1e5) / 1e5, lat: Math.round(lat * 1e5) / 1e5, country: ISO3_TO_ISO2[f.properties?.country_a] || null });
+    if (results.length >= 6) break;
   }
 
   const body = { results };
