@@ -1,4 +1,5 @@
 // gdzieponiesie.pl — pośrednik do OpenRouteService (Cloudflare Worker), wersja 15
+// v21: /reverse (nazwy miejsc noclegów), więcej serwerów Overpass, krótsze limity czasu.
 // v20: /poi (kempingi i miejsca dla kamperów przy noclegach) i /poi/lpg (stacje LPG wzdłuż trasy) z OpenStreetMap (Overpass), cache 7 dni.
 // v19: wysokości punktów (elevation) do profilu trasy.
 // v18: radiuses 5 km – punkty w porcie lub przy wodzie nie kończą się błędem „nie znaleziono drogi”.
@@ -16,7 +17,7 @@ const ORS_URL = 'https://api.openrouteservice.org/v2/directions/driving-car/geoj
 const ORS_URL_HGV = 'https://api.openrouteservice.org/v2/directions/driving-hgv/geojson';
 const ALLOWED_ORIGINS = ['https://gdzieponiesie.pl', 'https://www.gdzieponiesie.pl'];
 const CACHE_SECONDS = 6 * 3600;
-const CACHE_VERSION = 'v20';
+const CACHE_VERSION = 'v21';
 const GEOCODE_URL = 'https://api.openrouteservice.org/geocode/autocomplete';
 const GEOCODE_CACHE_SECONDS = 24 * 3600;
 const ORS_TIMEOUT_MS = 40000;
@@ -145,6 +146,10 @@ export default {
       if (url.pathname === '/poi' && request.method === 'GET') {
         if (!ALLOWED_ORIGINS.includes(origin)) return json({ error: 'Ta strona nie ma dostępu do API.' }, 403, cors);
         return await handlePoiNear(url, cors);
+      }
+      if (url.pathname === '/reverse' && request.method === 'GET') {
+        if (!ALLOWED_ORIGINS.includes(origin)) return json({ error: 'Ta strona nie ma dostępu do API.' }, 403, cors);
+        return await handleReverse(url, env, cors);
       }
       if (url.pathname === '/poi/lpg' && request.method === 'POST') {
         if (!ALLOWED_ORIGINS.includes(origin)) return json({ error: 'Ta strona nie ma dostępu do API.' }, 403, cors);
@@ -898,7 +903,7 @@ function parseWait(v) {
 
 // ===================== Miejsca z OpenStreetMap (Overpass) =====================
 // Dane © współtwórcy OpenStreetMap (ODbL). Wyniki cache'ujemy 7 dni, żeby nie obciążać Overpass.
-const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
+const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.private.coffee/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://maps.mail.ru/osm/tools/overpass/api/interpreter'];
 const POI_CACHE_SECONDS = 7 * 24 * 3600;
 
 async function overpass(query) {
@@ -909,11 +914,11 @@ async function overpass(query) {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'gdzieponiesie.pl/1.0 (+https://gdzieponiesie.pl)' },
         body: 'data=' + encodeURIComponent(query),
-        signal: AbortSignal.timeout(25000),
+        signal: AbortSignal.timeout(15000),
       });
       if (res.ok) return (await res.json()).elements || [];
-      last = 'Overpass ' + res.status;
-    } catch (e) { last = String(e.message || e); }
+      last = ep.split('/')[2] + ': ' + res.status;
+    } catch (e) { last = ep.split('/')[2] + ': ' + String(e.message || e); }
   }
   throw new Error(last);
 }
@@ -935,7 +940,7 @@ async function handlePoiNear(url, cors) {
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) return json({ error: 'brak lat/lon' }, 400, cors);
   const key = 'near/' + lat.toFixed(2) + ',' + lon.toFixed(2) + '/' + r;
   return poiCached(key, async () => {
-    const q = `[out:json][timeout:20];(nwr["tourism"="camp_site"](around:${r},${lat},${lon});nwr["tourism"="caravan_site"](around:${r},${lat},${lon}););out center tags 60;`;
+    const q = `[out:json][timeout:12];(nwr["tourism"="camp_site"](around:${r},${lat},${lon});nwr["tourism"="caravan_site"](around:${r},${lat},${lon}););out center tags 60;`;
     const items = (await overpass(q)).map((e) => {
       const p = poiPoint(e), t = e.tags || {};
       return { id: e.type[0] + e.id, name: t.name || null, kind: t.tourism === 'caravan_site' ? 'kamper' : 'kemping',
@@ -960,4 +965,26 @@ async function handlePoiLpg(request, cors) {
       .filter((x) => Number.isFinite(x.lat));
     return { items, source: 'OpenStreetMap' };
   }, cors);
+}
+
+
+// GET /reverse?lat=..&lon=.. → nazwa najbliższej miejscowości (ORS, cache 30 dni) – do nazw noclegów
+async function handleReverse(url, env, cors) {
+  const lat = Number(url.searchParams.get('lat')), lon = Number(url.searchParams.get('lon'));
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return json({ error: 'brak lat/lon' }, 400, cors);
+  const req = new Request('https://cache.gdzieponiesie.internal/rev/' + lat.toFixed(2) + ',' + lon.toFixed(2));
+  const hit = await caches.default.match(req);
+  if (hit) return json(await hit.json(), 200, cors, { 'X-Cache': 'HIT' });
+  const params = new URLSearchParams({ api_key: env.ORS_API_KEY || '', 'point.lat': lat, 'point.lon': lon, size: '1', layers: 'locality,localadmin' });
+  let body = { name: null };
+  try {
+    const res = await fetch('https://api.openrouteservice.org/geocode/reverse?' + params, { signal: AbortSignal.timeout(8000) });
+    if (res.ok) {
+      const f = (await res.json()).features?.[0];
+      if (f) body = { name: f.properties?.name || null, country: ISO3_TO_ISO2[f.properties?.country_a] || null,
+        d: Math.round((f.properties?.distance ?? 0) * 10) / 10 };
+    } else return json({ name: null, error: 'ORS ' + res.status }, 200, cors);
+  } catch (e) { return json({ name: null, error: String(e.message || e) }, 200, cors); }
+  await caches.default.put(req, new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'max-age=' + 30 * 24 * 3600 } }));
+  return json(body, 200, cors, { 'X-Cache': 'MISS' });
 }

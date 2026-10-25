@@ -1118,20 +1118,39 @@ function nights(){
 /* --- kempingi i miejsca dla kamperów przy noclegach (OpenStreetMap przez Workera) --- */
 const CAMPS = {};          // klucz "lat,lon" → {loading|items|error}
 const campKey = (lat, lon) => lat.toFixed(2) + ',' + lon.toFixed(2);
+let campQ = [], campBusy = false;
 function loadCamps(points){
   if(!API()) return;
-  points.forEach(p => { const k = campKey(p.lat, p.lon); if(CAMPS[k]) return; CAMPS[k] = {loading: true};
-    getJSON(CONFIG.routeApi + `/poi?lat=${p.lat.toFixed(4)}&lon=${p.lon.toFixed(4)}&r=15000`)
-      .then(j => { CAMPS[k] = {items: j.items || [], error: j.error}; })
-      .catch(e => { CAMPS[k] = {items: [], error: e.message}; })
-      .finally(() => { if(R) { renderExtras(); drawMap(); } }); });
+  points.forEach(p => { const k = campKey(p.lat, p.lon); if(CAMPS[k] && !CAMPS[k].retry) return; CAMPS[k] = {loading: true}; campQ.push([k, p]); });
+  pumpCamps();
 }
+async function pumpCamps(){   // po jednym zapytaniu naraz – Overpass nie lubi serii
+  if(campBusy || !campQ.length) return; campBusy = true;
+  const [k, p] = campQ.shift();
+  try{ const j = await getJSON(CONFIG.routeApi + `/poi?lat=${p.lat.toFixed(4)}&lon=${p.lon.toFixed(4)}&r=15000`); CAMPS[k] = {items: j.items || [], error: j.error}; }
+  catch(e){ CAMPS[k] = {items: [], error: e.message}; }
+  campBusy = false;
+  if(R){ renderExtras(); if(S.tab === 'noclegi') drawMap(); }
+  pumpCamps();
+}
+document.addEventListener('click', e => { const b = e.target.closest('[data-camp-retry]'); if(!b) return;
+  const [lat, lon] = b.dataset.campRetry.split(',').map(Number); CAMPS[campKey(lat, lon)] = {retry: true}; loadCamps([{lat, lon}]); renderExtras(); });
+/* nazwy miejsc noclegów z geokodera (Worker /reverse) */
+const NAMES = {};
+function loadNames(stops){
+  if(!API()) return;
+  stops.forEach(s => { const k = campKey(s.lat, s.lon); if(NAMES[k]) return; NAMES[k] = {loading: true};
+    getJSON(CONFIG.routeApi + `/reverse?lat=${s.lat.toFixed(4)}&lon=${s.lon.toFixed(4)}`)
+      .then(j => { NAMES[k] = j; }).catch(() => { NAMES[k] = {}; }).finally(() => { if(R && S.tab === 'noclegi') renderExtras(); }); });
+}
+const stopName = s => { const n = NAMES[campKey(s.lat, s.lon)]; return n && n.name ? (n.d > 6 ? 'okolice: ' + n.name : n.name) : s.place; };
 const gmaps = (lat, lon) => `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
 function campsHtml(lat, lon){
   if(!API()) return '';
   const c = CAMPS[campKey(lat, lon)];
   if(!c || c.loading) return '<small class="cp-load">szukam kempingów w pobliżu…</small>';
-  if(!c.items.length) return `<small class="cp-load">${c.error ? 'Nie udało się pobrać kempingów.' : 'Brak kempingów w promieniu 15 km.'}</small>`;
+  if(c.retry) return '<small class="cp-load">szukam kempingów w pobliżu…</small>';
+  if(!c.items.length) return c.error ? `<small class="cp-load">Nie udało się pobrać kempingów (${esc(c.error)}). <button class="txtbtn" data-camp-retry="${lat},${lon}">Spróbuj ponownie</button></small>` : '<small class="cp-load">Brak kempingów w promieniu 15 km.</small>';
   return `<ul class="camps">${c.items.slice(0, 3).map(x => `<li><span class="cp-ic ${x.kind}" aria-hidden="true">${x.kind === 'kamper' ? 'P' : '⛺'}</span>
     <a href="${esc(x.web || gmaps(x.lat, x.lon))}" target="_blank" rel="noopener">${esc(x.name || (x.kind === 'kamper' ? 'Miejsce dla kamperów' : 'Kemping'))}</a>
     <small>${x.kind === 'kamper' ? 'dla kamperów' : 'kemping'}, ${fmt(x.d, 1)} km</small></li>`).join('')}</ul>`;
@@ -1255,8 +1274,10 @@ function renderExtras(){
   $('#nightsHead').innerHTML = `<small>${esc(R.fromName)} – ${esc(R.toName)}, ${fmt(Math.round(R.km))} km</small><b>${n.stops.length ? `${n.stops.length} ${n.stops.length === 1 ? 'nocleg' : n.stops.length < 5 ? 'noclegi' : 'noclegów'}` : 'Bez noclegu'}</b><span>${n.days.length} ${n.days.length === 1 ? 'dzień' : 'dni'} jazdy po maks. ${fmt(S.dzien)} km</span>`;
   $('#nights').innerHTML = `<div class="nt-lim"><span>Dziennie jadę do</span><span class="st-ctl"><button class="round sm" data-dz="-50" aria-label="Mniej km dziennie">−</button><b>${fmt(S.dzien)} km</b><button class="round sm" data-dz="50" aria-label="Więcej km dziennie">+</button></span></div>
       <ol class="days">${n.days.map((d, i) => { const s = n.stops[i] || {lat: R.chain[R.chain.length - 1][2], lon: R.chain[R.chain.length - 1][1]};
-        return `<li><span class="dn">${i + 1}</span><span class="dd"><b>${esc(d.from)} → ${esc(d.to)}</b><small>${fmt(Math.round(d.km))} km, ok. ${fmt(d.h, 1)} h jazdy${d.ferry ? ', z promem' : ''}</small>${campsHtml(s.lat, s.lon)}</span></li>`; }).join('')}</ol>
+        const from = i === 0 ? R.fromName : stopName(n.stops[i - 1]), to = i < n.stops.length ? stopName(n.stops[i]) : R.toName;
+        return `<li><span class="dn">${i + 1}</span><span class="dd"><b>${esc(from)} → ${esc(to)}</b><small>${fmt(Math.round(d.km))} km, ok. ${fmt(d.h, 1)} h jazdy${d.ferry ? ', z promem' : ''}</small>${campsHtml(s.lat, s.lon)}</span></li>`; }).join('')}</ol>
       <p class="fine">Miejsca noclegów są orientacyjne – punkty na trasie po przejechaniu dziennego limitu.${API() ? ' Kempingi i miejsca dla kamperów w promieniu 15 km: © współtwórcy OpenStreetMap.' : ''}</p>`;
+  if(S.tab === 'noclegi') loadNames(n.stops);
   if(S.tab === 'noclegi') loadCamps(n.stops.concat([{lat: R.chain[R.chain.length - 1][2], lon: R.chain[R.chain.length - 1][1]}]));
   // profil wysokości
   const pr = profile(), ev = $('#elev');
