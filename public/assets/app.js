@@ -66,7 +66,7 @@ function placeMap(){
   const mb = $('.mapbox'), dock = $('#dock');
   const ev = $('#elev');
   if(isDesk()){ if(mb.parentNode !== dock) dock.append(mb); if(ev.parentNode !== dock) dock.append(ev); }
-  else { if(mb.parentNode === dock) $('#tiles').before(mb); if(ev.parentNode === dock) $('#nights').after(ev); }
+  else { if(mb.parentNode === dock) $('#tiles').before(mb); if(ev.parentNode === dock) $('#actions').after(ev); }
   ML.fitKey = null;
   if(R) drawMap();
 }
@@ -80,14 +80,16 @@ document.addEventListener('mouseover', e => {
 });
 
 /* ---------- zakładki ---------- */
-const TABS = ['trasa', 'paliwo', 'winiety', 'gaz', 'serwis'];
+const TABS = ['trasa', 'noclegi', 'paliwo', 'winiety', 'gaz', 'serwis'];
 function showTab(t){
   if(!TABS.includes(t) || (t === 'serwis' && isDesk())) t = 'trasa';
+  S.tab = t;
   $$('.view').forEach(v => v.hidden = v.id !== 'v-' + t);
   $$('.nav a').forEach(a => a.dataset.tab === t ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current'));
   window.scrollTo(0, 0);
   if(R && (t === 'trasa' || isDesk())) drawMap();
   if(t === 'gaz' && R) renderGaz();
+  if(t === 'noclegi' && R) renderExtras();
 }
 addEventListener('hashchange', () => showTab(location.hash.slice(1)));
 
@@ -322,7 +324,7 @@ function drawML(){
   mlMarker('', 'mk-a', [a[1], a[2]], R.fromName); mlMarker('', 'mk-b', [z[1], z[2]], R.toName);
   (R.via || []).forEach((p, i) => mlMarker(String(i + 1), 'mk-via', [p.lon, p.lat], 'Przez: ' + p.name));
   nights().stops.forEach((s, i) => mlMarker(`<span>${i + 1}</span>`, 'mk-night', [s.lon, s.lat], `Nocleg ${i + 1}: ${s.place}`));
-  if(nightsOpenNow()) campsAll().forEach(x => mlMarker(x.kind === 'kamper' ? 'P' : '⛺', 'mk-camp ' + x.kind, [x.lon, x.lat], (x.name || 'Kemping') + ` (${x.kind === 'kamper' ? 'dla kamperów' : 'kemping'})`));
+  if(S.tab === 'noclegi') campsAll().forEach(x => mlMarker(x.kind === 'kamper' ? 'P' : '⛺', 'mk-camp ' + x.kind, [x.lon, x.lat], (x.name || 'Kemping') + ` (${x.kind === 'kamper' ? 'dla kamperów' : 'kemping'})`));
   if(LPG.show && LPG.items && LPG.key === lpgKey()) LPG.items.forEach(x => mlMarker('LPG', 'mk-lpg', [x.lon, x.lat], 'LPG: ' + (x.name || 'stacja')));
   // dopasowanie widoku do trasy
   const b = new maplibregl.LngLatBounds(); R.chain.forEach(p => b.extend([p[1], p[2]]));
@@ -1240,7 +1242,6 @@ document.addEventListener('click', e => {
   const o = e.target.closest('[data-sv]'); if(o){ const x = SAVED.find(s => s.id === o.dataset.sv); if(x){ applyTrip(x.st); window.scrollTo(0, 0); } }
   const d = e.target.closest('[data-svdel]'); if(d){ SAVED = SAVED.filter(s => s.id !== d.dataset.svdel); store.set('saved', SAVED); renderSaved(); }
   const nd = e.target.closest('[data-dz]'); if(nd){ S.dzien = Math.max(200, Math.min(1200, S.dzien + +nd.dataset.dz)); store.set('dzien', S.dzien); renderExtras(); drawMap(); }
-  if(e.target.closest('.nt-t')){ S.nightsOpen = !nightsOpenNow(); renderExtras(); }
   if(e.target.closest('.ev-t-btn')){ S.elevOpen = !S.elevOpen; renderExtras(); }
 });
 const nightsOpenNow = () => S.nightsOpen == null ? isDesk() : S.nightsOpen;
@@ -1249,15 +1250,14 @@ function renderExtras(){
   // przyciski
   $('#actions').innerHTML = `<button class="btn ghost" id="shareBtn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7M16 6l-4-4-4 4M12 2v13"/></svg>Udostępnij</button>
     <button class="btn ghost" id="saveBtn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-6-4-6 4z"/></svg>Zapisz trasę</button>`;
-  // noclegi
-  const n = nights(), open = nightsOpenNow();
-  $('#nights').innerHTML = `<div class="nt">
-    <button class="ro-toggle nt-t" aria-expanded="${open}">${n.stops.length ? `${n.stops.length} ${n.stops.length === 1 ? 'nocleg' : n.stops.length < 5 ? 'noclegi' : 'noclegów'} po drodze` : 'Trasa na jeden dzień'}<span>${n.days.length} ${n.days.length === 1 ? 'dzień' : 'dni'} jazdy</span></button>
-    ${open ? `<div class="nt-body"><div class="nt-lim"><span>Dziennie jadę do</span><span class="st-ctl"><button class="round sm" data-dz="-50" aria-label="Mniej km dziennie">−</button><b>${fmt(S.dzien)} km</b><button class="round sm" data-dz="50" aria-label="Więcej km dziennie">+</button></span></div>
+  // noclegi – osobna zakładka
+  const n = nights();
+  $('#nightsHead').innerHTML = `<small>${esc(R.fromName)} – ${esc(R.toName)}, ${fmt(Math.round(R.km))} km</small><b>${n.stops.length ? `${n.stops.length} ${n.stops.length === 1 ? 'nocleg' : n.stops.length < 5 ? 'noclegi' : 'noclegów'}` : 'Bez noclegu'}</b><span>${n.days.length} ${n.days.length === 1 ? 'dzień' : 'dni'} jazdy po maks. ${fmt(S.dzien)} km</span>`;
+  $('#nights').innerHTML = `<div class="nt-lim"><span>Dziennie jadę do</span><span class="st-ctl"><button class="round sm" data-dz="-50" aria-label="Mniej km dziennie">−</button><b>${fmt(S.dzien)} km</b><button class="round sm" data-dz="50" aria-label="Więcej km dziennie">+</button></span></div>
       <ol class="days">${n.days.map((d, i) => { const s = n.stops[i] || {lat: R.chain[R.chain.length - 1][2], lon: R.chain[R.chain.length - 1][1]};
         return `<li><span class="dn">${i + 1}</span><span class="dd"><b>${esc(d.from)} → ${esc(d.to)}</b><small>${fmt(Math.round(d.km))} km, ok. ${fmt(d.h, 1)} h jazdy${d.ferry ? ', z promem' : ''}</small>${campsHtml(s.lat, s.lon)}</span></li>`; }).join('')}</ol>
-      <p class="fine">Miejsca noclegów są orientacyjne – punkty na trasie po przejechaniu dziennego limitu.${API() ? ' Kempingi i miejsca dla kamperów w promieniu 15 km: © współtwórcy OpenStreetMap.' : ''}</p></div>` : ''}</div>`;
-  if(open) loadCamps(n.stops.concat([{lat: R.chain[R.chain.length - 1][2], lon: R.chain[R.chain.length - 1][1]}]));
+      <p class="fine">Miejsca noclegów są orientacyjne – punkty na trasie po przejechaniu dziennego limitu.${API() ? ' Kempingi i miejsca dla kamperów w promieniu 15 km: © współtwórcy OpenStreetMap.' : ''}</p>`;
+  if(S.tab === 'noclegi') loadCamps(n.stops.concat([{lat: R.chain[R.chain.length - 1][2], lon: R.chain[R.chain.length - 1][1]}]));
   // profil wysokości
   const pr = profile(), ev = $('#elev');
   if(!pr){ ev.hidden = true; ev.innerHTML = ''; }

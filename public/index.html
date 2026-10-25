@@ -12,7 +12,7 @@
 /* motyw ustawiany przed renderem, żeby nie mrugało */
 (function(){try{var t=localStorage.getItem('gp-theme');if(!t)t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.dataset.theme=t}catch(e){}})();
 </script>
-<link rel="stylesheet" href="assets/style.css?v=20261025r">
+<link rel="stylesheet" href="assets/style.css?v=20261025s">
 </head>
 <body>
 <div class="app">
@@ -56,7 +56,6 @@
 
       <div class="tiles" id="tiles"></div>
       <div class="actions" id="actions"></div>
-      <div id="nights"></div>
       <div class="elev" id="elev" hidden></div>
       <div class="desk-only" id="deskExtra"></div>
       <div id="borders"></div>
@@ -64,6 +63,13 @@
     </section>
 
     <!-- PALIWO -->
+    <!-- NOCLEGI -->
+    <section class="view" id="v-noclegi" aria-label="Noclegi" hidden>
+      <div class="head"><h1>Noclegi</h1></div>
+      <div class="hero" id="nightsHead"></div>
+      <div class="nt" id="nights"></div>
+    </section>
+
     <section class="view" id="v-paliwo" aria-label="Paliwo" hidden>
       <div class="head">
         <h1>Paliwo</h1>
@@ -141,6 +147,7 @@
 
   <nav class="nav" aria-label="Menu">
     <a href="#trasa" data-tab="trasa"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="19" r="2"/><circle cx="18" cy="5" r="2"/><path d="M8 19h7a3.5 3.5 0 0 0 0-7H9a3.5 3.5 0 0 1 0-7h7"/></svg><span>Trasa</span></a>
+    <a href="#noclegi" data-tab="noclegi"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 19V6M3 15h18v4M21 15v-3a3 3 0 0 0-3-3h-8v6"/><circle cx="6.5" cy="11.5" r="2"/></svg><span>Noclegi</span></a>
     <a href="#paliwo" data-tab="paliwo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21V5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v16M3 21h13M7 8h5M15 11h2a2 2 0 0 1 2 2v4a1.5 1.5 0 0 0 3 0V9l-3-3"/></svg><span>Paliwo</span></a>
     <a href="#winiety" data-tab="winiety"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16a1 1 0 0 1 1 1v3.5a2.5 2.5 0 0 0 0 5V18a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-3.5a2.5 2.5 0 0 0 0-5V6a1 1 0 0 1 1-1z"/><path d="M15.5 5.5v2M15.5 11v2M15.5 16.5v2"/><path d="M6.5 10h5M6.5 14h3"/></svg><span>Winiety</span></a>
     <a href="#gaz" data-tab="gaz"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6M12 3v3"/><rect x="6" y="6" width="12" height="15" rx="5"/><path d="M6 12h12"/></svg><span>Gaz</span></a>
@@ -171,7 +178,7 @@
     <button class="btn wide" value="ok">Zapisz pojazd</button>
   </form>
 </dialog>
-<script src="assets/config.js?v=20261025r"></script>
-<script src="assets/app.js?v=20261025r"></script>
+<script src="assets/config.js?v=20261025s"></script>
+<script src="assets/app.js?v=20261025s"></script>
 </body>
 </html>
