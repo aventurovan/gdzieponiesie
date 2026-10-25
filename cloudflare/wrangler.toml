@@ -1,0 +1,16 @@
+# Konfiguracja Workera gdzieponiesie-api (wdrażana z GitHub Actions: „Wdrożenie Workera”)
+name = "gdzieponiesie-api"
+main = "worker.js"
+compatibility_date = "2025-09-01"
+workers_dev = true
+keep_vars = true          # nie kasuj zmiennych ustawionych ręcznie w panelu Cloudflare
+# Sekrety (ORS_API_KEY, NAKORDONI_KEY) zostają w Cloudflare – wdrożenie ich nie zmienia.
+
+# Cron: kolejki na granicach co 3 h, paliwo raz na dobę (Worker sam pilnuje odstępów)
+[triggers]
+crons = ["0 */3 * * *"]
+
+# Magazyn KV na dane z nakordoni.eu – odkomentuj i wpisz ID po utworzeniu przestrzeni „gdzieponiesie-nk”
+# [[kv_namespaces]]
+# binding = "NK"
+# id = "WPISZ_ID_KV"

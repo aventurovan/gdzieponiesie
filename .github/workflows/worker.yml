@@ -1,0 +1,22 @@
+name: Wdrożenie Workera (Cloudflare)
+
+# Tylko ręcznie: Actions → „Wdrożenie Workera (Cloudflare)” → Run workflow.
+on:
+  workflow_dispatch:
+
+concurrency: worker
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Pobranie plików z repo
+        uses: actions/checkout@v5
+
+      - name: Wdrożenie gdzieponiesie-api
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: cloudflare
+          command: deploy
