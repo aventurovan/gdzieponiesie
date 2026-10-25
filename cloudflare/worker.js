@@ -1,4 +1,5 @@
 // gdzieponiesie.pl — pośrednik do OpenRouteService (Cloudflare Worker), wersja 15
+// v23: więcej granic (m.in. Serbia–Macedonia, Macedonia–Grecja, Albania, Ukraina) – 42 kierunki co 3 h.
 // v22: paliwo porcjami (8 krajów na uruchomienie, każdy raz na dobę), pomijanie krajów bez danych (404), 2 s odstępu.
 // v21: /reverse (nazwy miejsc noclegów), więcej serwerów Overpass, krótsze limity czasu.
 // v20: /poi (kempingi i miejsca dla kamperów przy noclegach) i /poi/lpg (stacje LPG wzdłuż trasy) z OpenStreetMap (Overpass), cache 7 dni.
@@ -18,7 +19,7 @@ const ORS_URL = 'https://api.openrouteservice.org/v2/directions/driving-car/geoj
 const ORS_URL_HGV = 'https://api.openrouteservice.org/v2/directions/driving-hgv/geojson';
 const ALLOWED_ORIGINS = ['https://gdzieponiesie.pl', 'https://www.gdzieponiesie.pl'];
 const CACHE_SECONDS = 6 * 3600;
-const CACHE_VERSION = 'v22';
+const CACHE_VERSION = 'v23';
 const GEOCODE_URL = 'https://api.openrouteservice.org/geocode/autocomplete';
 const GEOCODE_CACHE_SECONDS = 24 * 3600;
 const ORS_TIMEOUT_MS = 40000;
@@ -760,8 +761,13 @@ const FUEL_COUNTRIES = ['PL', 'CZ', 'SK', 'HU', 'AT', 'SI', 'HR', 'MK', 'BG', 'R
   'DE', 'IT', 'FR', 'ES', 'PT', 'NL', 'BE', 'LU', 'CH', 'DK', 'SE', 'NO', 'LT', 'LV', 'EE', 'UA', 'MD'];
 // Pary granic poza Schengen pobierane co 3 h (oba kierunki osobno). Każda para = 1 zapytanie.
 // Lista celowo krótka: tylko granice z tras planera. Dopisz parę, gdy dojdzie nowy kierunek.
-const BORDER_PAIRS = ['HU>RS', 'RS>HU', 'HR>RS', 'RS>HR', 'HR>BA', 'BA>HR', 'HR>ME', 'ME>HR',
-  'RS>ME', 'ME>RS', 'RS>BG', 'BG>RS', 'BG>TR', 'TR>BG'];
+const BORDER_PAIRS = (() => {
+  // granice poza Schengen na trasach z Polski na Bałkany, do Turcji i na wschód (oba kierunki)
+  const g = [['HU', 'RS'], ['HR', 'RS'], ['HR', 'BA'], ['HR', 'ME'], ['RS', 'ME'], ['RS', 'BA'], ['BA', 'ME'], ['RS', 'MK'], ['RS', 'BG'],
+    ['RS', 'RO'], ['MK', 'GR'], ['MK', 'BG'], ['MK', 'AL'], ['ME', 'AL'], ['AL', 'GR'], ['BG', 'TR'], ['GR', 'TR'],
+    ['PL', 'UA'], ['SK', 'UA'], ['HU', 'UA'], ['RO', 'MD']];
+  return g.flatMap(([a, b]) => [a + '>' + b, b + '>' + a]);
+})();
 const FUEL_EVERY_H = 24;   // paliwo: raz na dobę
 const FUEL_PER_RUN = 8;    // ile krajów paliwa na jedno uruchomienie crona (reszta w kolejnych)
 const FUEL_HOUR_UTC = 4;   // …o tej godzinie UTC (pierwsze uruchomienie crona po niej)
