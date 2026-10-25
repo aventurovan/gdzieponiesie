@@ -1,4 +1,5 @@
 // gdzieponiesie.pl — pośrednik do OpenRouteService (Cloudflare Worker), wersja 15
+// v25: tylko miejscowości (bez ulic i miejsc), ok. 250 polskich nazw miast Europy.
 // v24: wyszukiwanie miejsc: polskie nazwy miast (Londyn, Ateny…), najpierw miejscowości bez ulic i stacji, etykiety po polsku.
 // v23: więcej granic (m.in. Serbia–Macedonia, Macedonia–Grecja, Albania, Ukraina) – 42 kierunki co 3 h.
 // v22: paliwo porcjami (8 krajów na uruchomienie, każdy raz na dobę), pomijanie krajów bez danych (404), 2 s odstępu.
@@ -20,7 +21,7 @@ const ORS_URL = 'https://api.openrouteservice.org/v2/directions/driving-car/geoj
 const ORS_URL_HGV = 'https://api.openrouteservice.org/v2/directions/driving-hgv/geojson';
 const ALLOWED_ORIGINS = ['https://gdzieponiesie.pl', 'https://www.gdzieponiesie.pl'];
 const CACHE_SECONDS = 6 * 3600;
-const CACHE_VERSION = 'v24';
+const CACHE_VERSION = 'v25';
 const GEOCODE_URL = 'https://api.openrouteservice.org/geocode/autocomplete';
 const GEOCODE_CACHE_SECONDS = 24 * 3600;
 const ORS_TIMEOUT_MS = 40000;
@@ -350,20 +351,47 @@ const ISO3_TO_ISO2 = {
 // Podpowiedzi adresów: ORS (Pelias) przez Workera, z zapamiętywaniem na 24 h.
 // Polskie nazwy miast Europy → nazwa w geokoderze (bez polskich znaków w kluczu). [szukana, wyświetlana]
 const EXONYMS = Object.fromEntries(Object.entries({
-  'Londyn': 'London', 'Ateny': 'Athens', 'Wiedeń': 'Wien', 'Rzym': 'Roma', 'Mediolan': 'Milano', 'Wenecja': 'Venezia', 'Neapol': 'Napoli',
-  'Florencja': 'Firenze', 'Turyn': 'Torino', 'Genua': 'Genova', 'Paryż': 'Paris', 'Lizbona': 'Lisboa', 'Monachium': 'München', 'Kolonia': 'Köln',
+  'Londyn': 'London', 'Edynburg': 'Edinburgh', 'Dublin': 'Dublin', 'Dover': 'Dover', 'Bruksela': 'Bruxelles', 'Antwerpia': 'Antwerpen',
+  'Brugia': 'Brugge', 'Gandawa': 'Gent', 'Haga': 'Den Haag', 'Luksemburg': 'Luxembourg', 'Paryż': 'Paris', 'Marsylia': 'Marseille',
+  'Nicea': 'Nice', 'Strasburg': 'Strasbourg', 'Tuluza': 'Toulouse', 'Awinion': 'Avignon', 'Orlean': 'Orléans', 'Lille': 'Lille',
+  'Rouen': 'Rouen', 'Nantes': 'Nantes', 'Reims': 'Reims', 'Metz': 'Metz', 'Grenoble': 'Grenoble', 'Dijon': 'Dijon',
+  'Calais': 'Calais', 'Madryt': 'Madrid', 'Sewilla': 'Sevilla', 'Walencja': 'València', 'Saragossa': 'Zaragoza', 'Kordoba': 'Córdoba',
+  'Grenada': 'Granada', 'Kadyks': 'Cádiz', 'Malaga': 'Málaga', 'Barcelona': 'Barcelona', 'Bilbao': 'Bilbao', 'San Sebastian': 'Donostia',
+  'Lizbona': 'Lisboa', 'Porto': 'Porto', 'Koimbra': 'Coimbra', 'Faro': 'Faro', 'Monachium': 'München', 'Kolonia': 'Köln',
   'Akwizgran': 'Aachen', 'Norymberga': 'Nürnberg', 'Lipsk': 'Leipzig', 'Drezno': 'Dresden', 'Ratyzbona': 'Regensburg', 'Pasawa': 'Passau',
-  'Moguncja': 'Mainz', 'Brema': 'Bremen', 'Bruksela': 'Bruxelles', 'Antwerpia': 'Antwerpen', 'Haga': 'Den Haag', 'Kopenhaga': 'København',
-  'Sztokholm': 'Stockholm', 'Goteborg': 'Göteborg', 'Helsinki': 'Helsinki', 'Genewa': 'Genève', 'Zurych': 'Zürich', 'Bazylea': 'Basel',
-  'Bratysława': 'Bratislava', 'Koszyce': 'Košice', 'Praga': 'Praha', 'Brno': 'Brno', 'Ołomuniec': 'Olomouc', 'Ostrawa': 'Ostrava',
-  'Budapeszt': 'Budapest', 'Segedyn': 'Szeged', 'Lublana': 'Ljubljana', 'Zagrzeb': 'Zagreb', 'Dubrownik': 'Dubrovnik', 'Sarajewo': 'Sarajevo',
-  'Belgrad': 'Beograd', 'Nowy Sad': 'Novi Sad', 'Nisz': 'Niš', 'Podgorica': 'Podgorica', 'Kotor': 'Kotor', 'Tirana': 'Tirana', 'Durres': 'Durrës',
-  'Szkodra': 'Shkodër', 'Skopje': 'Skopje', 'Ochryda': 'Ohrid', 'Saloniki': 'Thessaloniki', 'Bukareszt': 'București', 'Kluż': 'Cluj-Napoca',
-  'Sofia': 'Sofia', 'Warna': 'Varna', 'Burgas': 'Burgas', 'Płowdiw': 'Plovdiv', 'Stambuł': 'İstanbul', 'Kiszyniów': 'Chișinău',
-  'Lwów': 'Lviv', 'Kijów': 'Kyiv', 'Wilno': 'Vilnius', 'Kowno': 'Kaunas', 'Ryga': 'Riga', 'Tallin': 'Tallinn', 'Madryt': 'Madrid',
-  'Sewilla': 'Sevilla', 'Walencja': 'València', 'Saragossa': 'Zaragoza', 'Edynburg': 'Edinburgh', 'Dublin': 'Dublin', 'Marsylia': 'Marseille',
-  'Nicea': 'Nice', 'Strasburg': 'Strasbourg', 'Lyon': 'Lyon', 'Bordeaux': 'Bordeaux', 'Tuluza': 'Toulouse', 'Innsbruck': 'Innsbruck',
-  'Salzburg': 'Salzburg', 'Grac': 'Graz', 'Trydent': 'Trento', 'Bolonia': 'Bologna', 'Werona': 'Verona', 'Piza': 'Pisa', 'Bergen': 'Bergen',
+  'Moguncja': 'Mainz', 'Brema': 'Bremen', 'Hanower': 'Hannover', 'Brunszwik': 'Braunschweig', 'Getynga': 'Göttingen', 'Trewir': 'Trier',
+  'Koblencja': 'Koblenz', 'Fryburg': 'Freiburg im Breisgau', 'Frankfurt nad Menem': 'Frankfurt am Main', 'Frankfurt nad Odrą': 'Frankfurt (Oder)', 'Lubeka': 'Lübeck', 'Kilonia': 'Kiel',
+  'Szlezwik': 'Schleswig', 'Berlin': 'Berlin', 'Hamburg': 'Hamburg', 'Rostock': 'Rostock', 'Stuttgart': 'Stuttgart', 'Augsburg': 'Augsburg',
+  'Budziszyn': 'Bautzen', 'Chociebuż': 'Cottbus', 'Poczdam': 'Potsdam', 'Genewa': 'Genève', 'Zurych': 'Zürich',
+  'Bazylea': 'Basel', 'Berno': 'Bern', 'Lozanna': 'Lausanne', 'Lucerna': 'Luzern', 'Lugano': 'Lugano', 'Wiedeń': 'Wien',
+  'Grac': 'Graz', 'Salzburg': 'Salzburg', 'Innsbruck': 'Innsbruck', 'Klagenfurt': 'Klagenfurt', 'Linz': 'Linz', 'Rzym': 'Roma',
+  'Mediolan': 'Milano', 'Wenecja': 'Venezia', 'Neapol': 'Napoli', 'Florencja': 'Firenze', 'Turyn': 'Torino', 'Genua': 'Genova',
+  'Bolonia': 'Bologna', 'Werona': 'Verona', 'Piza': 'Pisa', 'Padwa': 'Padova', 'Triest': 'Trieste', 'Trydent': 'Trento',
+  'Bozen': 'Bolzano', 'Mesyna': 'Messina', 'Ankona': 'Ancona', 'Rawenna': 'Ravenna', 'Mantua': 'Mantova', 'Lukka': 'Lucca',
+  'Asyż': 'Assisi', 'Bari': 'Bari', 'Palermo': 'Palermo', 'Rimini': 'Rimini', 'Kopenhaga': 'København', 'Sztokholm': 'Stockholm',
+  'Goteborg': 'Göteborg', 'Malmo': 'Malmö', 'Uppsala': 'Uppsala', 'Oslo': 'Oslo', 'Bergen': 'Bergen', 'Stavanger': 'Stavanger',
+  'Trondheim': 'Trondheim', 'Tromso': 'Tromsø', 'Odense': 'Odense', 'Aarhus': 'Aarhus', 'Helsinki': 'Helsinki', 'Wilno': 'Vilnius',
+  'Kowno': 'Kaunas', 'Kłajpeda': 'Klaipėda', 'Ryga': 'Riga', 'Tallin': 'Tallinn', 'Parnawa': 'Pärnu', 'Tartu': 'Tartu',
+  'Praga': 'Praha', 'Brno': 'Brno', 'Ołomuniec': 'Olomouc', 'Ostrawa': 'Ostrava', 'Pilzno': 'Plzeň', 'Karlowe Wary': 'Karlovy Vary',
+  'Czeskie Budziejowice': 'České Budějovice', 'Hradec Kralowe': 'Hradec Králové', 'Bratysława': 'Bratislava', 'Koszyce': 'Košice', 'Żylina': 'Žilina', 'Preszów': 'Prešov',
+  'Bańska Bystrzyca': 'Banská Bystrica', 'Trenczyn': 'Trenčín', 'Poprad': 'Poprad', 'Nitra': 'Nitra', 'Budapeszt': 'Budapest', 'Segedyn': 'Szeged',
+  'Debreczyn': 'Debrecen', 'Pecz': 'Pécs', 'Egier': 'Eger', 'Siofok': 'Siófok', 'Lublana': 'Ljubljana', 'Maribor': 'Maribor',
+  'Bled': 'Bled', 'Piran': 'Piran', 'Koper': 'Koper', 'Zagrzeb': 'Zagreb', 'Rijeka': 'Rijeka', 'Zadar': 'Zadar',
+  'Szybenik': 'Šibenik', 'Split': 'Split', 'Trogir': 'Trogir', 'Makarska': 'Makarska', 'Omisz': 'Omiš', 'Dubrownik': 'Dubrovnik',
+  'Pula': 'Pula', 'Rowinj': 'Rovinj', 'Porecz': 'Poreč', 'Sarajewo': 'Sarajevo', 'Mostar': 'Mostar', 'Banja Luka': 'Banja Luka',
+  'Medziugorie': 'Međugorje', 'Belgrad': 'Beograd', 'Nowy Sad': 'Novi Sad', 'Nisz': 'Niš', 'Kragujewac': 'Kragujevac', 'Subotica': 'Subotica',
+  'Nowy Pazar': 'Novi Pazar', 'Podgorica': 'Podgorica', 'Kotor': 'Kotor', 'Budwa': 'Budva', 'Herceg Nowi': 'Herceg Novi', 'Ulcinj': 'Ulcinj',
+  'Bar': 'Bar', 'Cetynia': 'Cetinje', 'Żabljak': 'Žabljak', 'Prisztina': 'Prishtinë', 'Prizren': 'Prizren', 'Tirana': 'Tirana',
+  'Durres': 'Durrës', 'Szkodra': 'Shkodër', 'Wlora': 'Vlorë', 'Saranda': 'Sarandë', 'Gjirokastra': 'Gjirokastër', 'Berat': 'Berat',
+  'Skopje': 'Skopje', 'Ochryda': 'Ohrid', 'Bitola': 'Bitola', 'Struga': 'Struga', 'Ateny': 'Athens', 'Saloniki': 'Thessaloniki',
+  'Kawala': 'Kavala', 'Wolos': 'Volos', 'Larisa': 'Larissa', 'Joanina': 'Ioannina', 'Patras': 'Patra', 'Kalamata': 'Kalamata',
+  'Korynt': 'Korinthos', 'Nauplion': 'Nafplio', 'Igumenitsa': 'Igoumenitsa', 'Delfy': 'Delfoi', 'Kalambaka': 'Kalabaka', 'Parga': 'Parga',
+  'Lamia': 'Lamia', 'Heraklion': 'Irakleio', 'Sofia': 'Sofia', 'Warna': 'Varna', 'Burgas': 'Burgas', 'Płowdiw': 'Plovdiv',
+  'Wielkie Tyrnowo': 'Veliko Tarnovo', 'Ruse': 'Ruse', 'Słoneczny Brzeg': 'Slanchev Bryag', 'Złote Piaski': 'Zlatni Pyasatsi', 'Nesebyr': 'Nesebar', 'Bukareszt': 'București',
+  'Kluż': 'Cluj-Napoca', 'Konstanca': 'Constanța', 'Braszów': 'Brașov', 'Sybin': 'Sibiu', 'Jassy': 'Iași', 'Timiszoara': 'Timișoara',
+  'Oradea': 'Oradea', 'Sighișoara': 'Sighișoara', 'Stambuł': 'İstanbul', 'Adrianopol': 'Edirne', 'Edirne': 'Edirne', 'Smyrna': 'İzmir',
+  'Izmir': 'İzmir', 'Ankara': 'Ankara', 'Antalya': 'Antalya', 'Kiszyniów': 'Chișinău', 'Lwów': 'Lviv', 'Kijów': 'Kyiv',
+  'Odessa': 'Odesa', 'Użhorod': 'Uzhhorod', 'Czerniowce': 'Chernivtsi',
 }).map(([pl, local]) => [pl.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/ł/g, 'l'), [local, pl]]));
 
 async function handleGeocode(url, env, cors) {
@@ -375,7 +403,7 @@ async function handleGeocode(url, env, cors) {
     return json({ error: 'Wpisz od 3 do 80 znaków.' }, 400, cors);
   }
 
-  const cacheKey = new Request('https://cache.gdzieponiesie.internal/geo/' + await sha256('g3|' + q.toLowerCase()));
+  const cacheKey = new Request('https://cache.gdzieponiesie.internal/geo/' + await sha256('g4|' + q.toLowerCase()));
   const cached = await caches.default.match(cacheKey);
   if (cached) return json(await cached.json(), 200, cors, { 'X-Cache': 'HIT' });
 
@@ -399,10 +427,10 @@ async function handleGeocode(url, env, cors) {
   // 2) najpierw miejscowości i regiony (bez ulic, sklepów i stacji), dopiero potem wszystko
   let feats;
   try {
-    const COARSE = 'locality,localadmin,borough,county,region,macroregion,country';
+    // tylko miejscowości (miasta, wsie, gminy) – bez ulic, sklepów, stacji i regionów
+    const COARSE = 'locality,localadmin';
     feats = await ask(COARSE);
     if (ex) feats = feats.concat(await ask(COARSE, q));   // np. „Praga” – także dzielnica Warszawy
-    if (feats.length < 3) feats = feats.concat(await ask(null, q));
   } catch (e) {
     if (e.name === 'TimeoutError' || e.name === 'AbortError') return json({ error: 'Wyszukiwarka adresów nie odpowiedziała. Spróbuj ponownie.' }, 504, cors);
     return json({ error: e.message }, e.code || 502, cors);
