@@ -936,7 +936,7 @@ function renderPaliwo(){
   const cheap = cs[ps.indexOf(min)];
   $('#chart').innerHTML = cs.map((c, i) => `<div data-cc="${c}" class="col ${c === cheap ? 'c' : KR[c].schengen ? '' : 'x'}"><b>${litre(ps[i])}</b><i style="height:${Math.round(150 * (ps[i] - base) / (max - base || 1))}px"></i><span class="col-c">${flagSvg(c, 20)}${KR[c].o}</span></div>`).join('');
   $('#fuelTip').innerHTML = `<span><b>${esc(KR[cheap].n)}</b> ma najtańszy ${fn} na trasie. ${cheap === R.order[R.order.length - 1] ? 'Zatankuj do pełna przed powrotem.' : 'Zatankuj tam do pełna.'}</span>`;
-  $('#fuelSrc').textContent = `Ceny: ${fuelSrc}. Kurs 1 € = ${fmt(RATE, 2)} zł.`;
+  $('#fuelSrc').textContent = `Ceny: ${fuelSrc}. Kurs 1 € = ${fmt(RATE, 2)} zł${fxSrc ? ' (' + fxSrc + ')' : ''}.`;
 }
 $('#v-paliwo').addEventListener('click', e => {
   const b = e.target.closest('[data-cons]'); if(!b) return;
@@ -1425,8 +1425,24 @@ function buildPrint(){
 /* ---------- całość ---------- */
 function renderAll(){ if(!R) return; renderTrasa(); renderPaliwo(); renderWiniety(); renderGaz(); renderSerwis(); }
 
-// Ceny paliwa i kolejki przychodzą z Workera (który pyta nakordoni.eu tylko z crona). Strona nic dodatkowo nie odpytuje.
-function loadLive(){}
+// Ceny paliwa (nakordoni.eu, z crona Workera) i kurs EUR (NBP) – pobierane przy starcie, niezależnie od wyznaczania tras.
+let fxSrc = '';
+async function loadLive(){
+  if(!API()) return;
+  try{
+    const j = await getJSON(CONFIG.routeApi + '/prices');
+    if(j.eur_pln > 3 && j.eur_pln < 6){ RATE = j.eur_pln; fxSrc = j.fx_source === 'nbp' ? 'NBP' + (j.fx_date ? ' z ' + new Date(j.fx_date).toLocaleDateString('pl-PL') : '') : ''; }
+    let n = 0;
+    for(const [c, p] of Object.entries(j.prices || {})){
+      if(!KR[c]) continue;
+      if(p.diesel > 0){ KR[c].on = p.diesel / RATE; n++; }
+      if(p.petrol > 0) KR[c].pb = p.petrol / RATE;
+      if(p.lpg > 0 && KR[c].lpg != null) KR[c].lpg = typeof KR[c].lpg === 'object' ? KR[c].lpg : p.lpg / RATE;
+    }
+    if(n) fuelSrc = 'nakordoni.eu' + (j.fuel_updated ? ', aktualizacja ' + new Date(j.fuel_updated).toLocaleDateString('pl-PL') : '') + ' (kraje bez danych: tolls.eu, 19.10.2026)';
+    if(R) renderAll();
+  }catch(e){ /* zostają ceny z pliku */ }
+}
 
 async function init(){
   applyTheme(document.documentElement.dataset.theme || 'light');

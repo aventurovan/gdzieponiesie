@@ -1,6 +1,6 @@
 // gdzieponiesie.pl – service worker (PWA)
 // Strona działa offline z ostatnio wczytanymi plikami. Trasy, ceny i kolejki wymagają internetu (Worker), mapa – też.
-const VERSION = 'gp-20261026g';           // podbij przy każdym wdrożeniu, razem z ?v= w index.html
+const VERSION = 'gp-20261026h';           // podbij przy każdym wdrożeniu, razem z ?v= w index.html
 const SHELL = [
   '/', '/index.html', '/manifest.webmanifest',
   '/assets/app.js', '/assets/style.css', '/assets/config.js',

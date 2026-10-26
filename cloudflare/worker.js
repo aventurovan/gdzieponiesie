@@ -1,4 +1,5 @@
 // gdzieponiesie.pl — pośrednik do OpenRouteService (Cloudflare Worker), wersja 15
+// v29: /prices – ceny paliw i kurs EUR dla strony niezależnie od tras (działa też bez ORS).
 // v28: trasy zapamiętywane w KV na 30 dni (wspólnie dla wszystkich serwerowni), blokada zapytań do ORS po wyczerpaniu dziennego limitu.
 // v27: własna baza ok. 20 tys. miejscowości z GeoNames (polskie nazwy), ORS tylko gdy w bazie nic nie ma.
 // v26: ok. 450 miast i miejscowości turystycznych Europy w słowniku nazw.
@@ -30,7 +31,7 @@ const ROUTE_KV_SECONDS = 30 * 24 * 3600;
 // Wersja formatu zapisanej trasy – zmieniaj tylko, gdy zmienia się to, co zwraca summarize().
 // (Wcześniej klucz zależał od CACHE_VERSION i każde wdrożenie Workera kasowało zapamiętane trasy.)
 const ROUTE_FORMAT = 'r1';   // trasy w KV: 30 dni (drogi zmieniają się rzadko)
-const CACHE_VERSION = 'v28';
+const CACHE_VERSION = 'v29';
 const GEOCODE_URL = 'https://api.openrouteservice.org/geocode/autocomplete';
 const GEOCODE_CACHE_SECONDS = 24 * 3600;
 const ORS_TIMEOUT_MS = 40000;
@@ -167,6 +168,9 @@ export default {
       if (url.pathname === '/poi/lpg' && request.method === 'POST') {
         if (!ALLOWED_ORIGINS.includes(origin)) return json({ error: 'Ta strona nie ma dostępu do API.' }, 403, cors);
         return await handlePoiLpg(request, cors);
+      }
+      if (url.pathname === '/prices' && request.method === 'GET') {
+        return await handlePrices(env, cors);
       }
       if (url.pathname === '/geocode' && request.method === 'GET') {
         if (!ALLOWED_ORIGINS.includes(origin)) {
@@ -1180,4 +1184,18 @@ async function handleReverse(url, env, cors) {
   } catch (e) { return json({ name: null, error: String(e.message || e) }, 200, cors); }
   await caches.default.put(req, new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'max-age=' + 30 * 24 * 3600 } }));
   return json(body, 200, cors, { 'X-Cache': 'MISS' });
+}
+
+
+// GET /prices → ceny paliw (zł/l) ze wszystkich krajów w KV i kurs EUR z NBP – niezależnie od wyznaczania tras.
+// Nie pyta nakordoni.eu (dane z crona); kurs NBP z pamięci Workera.
+async function handlePrices(env, cors) {
+  const [fx, fuel] = await Promise.all([getFx(), env.NK ? env.NK.get('fuel', 'json') : null]);
+  const r2 = (v) => (v === null ? null : Math.round(v * 100) / 100);
+  const prices = {};
+  for (const [c, d] of Object.entries(fuel?.byCountry || {})) {
+    prices[c] = { diesel: r2(livePrice(d, 'diesel', fx)), petrol: r2(livePrice(d, 'petrol', fx)), lpg: r2(livePrice(d, 'lpg', fx)), updated: d.updated || null };
+  }
+  return json({ eur_pln: r2(fx.rates.EUR), fx_source: fx.source, fx_date: fx.date || null, fuel_updated: fuel?.updated || null, prices },
+    200, cors, { 'Cache-Control': 'public, max-age=1800' });
 }
