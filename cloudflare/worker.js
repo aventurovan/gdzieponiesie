@@ -1,4 +1,5 @@
 // gdzieponiesie.pl — pośrednik do OpenRouteService (Cloudflare Worker), wersja 15
+// v32: panel administracyjny – logowanie e-mail + hasło, edycja promów (KV „data:promy”), /data dla strony.
 // v31: kody błędów dla użytkownika (GP-xxx) i dziennik błędów w KV z podglądem /admin/log (sekret ADMIN_TOKEN).
 // v30: /reverse z własnej bazy GeoNames – ORS używany już tylko do tras i (rzadko) do wyszukiwania małych miejscowości.
 // v29: /prices – ceny paliw i kurs EUR dla strony niezależnie od tras (działa też bez ORS).
@@ -33,7 +34,7 @@ const ROUTE_KV_SECONDS = 30 * 24 * 3600;
 // Wersja formatu zapisanej trasy – zmieniaj tylko, gdy zmienia się to, co zwraca summarize().
 // (Wcześniej klucz zależał od CACHE_VERSION i każde wdrożenie Workera kasowało zapamiętane trasy.)
 const ROUTE_FORMAT = 'r1';   // trasy w KV: 30 dni (drogi zmieniają się rzadko)
-const CACHE_VERSION = 'v31';
+const CACHE_VERSION = 'v32';
 const GEOCODE_URL = 'https://api.openrouteservice.org/geocode/autocomplete';
 const GEOCODE_CACHE_SECONDS = 24 * 3600;
 const ORS_TIMEOUT_MS = 40000;
@@ -178,6 +179,12 @@ export default {
       if (url.pathname === '/admin/log') {
         return await handleAdminLog(request, env, cors);
       }
+      if (url.pathname === '/data' && request.method === 'GET') {
+        return await handlePublicData(env, cors);
+      }
+      if (url.pathname.startsWith('/admin/')) {
+        return await handleAdmin(request, url, env, cors);
+      }
       if (url.pathname === '/prices' && request.method === 'GET') {
         return await handlePrices(env, cors);
       }
@@ -203,7 +210,7 @@ export default {
 
 function corsHeaders(origin) {
   const h = {
-    'Access-Control-Allow-Methods': 'POST, GET, DELETE, OPTIONS',
+    'Access-Control-Allow-Methods': 'POST, GET, PUT, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400',
     'Vary': 'Origin',
@@ -1235,9 +1242,144 @@ async function handleClientLog(request, env, cors) {
   return json({ ok: true }, 200, cors);
 }
 async function handleAdminLog(request, env, cors) {
-  const auth = request.headers.get('Authorization') || '';
-  if (!env.ADMIN_TOKEN || auth !== 'Bearer ' + env.ADMIN_TOKEN) return json({ error: 'brak dostępu' }, 401, cors);
+  if (!(await adminUser(request, env))) return json({ error: 'brak dostępu' }, 401, cors);
   if (request.method === 'DELETE') { if (env.NK) await env.NK.put('log', '[]'); return json({ ok: true }, 200, cors); }
   const [list, quota, status] = env.NK ? await Promise.all([env.NK.get('log', 'json'), env.NK.get('ors:quota'), env.NK.get('status', 'json')]) : [[], null, null];
   return json({ version: CACHE_VERSION, ors_block: quota, cron: status?.last_run || null, entries: list || [] }, 200, cors, { 'Cache-Control': 'no-store' });
+}
+
+
+// ===================== Panel administracyjny: konta, sesje, edytowalne dane =====================
+// Konta w KV „users” ({email: {salt, hash, it}}), sesje „sess:<sha256(token)>” na 7 dni.
+// Pierwsze konto zakłada się raz przez /admin/setup z nagłówkiem Authorization: Bearer <ADMIN_TOKEN>.
+const PBKDF2_IT = 5000;   // darmowy plan Workers ma limit czasu CPU; siłę daje dodatkowo sekret ADMIN_TOKEN jako „pieprz”
+const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
+const randomToken = (n = 32) => b64(crypto.getRandomValues(new Uint8Array(n))).replace(/[+/=]/g, (c) => ({ '+': '-', '/': '_', '=': '' }[c]));
+async function hashPassword(password, salt, env, it = PBKDF2_IT) {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(password + '|' + (env.ADMIN_TOKEN || '')), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: new TextEncoder().encode(salt), iterations: it }, key, 256);
+  return b64(bits);
+}
+function safeEqual(a, b) { if (a.length !== b.length) return false; let r = 0; for (let i = 0; i < a.length; i++) r |= a.charCodeAt(i) ^ b.charCodeAt(i); return r === 0; }
+async function adminUser(request, env) {
+  const auth = request.headers.get('Authorization') || '';
+  if (!auth.startsWith('Bearer ') || !env.NK) return null;
+  const tok = auth.slice(7);
+  if (env.ADMIN_TOKEN && safeEqual(tok, env.ADMIN_TOKEN)) return { email: 'token', setup: true };
+  const s = await env.NK.get('sess:' + (await sha256(tok)), 'json');
+  return s ? { email: s.email } : null;
+}
+async function audit(env, email, what) {
+  const list = (await env.NK.get('audit', 'json')) || [];
+  list.unshift({ t: new Date().toISOString(), email, what });
+  await env.NK.put('audit', JSON.stringify(list.slice(0, 200)));
+}
+const FERRY_KEYS = ['id', 'trasa', 'operator', 'link', 'a', 'b', 'od', 'sezon', 'h', 'opis', 'tylkoNO', 'zachod', 'wschodNie', 'lokalny', 'sprawdzono'];
+function validFerries(list) {
+  if (!Array.isArray(list) || list.length > 200) return 'lista promów musi być tablicą (maks. 200)';
+  const ids = new Set();
+  for (const [i, f] of list.entries()) {
+    const n = 'Prom ' + (i + 1) + ': ';
+    if (!f || typeof f !== 'object') return n + 'zły format';
+    if (!/^[a-z0-9-]{3,60}$/.test(f.id || '')) return n + 'id: małe litery, cyfry i myślniki';
+    if (ids.has(f.id)) return n + 'id się powtarza'; ids.add(f.id);
+    if (!/ – /.test(f.trasa || '')) return n + 'trasa w formacie „Port A – Port B”';
+    for (const k of ['a', 'b']) if (!isPoint(f[k])) return n + 'współrzędne portu ' + k.toUpperCase() + ' [dł., szer.]';
+    for (const k of ['od', 'sezon', 'h']) if (f[k] != null && !(typeof f[k] === 'number' && f[k] >= 0 && f[k] < 10000)) return n + k + ' musi być liczbą';
+    if (f.link && !/^https:\/\//.test(f.link)) return n + 'link musi zaczynać się od https://';
+    for (const k of Object.keys(f)) if (!FERRY_KEYS.includes(k)) return n + 'nieznane pole ' + k;
+  }
+  return null;
+}
+async function handlePublicData(env, cors) {
+  const promy = env.NK ? await env.NK.get('data:promy', 'json') : null;
+  return json({ promy: promy?.list || null, updated: promy?.updated || null }, 200, cors, { 'Cache-Control': 'public, max-age=300' });
+}
+async function handleAdmin(request, url, env, cors) {
+  if (!env.NK) return json({ error: 'brak magazynu KV' }, 500, cors);
+  const p = url.pathname, m = request.method;
+  const body = async () => { try { return await request.json(); } catch { return {}; } };
+
+  // logowanie (z limitem prób na adres IP)
+  if (p === '/admin/login' && m === 'POST') {
+    const ip = request.headers.get('CF-Connecting-IP') || 'x';
+    const rl = Number(await env.NK.get('rl:' + ip)) || 0;
+    if (rl >= 8) return json({ error: 'Za dużo prób logowania. Spróbuj za 15 minut.' }, 429, cors);
+    const { email = '', password = '' } = await body();
+    const users = (await env.NK.get('users', 'json')) || {};
+    const u = users[String(email).toLowerCase().trim()];
+    const ok = u && safeEqual(await hashPassword(password, u.salt, env, u.it), u.hash);
+    if (!ok) {
+      await env.NK.put('rl:' + ip, String(rl + 1), { expirationTtl: 900 });
+      await logEvent(env, { code: 'GP-401', path: '/admin/login', detail: 'nieudane logowanie: ' + String(email).slice(0, 80) + ' z ' + ip });
+      return json({ error: 'Zły e-mail lub hasło.' }, 401, cors);
+    }
+    const token = randomToken();
+    await env.NK.put('sess:' + (await sha256(token)), JSON.stringify({ email: String(email).toLowerCase().trim(), t: Date.now() }), { expirationTtl: 7 * 86400 });
+    return json({ token, email: String(email).toLowerCase().trim() }, 200, cors);
+  }
+
+  const me = await adminUser(request, env);
+  if (!me) return json({ error: 'Zaloguj się.' }, 401, cors);
+
+  if (p === '/admin/logout' && m === 'POST') {
+    const tok = (request.headers.get('Authorization') || '').slice(7);
+    await env.NK.delete('sess:' + (await sha256(tok)));
+    return json({ ok: true }, 200, cors);
+  }
+  if (p === '/admin/me') return json({ email: me.email }, 200, cors);
+
+  // zakładanie i zmiana konta (pierwsze konto: tylko z ADMIN_TOKEN; potem także zalogowany użytkownik)
+  if (p === '/admin/users' && m === 'POST') {
+    const { email = '', password = '' } = await body();
+    const e = String(email).toLowerCase().trim();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) return json({ error: 'Podaj poprawny e-mail.' }, 400, cors);
+    if (String(password).length < 10) return json({ error: 'Hasło musi mieć co najmniej 10 znaków.' }, 400, cors);
+    const users = (await env.NK.get('users', 'json')) || {};
+    const salt = randomToken(16);
+    users[e] = { salt, it: PBKDF2_IT, hash: await hashPassword(password, salt, env) };
+    await env.NK.put('users', JSON.stringify(users));
+    await audit(env, me.email, 'konto ' + e + ' (założone/zmienione hasło)');
+    return json({ ok: true, users: Object.keys(users) }, 200, cors);
+  }
+  if (p === '/admin/users' && m === 'GET') {
+    const users = (await env.NK.get('users', 'json')) || {};
+    return json({ users: Object.keys(users) }, 200, cors);
+  }
+  if (p === '/admin/users' && m === 'DELETE') {
+    const { email = '' } = await body();
+    const users = (await env.NK.get('users', 'json')) || {};
+    if (Object.keys(users).length <= 1) return json({ error: 'Nie można usunąć ostatniego konta.' }, 400, cors);
+    delete users[String(email).toLowerCase().trim()];
+    await env.NK.put('users', JSON.stringify(users));
+    await audit(env, me.email, 'usunięte konto ' + email);
+    return json({ ok: true, users: Object.keys(users) }, 200, cors);
+  }
+
+  // promy
+  if (p === '/admin/data/promy' && m === 'GET') {
+    const [cur, prev] = await Promise.all([env.NK.get('data:promy', 'json'), env.NK.get('data:promy:prev', 'json')]);
+    return json({ list: cur?.list || null, updated: cur?.updated || null, by: cur?.by || null, prev: prev ? { updated: prev.updated, by: prev.by } : null }, 200, cors);
+  }
+  if (p === '/admin/data/promy' && m === 'PUT') {
+    const { list } = await body();
+    const err = validFerries(list);
+    if (err) return json({ error: err }, 400, cors);
+    const cur = await env.NK.get('data:promy');
+    if (cur) await env.NK.put('data:promy:prev', cur);
+    await env.NK.put('data:promy', JSON.stringify({ list, updated: new Date().toISOString(), by: me.email }));
+    await audit(env, me.email, 'promy: zapisano ' + list.length + ' pozycji');
+    return json({ ok: true }, 200, cors);
+  }
+  if (p === '/admin/data/promy/undo' && m === 'POST') {
+    const prev = await env.NK.get('data:promy:prev');
+    if (!prev) return json({ error: 'Brak poprzedniej wersji.' }, 400, cors);
+    const cur = await env.NK.get('data:promy');
+    await env.NK.put('data:promy', prev);
+    if (cur) await env.NK.put('data:promy:prev', cur);
+    await audit(env, me.email, 'promy: przywrócona poprzednia wersja');
+    return json({ ok: true }, 200, cors);
+  }
+  if (p === '/admin/audit') return json({ entries: (await env.NK.get('audit', 'json')) || [] }, 200, cors);
+  return json({ error: 'Nie ma takiego adresu.' }, 404, cors);
 }

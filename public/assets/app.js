@@ -1437,6 +1437,13 @@ function buildPrint(){
 /* ---------- całość ---------- */
 function renderAll(){ if(!R) return; renderTrasa(); renderPaliwo(); renderWiniety(); renderGaz(); renderSerwis(); }
 
+// Dane z panelu administracyjnego (Worker /data). Brak lub błąd = zostają dane z plików.
+async function loadData(){
+  try{
+    const j = await Promise.race([getJSON(CONFIG.routeApi + '/data'), new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 2000))]);
+    if(Array.isArray(j.promy) && j.promy.length) T.promyPorty = j.promy;
+  }catch(e){}
+}
 // Ceny paliwa (nakordoni.eu, z crona Workera) i kurs EUR (NBP) – pobierane przy starcie, niezależnie od wyznaczania tras.
 let fxSrc = '';
 async function loadLive(){
@@ -1471,6 +1478,7 @@ async function init(){
   syncSegs(); vehLine(); renderVia();
   const shared = readSharedLink();
   R = buildRoute(f0, demoPick(f0) || undefined);
+  if(API()) await loadData();   // dane edytowane w panelu (promy) – przed liczeniem tras
   if(API()) setRouteApi(true);
   placeMap();
   showTab(location.hash.slice(1));

@@ -4,72 +4,196 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>Dziennik – gdzieponiesie</title>
+<title>Panel – gdzieponiesie</title>
 <style>
-  :root{--bg:#fff;--ink:#16181D;--mut:#5c6370;--rule:#e3e5e8;--tile:#f2f3f5;--amb:#F2A900;--bad:#C8102E}
+  :root{--bg:#fff;--ink:#16181D;--mut:#5c6370;--rule:#e3e5e8;--tile:#f2f3f5;--amb:#F2A900;--bad:#C8102E;--ok:#1E7F4E}
   @media (prefers-color-scheme:dark){:root{--bg:#111317;--ink:#eef0f3;--mut:#9aa1ab;--rule:#2a2e35;--tile:#1c1f25}}
+  *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,sans-serif}
-  main{max-width:1100px;margin:0 auto;padding:20px 16px 60px}
-  h1{font-size:22px;margin:0 0 12px}
-  .bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
-  input,button,select{font:inherit;border:1px solid var(--rule);background:var(--tile);color:var(--ink);border-radius:8px;padding:8px 10px}
+  header{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--rule);gap:10px;flex-wrap:wrap}
+  header b{font-size:17px}
+  main{max-width:1100px;margin:0 auto;padding:18px 16px 60px}
+  h2{font-size:18px;margin:0 0 10px}
+  input,button,select,textarea{font:inherit;border:1px solid var(--rule);background:var(--tile);color:var(--ink);border-radius:8px;padding:8px 10px}
   button{cursor:pointer;font-weight:700}
-  .info{color:var(--mut);margin:6px 0 12px}
+  button.pri{background:var(--amb);color:#16181D;border-color:var(--amb)}
+  button.del{color:var(--bad)}
+  .card{border:1px solid var(--rule);border-radius:12px;padding:14px;margin-bottom:12px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px 10px}
+  .grid label{display:flex;flex-direction:column;font-size:12px;color:var(--mut);gap:3px}
+  .grid label.w2{grid-column:span 2}
+  .grid input,.grid textarea{width:100%;color:var(--ink)}
+  .flags{display:flex;gap:12px;flex-wrap:wrap;font-size:13px;margin-top:8px;align-items:center}
+  .tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+  .tabs button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+  .bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:10px 0}
+  .note{color:var(--mut);font-size:13px}
+  .msg{padding:8px 10px;border-radius:8px;margin:8px 0;display:none}
+  .msg.ok{display:block;background:rgba(30,127,78,.12);color:var(--ok)}
+  .msg.err{display:block;background:rgba(200,16,46,.1);color:var(--bad)}
   table{width:100%;border-collapse:collapse}
   th{text-align:left;font-size:12px;color:var(--mut);padding:6px;border-bottom:2px solid var(--ink)}
   td{padding:6px;border-bottom:1px solid var(--rule);vertical-align:top;word-break:break-word}
   .code{font-weight:800;white-space:nowrap}
-  .c1{color:var(--bad)} .c2{color:#1F6FD1} .c3{color:#7a5af5} .c5{color:var(--bad)}
-  .wrap{overflow-x:auto}
-  .legend{font-size:12.5px;color:var(--mut);line-height:1.7;margin-top:16px}
+  .login{max-width:360px;margin:40px auto;display:flex;flex-direction:column;gap:10px}
+  [hidden]{display:none!important}
 </style>
 </head>
 <body>
+<header><b>gdzieponiesie – panel</b><span id="who" class="note"></span></header>
 <main>
-  <h1>Dziennik błędów</h1>
-  <div class="bar">
-    <input id="tok" type="password" placeholder="Token administratora" autocomplete="off" size="28">
-    <button id="load">Pokaż</button>
-    <select id="filter"><option value="">wszystkie kody</option><option value="GP-1">trasy (GP-1xx)</option><option value="GP-2">przeglądarka (GP-2xx)</option><option value="GP-3">wyszukiwanie (GP-3xx)</option><option value="GP-5">Worker (GP-500)</option></select>
-    <button id="clear">Wyczyść dziennik</button>
-  </div>
-  <div class="info" id="info"></div>
-  <div class="wrap"><table><thead><tr><th>Czas</th><th>Kod</th><th>Gdzie</th><th>Szczegóły</th></tr></thead><tbody id="rows"></tbody></table></div>
-  <div class="legend">
-    <b>Kody:</b> GP-101 dzienny limit ORS (przerwa 30 min) · GP-102 limit na minutę (przerwa 1 min) · GP-103 trasa odrzucona w czasie przerwy ·
-    GP-104 brak trasy przy wybranych ograniczeniach · GP-105 ORS nie odpowiedział · GP-1xxx inny kod ORS ·
-    GP-201 przeglądarka bez połączenia z Workerem · GP-2xx inne błędy w przeglądarce · GP-301/302/303 wyszukiwanie miejscowości · GP-500 błąd Workera.
-  </div>
+  <section id="vLogin" class="login">
+    <h2>Logowanie</h2>
+    <input id="lEmail" type="email" placeholder="E-mail" autocomplete="username">
+    <input id="lPass" type="password" placeholder="Hasło" autocomplete="current-password">
+    <button class="pri" id="lGo">Zaloguj</button>
+    <div class="msg" id="lMsg"></div>
+    <details><summary class="note">Pierwsze uruchomienie – załóż konto</summary>
+      <p class="note">Potrzebny jest sekret <code>ADMIN_TOKEN</code> z ustawień Workera w Cloudflare.</p>
+      <input id="sTok" type="password" placeholder="ADMIN_TOKEN" autocomplete="off" style="width:100%;margin-bottom:6px">
+      <input id="sEmail" type="email" placeholder="E-mail nowego konta" style="width:100%;margin-bottom:6px">
+      <input id="sPass" type="password" placeholder="Hasło (min. 10 znaków)" autocomplete="new-password" style="width:100%;margin-bottom:6px">
+      <button id="sGo">Załóż konto</button>
+    </details>
+  </section>
+
+  <section id="vPanel" hidden>
+    <div class="tabs">
+      <button data-tab="promy" aria-pressed="true">Promy</button>
+      <button data-tab="log" aria-pressed="false">Dziennik błędów</button>
+      <button data-tab="audit" aria-pressed="false">Historia zmian</button>
+      <button data-tab="users" aria-pressed="false">Konta</button>
+      <button id="logout" style="margin-left:auto">Wyloguj</button>
+    </div>
+    <div class="msg" id="pMsg"></div>
+
+    <div data-view="promy">
+      <h2>Promy</h2>
+      <p class="note" id="prInfo"></p>
+      <div class="bar"><button id="prAdd">+ Dodaj prom</button><button class="pri" id="prSave">Zapisz zmiany</button><button id="prUndo">Cofnij ostatni zapis</button></div>
+      <div id="prList"></div>
+      <div class="bar"><button class="pri" id="prSave2">Zapisz zmiany</button></div>
+      <p class="note">Współrzędne portu: „długość, szerokość”, np. 14.2667, 53.9113 (w Google Maps kolejność jest odwrotna – szerokość, długość).
+        Ceny w euro dla kampera ok. 6 m; strona przelicza je według długości pojazdu. Zmiany widać na stronie do 5 minut po zapisie.</p>
+    </div>
+
+    <div data-view="log" hidden>
+      <h2>Dziennik błędów</h2>
+      <div class="bar"><button id="lgLoad">Odśwież</button><button class="del" id="lgClear">Wyczyść</button><span class="note" id="lgInfo"></span></div>
+      <table><thead><tr><th>Czas</th><th>Kod</th><th>Gdzie</th><th>Szczegóły</th></tr></thead><tbody id="lgRows"></tbody></table>
+      <p class="note">GP-101 dzienny limit ORS · GP-102 limit na minutę · GP-103 trasa w czasie przerwy · GP-104 brak trasy · GP-105 ORS nie odpowiedział ·
+        GP-1xxx inny kod ORS · GP-201 brak połączenia w przeglądarce · GP-30x wyszukiwanie · GP-401 nieudane logowanie · GP-500 błąd Workera.</p>
+    </div>
+
+    <div data-view="audit" hidden>
+      <h2>Historia zmian</h2>
+      <table><thead><tr><th>Czas</th><th>Kto</th><th>Co</th></tr></thead><tbody id="auRows"></tbody></table>
+    </div>
+
+    <div data-view="users" hidden>
+      <h2>Konta</h2>
+      <div id="usList" class="note"></div>
+      <div class="card"><b>Dodaj konto lub zmień hasło</b>
+        <div class="bar"><input id="uEmail" type="email" placeholder="E-mail"><input id="uPass" type="password" placeholder="Nowe hasło (min. 10 znaków)" autocomplete="new-password"><button class="pri" id="uSave">Zapisz</button></div>
+      </div>
+    </div>
+  </section>
 </main>
 <script src="assets/config.js"></script>
 <script>
 (function(){
   const API = (window.GP_CONFIG || {}).routeApi;
-  const $ = s => document.querySelector(s);
+  const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
   const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-  let data = null;
-  try{ $('#tok').value = localStorage.getItem('gp-admin') || ''; }catch(e){}
-  async function call(method){
-    const tok = $('#tok').value.trim(); try{ localStorage.setItem('gp-admin', tok); }catch(e){}
-    const r = await fetch(API + '/admin/log', {method, headers: {Authorization: 'Bearer ' + tok}, cache: 'no-store'});
-    if(r.status === 401) throw new Error('Zły token.');
-    return r.json();
+  let TOKEN = sessionStorage.getItem('gp-panel') || '';
+  let FERRIES = [];
+  const say = (el, t, ok) => { el.textContent = t; el.className = 'msg ' + (t ? (ok ? 'ok' : 'err') : ''); };
+  async function call(path, method = 'GET', body, tok = TOKEN){
+    const r = await fetch(API + path, {method, headers: {'Content-Type': 'application/json', Authorization: 'Bearer ' + tok}, body: body ? JSON.stringify(body) : undefined, cache: 'no-store'});
+    const j = await r.json().catch(() => ({}));
+    if(r.status === 401 && path !== '/admin/login' && tok === TOKEN && TOKEN){ logout(); throw new Error('Sesja wygasła – zaloguj się ponownie.'); }
+    if(!r.ok) throw new Error(j.error || 'Błąd ' + r.status);
+    return j;
   }
-  function render(){
-    if(!data) return;
-    const f = $('#filter').value;
-    const list = data.entries.filter(e => !f || String(e.code).startsWith(f));
-    $('#info').textContent = `Worker ${data.version}. ` + (data.ors_block ? `Trasy wstrzymane po błędzie ORS ${data.ors_block}. ` : 'Trasy działają. ')
-      + `Wpisów: ${data.entries.length} (pokazane: ${list.length}).` + (data.cron ? ` Ostatni cron: ${new Date(data.cron.started).toLocaleString('pl-PL')}.` : '');
-    $('#rows').innerHTML = list.map(e => `<tr><td>${new Date(e.t).toLocaleString('pl-PL')}</td><td class="code c${String(e.code).charAt(3)}">${esc(e.code)}</td>
-      <td>${esc(e.path)}${e.variant ? '<br><small>' + esc(e.variant) + '</small>' : ''}</td>
-      <td>${esc(e.detail)}${e.from ? `<br><small>z ${esc(e.from.join(', '))} do ${esc((e.to || []).join(', '))}</small>` : ''}${e.ua ? '<br><small>' + esc(e.ua) + '</small>' : ''}</td></tr>`).join('')
-      || '<tr><td colspan="4">Brak wpisów.</td></tr>';
+  function logout(){ TOKEN = ''; sessionStorage.removeItem('gp-panel'); $('#vPanel').hidden = true; $('#vLogin').hidden = false; $('#who').textContent = ''; }
+  async function enter(){
+    const me = await call('/admin/me'); $('#who').textContent = 'zalogowany: ' + me.email;
+    $('#vLogin').hidden = true; $('#vPanel').hidden = false; loadFerries();
   }
-  $('#load').onclick = async () => { try{ data = await call('GET'); render(); }catch(e){ $('#info').textContent = e.message; } };
-  $('#clear').onclick = async () => { if(!confirm('Wyczyścić cały dziennik?')) return; try{ await call('DELETE'); data = await call('GET'); render(); }catch(e){ $('#info').textContent = e.message; } };
-  $('#filter').onchange = render;
-  if($('#tok').value) $('#load').click();
+
+  $('#lGo').onclick = async () => { try{ const j = await call('/admin/login', 'POST', {email: $('#lEmail').value, password: $('#lPass').value}, '');
+    TOKEN = j.token; sessionStorage.setItem('gp-panel', TOKEN); $('#lPass').value = ''; say($('#lMsg'), ''); await enter(); }catch(e){ say($('#lMsg'), e.message); } };
+  $('#lPass').onkeydown = e => { if(e.key === 'Enter') $('#lGo').click(); };
+  $('#sGo').onclick = async () => { try{ await call('/admin/users', 'POST', {email: $('#sEmail').value, password: $('#sPass').value}, $('#sTok').value.trim());
+    say($('#lMsg'), 'Konto założone – zaloguj się.', true); $('#lEmail').value = $('#sEmail').value; $('#sTok').value = $('#sPass').value = ''; }catch(e){ say($('#lMsg'), e.message); } };
+  $('#logout').onclick = async () => { try{ await call('/admin/logout', 'POST'); }catch(e){} logout(); };
+
+  $$('.tabs [data-tab]').forEach(b => b.onclick = () => {
+    $$('.tabs [data-tab]').forEach(x => x.setAttribute('aria-pressed', x === b));
+    $$('[data-view]').forEach(v => v.hidden = v.dataset.view !== b.dataset.tab); say($('#pMsg'), '');
+    ({promy: loadFerries, log: loadLog, audit: loadAudit, users: loadUsers})[b.dataset.tab]();
+  });
+
+  const pt = v => Array.isArray(v) ? v.join(', ') : (v || '');
+  const parsePt = s => { const m = String(s).split(',').map(x => parseFloat(x.trim())); return m.length === 2 && m.every(Number.isFinite) ? m : null; };
+  function ferryCard(f, i){
+    const fld = (k, label, type = 'text', cls = '') => `<label class="${cls}">${label}<input data-k="${k}" data-i="${i}" type="${type === 'pt' ? 'text' : type}" value="${esc(type === 'pt' ? pt(f[k]) : f[k] ?? '')}"${type === 'number' ? ' step="any" min="0"' : ''}></label>`;
+    const flag = (k, label) => `<label><input type="checkbox" data-k="${k}" data-i="${i}" ${f[k] ? 'checked' : ''}> ${label}</label>`;
+    return `<div class="card"><div class="grid">
+      ${fld('trasa', 'Trasa (Port A – Port B)', 'text', 'w2')}${fld('operator', 'Przewoźnik')}${fld('id', 'Identyfikator')}
+      ${fld('a', 'Port A: długość, szerokość', 'pt')}${fld('b', 'Port B: długość, szerokość', 'pt')}
+      ${fld('od', 'Cena od (€)', 'number')}${fld('sezon', 'W sezonie (€)', 'number')}${fld('h', 'Rejs (godz.)', 'number')}${fld('sprawdzono', 'Cena sprawdzona', 'month')}
+      ${fld('link', 'Link do biletów (https://…)', 'url', 'w2')}
+      <label class="w2">Opis<textarea data-k="opis" data-i="${i}" rows="2">${esc(f.opis || '')}</textarea></label></div>
+      <div class="flags">${flag('tylkoNO', 'tylko trasy do Norwegii')}${flag('zachod', 'tylko zachodnia Norwegia')}${flag('wschodNie', 'nie do zachodniej Norwegii')}${flag('lokalny', 'prom lokalny')}
+      <button class="del" data-del="${i}" style="margin-left:auto">Usuń</button></div></div>`;
+  }
+  function renderFerries(){ $('#prList').innerHTML = FERRIES.map(ferryCard).join(''); }
+  async function loadFerries(){
+    try{
+      const j = await call('/admin/data/promy');
+      if(j.list){ FERRIES = j.list; $('#prInfo').textContent = `Ostatni zapis: ${new Date(j.updated).toLocaleString('pl-PL')} (${j.by}).` + (j.prev ? ' Można cofnąć do wersji z ' + new Date(j.prev.updated).toLocaleString('pl-PL') + '.' : ''); }
+      else { const t = await (await fetch('assets/dane/trasy-demo.json', {cache: 'no-store'})).json(); FERRIES = t.promyPorty || [];
+        $('#prInfo').textContent = 'Promy wczytane z pliku strony. Po pierwszym zapisie strona będzie brać je z panelu.'; }
+      renderFerries();
+    }catch(e){ say($('#pMsg'), e.message); }
+  }
+  $('#prList').addEventListener('input', e => { const el = e.target, i = +el.dataset.i, k = el.dataset.k; if(!k) return;
+    const f = FERRIES[i];
+    if(el.type === 'checkbox'){ if(el.checked) f[k] = true; else delete f[k]; }
+    else if(k === 'a' || k === 'b') f[k] = parsePt(el.value) || el.value;
+    else if(el.type === 'number'){ if(el.value === '') delete f[k]; else f[k] = Number(el.value); }
+    else { if(el.value === '') delete f[k]; else f[k] = el.value; }
+  });
+  $('#prList').addEventListener('click', e => { const d = e.target.closest('[data-del]'); if(!d) return;
+    if(confirm('Usunąć prom ' + (FERRIES[+d.dataset.del].trasa || '') + '?')){ FERRIES.splice(+d.dataset.del, 1); renderFerries(); } });
+  $('#prAdd').onclick = () => { FERRIES.unshift({id: 'nowy-prom-' + Date.now().toString(36), trasa: 'Port A – Port B', operator: ''}); renderFerries(); window.scrollTo(0, 0); };
+  const slug = s => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/ł/g, 'l').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  const save = async () => { try{
+      FERRIES.forEach(f => { if(!f.id || f.id.startsWith('nowy-prom-')) f.id = slug(f.trasa || 'prom'); });
+      await call('/admin/data/promy', 'PUT', {list: FERRIES}); say($('#pMsg'), 'Zapisano. Strona pokaże zmiany w ciągu 5 minut.', true); loadFerries();
+    }catch(e){ say($('#pMsg'), e.message); } };
+  $('#prSave').onclick = save; $('#prSave2').onclick = save;
+  $('#prUndo').onclick = async () => { if(!confirm('Przywrócić poprzednią zapisaną wersję promów?')) return;
+    try{ await call('/admin/data/promy/undo', 'POST'); say($('#pMsg'), 'Przywrócono poprzednią wersję.', true); loadFerries(); }catch(e){ say($('#pMsg'), e.message); } };
+
+  async function loadLog(){ try{ const d = await call('/admin/log');
+    $('#lgInfo').textContent = `Worker ${d.version}. ` + (d.ors_block ? `Trasy wstrzymane po błędzie ORS ${d.ors_block}.` : 'Trasy działają.');
+    $('#lgRows').innerHTML = d.entries.map(e => `<tr><td>${new Date(e.t).toLocaleString('pl-PL')}</td><td class="code">${esc(e.code)}</td><td>${esc(e.path)}${e.variant ? '<br><small>' + esc(e.variant) + '</small>' : ''}</td><td>${esc(e.detail)}${e.from ? `<br><small>z ${esc(e.from.join(', '))} do ${esc((e.to || []).join(', '))}</small>` : ''}</td></tr>`).join('') || '<tr><td colspan="4">Brak wpisów.</td></tr>';
+  }catch(e){ say($('#pMsg'), e.message); } }
+  $('#lgLoad').onclick = loadLog;
+  $('#lgClear').onclick = async () => { if(confirm('Wyczyścić dziennik?')){ try{ await call('/admin/log', 'DELETE'); loadLog(); }catch(e){ say($('#pMsg'), e.message); } } };
+  async function loadAudit(){ try{ const d = await call('/admin/audit');
+    $('#auRows').innerHTML = d.entries.map(e => `<tr><td>${new Date(e.t).toLocaleString('pl-PL')}</td><td>${esc(e.email)}</td><td>${esc(e.what)}</td></tr>`).join('') || '<tr><td colspan="3">Brak zmian.</td></tr>';
+  }catch(e){ say($('#pMsg'), e.message); } }
+  async function loadUsers(){ try{ const d = await call('/admin/users');
+    $('#usList').innerHTML = 'Konta: ' + d.users.map(u => `<b>${esc(u)}</b> <button class="del" data-udel="${esc(u)}">usuń</button>`).join(' · ');
+  }catch(e){ say($('#pMsg'), e.message); } }
+  $('#usList').addEventListener('click', async e => { const b = e.target.closest('[data-udel]'); if(!b || !confirm('Usunąć konto ' + b.dataset.udel + '?')) return;
+    try{ await call('/admin/users', 'DELETE', {email: b.dataset.udel}); loadUsers(); }catch(err){ say($('#pMsg'), err.message); } });
+  $('#uSave').onclick = async () => { try{ await call('/admin/users', 'POST', {email: $('#uEmail').value, password: $('#uPass').value}); $('#uPass').value = ''; say($('#pMsg'), 'Zapisano konto.', true); loadUsers(); }catch(e){ say($('#pMsg'), e.message); } };
+
+  if(TOKEN) enter().catch(() => logout());
 })();
 </script>
 </body>
