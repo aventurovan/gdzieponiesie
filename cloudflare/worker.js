@@ -1,5 +1,5 @@
 // gdzieponiesie.pl — pośrednik do OpenRouteService (Cloudflare Worker), wersja 15
-// v35: budżet nakordoni.eu 170/dobę (limit 200): kolejki tylko dla granic, o które pytają użytkownicy; paliwo co 3 dni.
+// v35: budżet nakordoni.eu 185/dobę (limit 200): wszystkie granice z listy co 6 h (pierwszeństwo), paliwo co 3 dni z reszty budżetu.
 // v34: pierwsze konto bez ADMIN_TOKEN – tylko dla pawel@modrzejewski.info i tylko gdy nie ma żadnego konta.
 // v33: panel – winiety, ceny paliw, komunikaty, baner, listy, granice do kolejek, narzędzia.
 // v32: panel administracyjny – logowanie e-mail + hasło, edycja promów (KV „data:promy”), /data dla strony.
@@ -958,8 +958,6 @@ async function handleBorder(url, env, cors) {
   const to = (url.searchParams.get('to') || '').toUpperCase();
   if (!env.NK) return json({ checkpoints: [], note: 'brak powiązania KV (NK)' }, 200, cors);
   const pair = from + '>' + to;
-  // granica, o którą pytają użytkownicy – cron pobiera tylko takie (limit nakordoni.eu: 200 zapytań na dobę)
-  if (/^[A-Z]{2}>[A-Z]{2}$/.test(pair) && !(await env.NK.get('hot:' + pair))) await env.NK.put('hot:' + pair, '1', { expirationTtl: 3 * 86400 });
   const all = await env.NK.get('borders', 'json');
   const hit = all?.pairs?.[pair];
   if (!hit) return json({ from, to, checkpoints: [], note: 'dane pojawią się w ciągu kilku godzin' }, 200, cors, { 'Cache-Control': 'public, max-age=600' });
@@ -980,10 +978,10 @@ const BORDER_PAIRS_DEFAULT = (() => {
   return g.flatMap(([a, b]) => [a + '>' + b, b + '>' + a]);
 })();
 const FUEL_EVERY_H = 72;   // paliwo: każdy kraj co 3 dni (ceny zmieniają się powoli)
-const NK_DAILY_BUDGET = 170; // limit nakordoni.eu to 200 zapytań na dobę – zostawiamy zapas na ręczne sprawdzenia
-const FUEL_PER_RUN = 3;    // ile krajów paliwa na jedno uruchomienie crona (reszta w kolejnych)
+const NK_DAILY_BUDGET = 185; // limit nakordoni.eu to 200 zapytań na dobę – 15 zostaje w zapasie
+const FUEL_PER_RUN = 2;    // ile krajów paliwa na jedno uruchomienie crona (reszta w kolejnych)
 const FUEL_HOUR_UTC = 4;   // …o tej godzinie UTC (pierwsze uruchomienie crona po niej)
-const BORDERS_EVERY_H = 3; // kolejka danej granicy: nie częściej niż co 3 h
+const BORDERS_EVERY_H = 6; // kolejka każdej granicy z listy co 6 h (42 kierunki × 4 = 168 zapytań na dobę)
 const PAUSE_MS = 2000;     // 2 s między zapytaniami – nakordoni.eu odcina serie (429)
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -1029,9 +1027,8 @@ async function runNakordoniCron(env, now) {
     const pairs = { ...prev.pairs };
     const custom = (await env.NK.get('data:granice', 'json'))?.list;
     const allowed = new Set(Array.isArray(custom) && custom.length ? custom : BORDER_PAIRS_DEFAULT);
-    const hot = (await env.NK.list({ prefix: 'hot:', limit: 200 })).keys.map((k) => k.name.slice(4)).filter((p) => allowed.has(p));
-    // najpierw te, które czekają najdłużej
-    const due = hot.filter((p) => !pairs[p] || (now.getTime() / 1000 - (pairs[p].fetched_at || 0)) / 3600 >= BORDERS_EVERY_H - 0.25)
+    // wszystkie granice z listy, każda najwyżej co BORDERS_EVERY_H; najpierw te, które czekają najdłużej
+    const due = [...allowed].filter((p) => !pairs[p] || (now.getTime() / 1000 - (pairs[p].fetched_at || 0)) / 3600 >= BORDERS_EVERY_H - 0.25)
       .sort((a, b) => (pairs[a]?.fetched_at || 0) - (pairs[b]?.fetched_at || 0));
     log.borders_due = due.length;
     for (const p of due) {
