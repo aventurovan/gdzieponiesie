@@ -544,3 +544,7 @@ html,body,button,input,select{font-variant-numeric:normal;font-feature-settings:
 
 .var.calc{border-style:dashed}
 .var.calc small{color:var(--mut)}
+
+/* bez powiększania strony (podwójne stuknięcie); mapa ma własne przybliżanie */
+html{touch-action:manipulation;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+input,select,textarea{font-size:max(16px,1em)}
