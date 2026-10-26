@@ -1,4 +1,5 @@
 // gdzieponiesie.pl — pośrednik do OpenRouteService (Cloudflare Worker), wersja 15
+// v35: budżet nakordoni.eu 170/dobę (limit 200): kolejki tylko dla granic, o które pytają użytkownicy; paliwo co 3 dni.
 // v34: pierwsze konto bez ADMIN_TOKEN – tylko dla pawel@modrzejewski.info i tylko gdy nie ma żadnego konta.
 // v33: panel – winiety, ceny paliw, komunikaty, baner, listy, granice do kolejek, narzędzia.
 // v32: panel administracyjny – logowanie e-mail + hasło, edycja promów (KV „data:promy”), /data dla strony.
@@ -36,7 +37,7 @@ const ROUTE_KV_SECONDS = 30 * 24 * 3600;
 // Wersja formatu zapisanej trasy – zmieniaj tylko, gdy zmienia się to, co zwraca summarize().
 // (Wcześniej klucz zależał od CACHE_VERSION i każde wdrożenie Workera kasowało zapamiętane trasy.)
 const ROUTE_FORMAT = 'r1';   // trasy w KV: 30 dni (drogi zmieniają się rzadko)
-const CACHE_VERSION = 'v34';
+const CACHE_VERSION = 'v35';
 const GEOCODE_URL = 'https://api.openrouteservice.org/geocode/autocomplete';
 const GEOCODE_CACHE_SECONDS = 24 * 3600;
 const ORS_TIMEOUT_MS = 40000;
@@ -956,9 +957,12 @@ async function handleBorder(url, env, cors) {
   const from = (url.searchParams.get('from') || '').toUpperCase();
   const to = (url.searchParams.get('to') || '').toUpperCase();
   if (!env.NK) return json({ checkpoints: [], note: 'brak powiązania KV (NK)' }, 200, cors);
+  const pair = from + '>' + to;
+  // granica, o którą pytają użytkownicy – cron pobiera tylko takie (limit nakordoni.eu: 200 zapytań na dobę)
+  if (/^[A-Z]{2}>[A-Z]{2}$/.test(pair) && !(await env.NK.get('hot:' + pair))) await env.NK.put('hot:' + pair, '1', { expirationTtl: 3 * 86400 });
   const all = await env.NK.get('borders', 'json');
-  const hit = all?.pairs?.[from + '>' + to];
-  if (!hit) return json({ from, to, checkpoints: [], note: 'brak danych dla tej granicy' }, 200, cors, { 'Cache-Control': 'public, max-age=600' });
+  const hit = all?.pairs?.[pair];
+  if (!hit) return json({ from, to, checkpoints: [], note: 'dane pojawią się w ciągu kilku godzin' }, 200, cors, { 'Cache-Control': 'public, max-age=600' });
   return json({ from, to, ...hit, source: 'nakordoni.eu' }, 200, cors, { 'Cache-Control': 'public, max-age=600' });
 }
 
@@ -975,10 +979,11 @@ const BORDER_PAIRS_DEFAULT = (() => {
     ['PL', 'UA'], ['SK', 'UA'], ['HU', 'UA'], ['RO', 'MD']];
   return g.flatMap(([a, b]) => [a + '>' + b, b + '>' + a]);
 })();
-const FUEL_EVERY_H = 24;   // paliwo: raz na dobę
-const FUEL_PER_RUN = 8;    // ile krajów paliwa na jedno uruchomienie crona (reszta w kolejnych)
+const FUEL_EVERY_H = 72;   // paliwo: każdy kraj co 3 dni (ceny zmieniają się powoli)
+const NK_DAILY_BUDGET = 170; // limit nakordoni.eu to 200 zapytań na dobę – zostawiamy zapas na ręczne sprawdzenia
+const FUEL_PER_RUN = 3;    // ile krajów paliwa na jedno uruchomienie crona (reszta w kolejnych)
 const FUEL_HOUR_UTC = 4;   // …o tej godzinie UTC (pierwsze uruchomienie crona po niej)
-const BORDERS_EVERY_H = 3; // kolejki: nie częściej niż co 3 h
+const BORDERS_EVERY_H = 3; // kolejka danej granicy: nie częściej niż co 3 h
 const PAUSE_MS = 2000;     // 2 s między zapytaniami – nakordoni.eu odcina serie (429)
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -1011,37 +1016,52 @@ async function runNakordoniCron(env, now) {
   const hoursSince = (iso) => iso ? (now - new Date(iso)) / 3600000 : Infinity;
   let stop = false;
 
-  // --- kolejki: nie częściej niż co 3 h, niezależnie od tego, jak często chodzi cron ---
+  // --- budżet: nakordoni.eu daje 200 zapytań na dobę (UTC); my zużywamy najwyżej NK_DAILY_BUDGET ---
+  // Na każde uruchomienie przypada równa część tego, co zostało do północy UTC.
+  const runsLeft = Math.max(1, Math.ceil((24 - now.getUTCHours()) / 3));
+  let allowance = Math.max(0, Math.floor((NK_DAILY_BUDGET - (status.calls_today || 0)) / runsLeft));
+  const spend = () => (allowance > 0 ? (allowance--, true) : false);
+  log.budget = allowance;
+
+  // --- kolejki: tylko granice z listy, o które ktoś pytał w ostatnich 3 dniach; każda najwyżej co BORDERS_EVERY_H ---
   const prev = (await env.NK.get('borders', 'json')) || { pairs: {} };
-  if (hoursSince(prev.updated) >= BORDERS_EVERY_H - 0.25) {
+  {
     const pairs = { ...prev.pairs };
     const custom = (await env.NK.get('data:granice', 'json'))?.list;
-    for (const p of (Array.isArray(custom) && custom.length ? custom : BORDER_PAIRS_DEFAULT)) {
-      if (stop) break;
+    const allowed = new Set(Array.isArray(custom) && custom.length ? custom : BORDER_PAIRS_DEFAULT);
+    const hot = (await env.NK.list({ prefix: 'hot:', limit: 200 })).keys.map((k) => k.name.slice(4)).filter((p) => allowed.has(p));
+    // najpierw te, które czekają najdłużej
+    const due = hot.filter((p) => !pairs[p] || (now.getTime() / 1000 - (pairs[p].fetched_at || 0)) / 3600 >= BORDERS_EVERY_H - 0.25)
+      .sort((a, b) => (pairs[a]?.fetched_at || 0) - (pairs[b]?.fetched_at || 0));
+    log.borders_due = due.length;
+    for (const p of due) {
+      if (stop || !spend()) break;
       const path = nkBorderPath(p, 'v4');
       if (!path) continue;
       try {
         log.border_calls++;
         const data = await nkFetch(path, key);
-        pairs[p] = { ...normalizeBorder(data), fetched_at: Math.floor(Date.now() / 1000) };
+        pairs[p] = { ...normalizeBorder(data), fetched_at: Math.floor(now.getTime() / 1000) };
       } catch (e) {
         log.errors.push(p + ': ' + e.message);
         if (/HTTP (401|403|429)/.test(e.message)) stop = true; // blokada lub limit – kończymy do następnego okna
       }
       await sleep(PAUSE_MS);
     }
-    await env.NK.put('borders', JSON.stringify({ pairs, updated: now.toISOString() }));
-  } else log.borders = 'pominięte – dane z ' + prev.updated;
+    if (log.border_calls) await env.NK.put('borders', JSON.stringify({ pairs, updated: now.toISOString() }));
+  }
 
   // --- paliwo: każdy kraj raz na dobę, porcjami po FUEL_PER_RUN krajów na uruchomienie (bez serii zapytań) ---
   // Kraje, których nakordoni.eu nie obsługuje (404), pomijamy przez 30 dni.
   const fuelPrev = (await env.NK.get('fuel', 'json')) || { byCountry: {} };
   const skip = fuelPrev.skip || {};
   const fetchedAt = fuelPrev.fetchedAt || {};
-  const due = FUEL_COUNTRIES.filter((c) => !(skip[c] && new Date(skip[c]) > now) && hoursSince(fetchedAt[c]) >= 23).slice(0, FUEL_PER_RUN);
+  const due = FUEL_COUNTRIES.filter((c) => !(skip[c] && new Date(skip[c]) > now) && hoursSince(fetchedAt[c]) >= FUEL_EVERY_H - 1)
+    .sort((a, b) => hoursSince(fetchedAt[b]) - hoursSince(fetchedAt[a])).slice(0, FUEL_PER_RUN);
   if (!stop && due.length) {
     const byCountry = { ...fuelPrev.byCountry };
     for (const c of due) {
+      if (!spend()) break;
       try {
         log.fuel_calls++;
         const payload = await nkFetch('/api/v1/data/fuel?lang=en&country=' + c, key);
