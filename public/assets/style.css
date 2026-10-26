@@ -548,3 +548,9 @@ html,body,button,input,select{font-variant-numeric:normal;font-feature-settings:
 /* bez powiększania strony (podwójne stuknięcie); mapa ma własne przybliżanie */
 html{touch-action:manipulation;-webkit-text-size-adjust:100%;text-size-adjust:100%}
 input,select,textarea{font-size:max(16px,1em)}
+
+/* baner i komunikaty z panelu */
+.gp-banner{background:var(--tile);border-left:4px solid var(--amb);border-radius:10px;padding:10px 14px;margin:0 0 12px;font-size:14px;font-weight:600}
+.gp-banner.warn{background:#FFF4D6;color:#5a4300} :root[data-theme="dark"] .gp-banner.warn{background:#3a3010;color:#ffe08a}
+.gp-banner a{color:inherit;font-weight:800}
+.calm.warn{border-left:4px solid var(--amb)}

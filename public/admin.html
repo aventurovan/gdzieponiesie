@@ -44,14 +44,14 @@
 <main>
   <section id="vLogin" class="login">
     <h2>Logowanie</h2>
-    <input id="lEmail" type="email" placeholder="E-mail" autocomplete="username">
+    <input id="lEmail" type="email" placeholder="E-mail" autocomplete="username" value="pawel@modrzejewski.info">
     <input id="lPass" type="password" placeholder="Hasło" autocomplete="current-password">
     <button class="pri" id="lGo">Zaloguj</button>
     <div class="msg" id="lMsg"></div>
     <details><summary class="note">Pierwsze uruchomienie – załóż konto</summary>
       <p class="note">Potrzebny jest sekret <code>ADMIN_TOKEN</code> z ustawień Workera w Cloudflare.</p>
       <input id="sTok" type="password" placeholder="ADMIN_TOKEN" autocomplete="off" style="width:100%;margin-bottom:6px">
-      <input id="sEmail" type="email" placeholder="E-mail nowego konta" style="width:100%;margin-bottom:6px">
+      <input id="sEmail" type="email" placeholder="E-mail nowego konta" value="pawel@modrzejewski.info" style="width:100%;margin-bottom:6px">
       <input id="sPass" type="password" placeholder="Hasło (min. 10 znaków)" autocomplete="new-password" style="width:100%;margin-bottom:6px">
       <button id="sGo">Załóż konto</button>
     </details>
@@ -60,6 +60,13 @@
   <section id="vPanel" hidden>
     <div class="tabs">
       <button data-tab="promy" aria-pressed="true">Promy</button>
+      <button data-tab="winiety" aria-pressed="false">Winiety</button>
+      <button data-tab="paliwa" aria-pressed="false">Paliwa</button>
+      <button data-tab="komunikaty" aria-pressed="false">Komunikaty</button>
+      <button data-tab="baner" aria-pressed="false">Baner</button>
+      <button data-tab="listy" aria-pressed="false">Listy</button>
+      <button data-tab="granice" aria-pressed="false">Granice</button>
+      <button data-tab="tools" aria-pressed="false">Narzędzia</button>
       <button data-tab="log" aria-pressed="false">Dziennik błędów</button>
       <button data-tab="audit" aria-pressed="false">Historia zmian</button>
       <button data-tab="users" aria-pressed="false">Konta</button>
@@ -75,6 +82,56 @@
       <div class="bar"><button class="pri" id="prSave2">Zapisz zmiany</button></div>
       <p class="note">Współrzędne portu: „długość, szerokość”, np. 14.2667, 53.9113 (w Google Maps kolejność jest odwrotna – szerokość, długość).
         Ceny w euro dla kampera ok. 6 m; strona przelicza je według długości pojazdu. Zmiany widać na stronie do 5 minut po zapisie.</p>
+    </div>
+
+    <div data-view="winiety" hidden>
+      <h2>Winiety i opłaty</h2>
+      <p class="note">Pozycje wpisane tu zastępują automatyczne wyliczenie dla danego kraju i typu pojazdu („wszystkie” = każdy typ). Kwota w euro; puste = „wg km”. Kraj bez pozycji liczy się jak dotąd.</p>
+      <div class="ed" data-set="winiety"></div>
+    </div>
+    <div data-view="paliwa" hidden>
+      <h2>Ceny paliw (ręcznie)</h2>
+      <p class="note">Dla krajów bez danych z nakordoni.eu (np. Serbia, Czarnogóra, Bośnia, Albania, Kosowo). Ceny w zł za litr. Wpis tutaj ma pierwszeństwo przed danymi automatycznymi.</p>
+      <div class="ed" data-set="paliwa"></div>
+    </div>
+    <div data-view="komunikaty" hidden>
+      <h2>Komunikaty dla krajów</h2>
+      <p class="note">Pokazują się przy trasach przez dany kraj (kod „ALL” – przy każdej trasie). Po dacie „ważne do” znikają same.</p>
+      <div class="ed" data-set="komunikaty"></div>
+    </div>
+    <div data-view="baner" hidden>
+      <h2>Baner na stronie</h2>
+      <p class="note">Krótka informacja na górze strony dla wszystkich. Puste pole treści = brak banera.</p>
+      <div class="card"><div class="grid">
+        <label class="w2">Treść<input id="bnText" maxlength="300"></label>
+        <label>Ważny do<input id="bnDo" type="date"></label>
+        <label>Poziom<select id="bnLvl"><option value="info">informacja</option><option value="uwaga">ostrzeżenie</option></select></label>
+        <label class="w2">Link (opcjonalnie, https://…)<input id="bnLink" type="url"></label></div>
+        <div class="bar"><button class="pri" id="bnSave">Zapisz baner</button><button id="bnOff">Wyłącz baner</button></div></div>
+    </div>
+    <div data-view="listy" hidden>
+      <h2>Listy przed wyjazdem</h2>
+      <p class="note">Domyślne listy w zakładce Serwis. Jeden punkt w linii, opis po znaku „|”, np. „Gaz zakręcony | zawór przy butli”. Lista „dla tej trasy i pojazdu” tworzy się sama.</p>
+      <div class="bar"><button id="liAdd">+ Dodaj listę</button><button class="pri" id="liSave">Zapisz listy</button><button id="liUndo">Cofnij ostatni zapis</button></div>
+      <div id="liList"></div>
+    </div>
+    <div data-view="granice" hidden>
+      <h2>Granice do kolejek</h2>
+      <p class="note">Pary krajów, dla których cron co 3 godziny pobiera kolejki z nakordoni.eu. Jedna granica w linii, np. „HU-RS” – oba kierunki dodają się same. Każda granica to 2 zapytania co 3 h (limit nakordoni.eu: 2 na sekundę – cron robi przerwy).</p>
+      <textarea id="grText" rows="14" style="width:100%"></textarea>
+      <div class="bar"><button class="pri" id="grSave">Zapisz</button><button id="grDef">Przywróć domyślne</button><span class="note" id="grInfo"></span></div>
+    </div>
+    <div data-view="tools" hidden>
+      <h2>Narzędzia</h2>
+      <div class="card" id="toStatus">…</div>
+      <div class="bar">
+        <button id="toRefresh">Odśwież</button>
+        <button id="toCron">Uruchom cron teraz</button>
+        <button id="toUnblock">Zdejmij blokadę tras ORS</button>
+        <button class="del" id="toClear">Usuń zapamiętane trasy</button>
+      </div>
+      <p class="note">„Uruchom cron teraz” trzyma się tych samych zasad co automat (kolejki najwyżej co 3 h, paliwo raz na dobę), więc nie przekroczy limitów nakordoni.eu.
+        Usunięcie zapamiętanych tras sprawi, że kolejne wyszukiwania pójdą od nowa do ORS – używaj tylko po zmianach w wyznaczaniu tras.</p>
     </div>
 
     <div data-view="log" hidden>
@@ -131,7 +188,8 @@
   $$('.tabs [data-tab]').forEach(b => b.onclick = () => {
     $$('.tabs [data-tab]').forEach(x => x.setAttribute('aria-pressed', x === b));
     $$('[data-view]').forEach(v => v.hidden = v.dataset.view !== b.dataset.tab); say($('#pMsg'), '');
-    ({promy: loadFerries, log: loadLog, audit: loadAudit, users: loadUsers})[b.dataset.tab]();
+    ({promy: loadFerries, log: loadLog, audit: loadAudit, users: loadUsers, winiety: () => loadSet('winiety'), paliwa: () => loadSet('paliwa'),
+      komunikaty: () => loadSet('komunikaty'), baner: loadBaner, listy: loadLists, granice: loadBorders, tools: loadTools})[b.dataset.tab]();
   });
 
   const pt = v => Array.isArray(v) ? v.join(', ') : (v || '');
@@ -192,6 +250,95 @@
   $('#usList').addEventListener('click', async e => { const b = e.target.closest('[data-udel]'); if(!b || !confirm('Usunąć konto ' + b.dataset.udel + '?')) return;
     try{ await call('/admin/users', 'DELETE', {email: b.dataset.udel}); loadUsers(); }catch(err){ say($('#pMsg'), err.message); } });
   $('#uSave').onclick = async () => { try{ await call('/admin/users', 'POST', {email: $('#uEmail').value, password: $('#uPass').value}); $('#uPass').value = ''; say($('#pMsg'), 'Zapisano konto.', true); loadUsers(); }catch(e){ say($('#pMsg'), e.message); } };
+
+  // ---------- edytory tabelaryczne ----------
+  let COUNTRIES = {};
+  fetch('assets/dane/kraje.json').then(r => r.json()).then(j => { COUNTRIES = Object.fromEntries(Object.entries(j.kraje).map(([c, v]) => [c, v.n]));
+    const dl = document.createElement('datalist'); dl.id = 'ccList'; dl.innerHTML = Object.entries(COUNTRIES).map(([c, n]) => `<option value="${c}">${esc(n)}</option>`).join('') + '<option value="ALL">wszystkie trasy</option>'; document.body.append(dl); }).catch(() => {});
+  const SPEC = {
+    winiety: {cols: [['kraj', 'Kraj', 'cc'], ['typ', 'Pojazd', ['wszystkie', 'kamper', 'ciezki', 'zestaw']], ['k', 'Nazwa (np. Winieta 10 dni)', 'text', 'w2'], ['eur', 'Kwota €', 'number'], ['link', 'Link', 'url', 'w2'], ['opis', 'Opis', 'text', 'w2']],
+      blank: () => ({kraj: '', typ: 'wszystkie', k: ''})},
+    paliwa: {cols: [['kraj', 'Kraj', 'cc'], ['on', 'ON zł/l', 'number'], ['pb', 'Pb 95 zł/l', 'number'], ['lpg', 'LPG zł/l', 'number'], ['data', 'Stan na', 'month']],
+      blank: () => ({kraj: ''})},
+    komunikaty: {cols: [['kraj', 'Kraj (lub ALL)', 'cc'], ['tytul', 'Tytuł', 'text', 'w2'], ['tekst', 'Treść', 'area', 'w2'], ['do', 'Ważne do', 'date'], ['poziom', 'Poziom', ['info', 'uwaga']]],
+      blank: () => ({kraj: 'ALL', tytul: '', tekst: '', poziom: 'info'})},
+  };
+  const DATA = {};
+  function edCard(set, x, i){
+    return `<div class="card"><div class="grid">${SPEC[set].cols.map(([k, label, type, cls]) => {
+      const v = x[k] ?? '';
+      const inp = Array.isArray(type) ? `<select data-k="${k}" data-i="${i}">${type.map(o => `<option${o === v ? ' selected' : ''}>${o}</option>`).join('')}</select>`
+        : type === 'area' ? `<textarea data-k="${k}" data-i="${i}" rows="2">${esc(v)}</textarea>`
+        : `<input data-k="${k}" data-i="${i}" ${type === 'cc' ? 'list="ccList" maxlength="3" style="text-transform:uppercase"' : `type="${type}"${type === 'number' ? ' step="any" min="0"' : ''}`} value="${esc(v)}">`;
+      return `<label class="${cls || ''}">${label}${inp}</label>`; }).join('')}</div>
+      <div class="flags"><span class="note">${esc(COUNTRIES[x.kraj] || '')}</span><button class="del" data-del="${i}" style="margin-left:auto">Usuń</button></div></div>`;
+  }
+  function renderSet(set){
+    const box = document.querySelector(`.ed[data-set="${set}"]`);
+    box.innerHTML = `<p class="note">${esc(DATA[set].info || '')}</p><div class="bar"><button data-add>+ Dodaj</button><button class="pri" data-save>Zapisz</button><button data-undo>Cofnij ostatni zapis</button></div>`
+      + (DATA[set].list.map((x, i) => edCard(set, x, i)).join('') || '<p class="note">Brak pozycji.</p>');
+  }
+  async function loadSet(set){ try{ const j = await call('/admin/data/' + set);
+    DATA[set] = {list: j.list || [], info: j.updated ? `Ostatni zapis: ${new Date(j.updated).toLocaleString('pl-PL')} (${j.by}).` : 'Jeszcze nic nie zapisano.'}; renderSet(set);
+  }catch(e){ say($('#pMsg'), e.message); } }
+  document.querySelectorAll('.ed').forEach(box => {
+    const set = box.dataset.set;
+    box.addEventListener('input', e => { const el = e.target, k = el.dataset.k; if(!k) return; const x = DATA[set].list[+el.dataset.i];
+      let v = el.value; if(k === 'kraj') v = v.toUpperCase().trim();
+      if(el.type === 'number'){ if(v === '') delete x[k]; else x[k] = Number(v); } else if(v === '') delete x[k]; else x[k] = v; });
+    box.addEventListener('click', async e => {
+      if(e.target.closest('[data-add]')){ DATA[set].list.unshift(SPEC[set].blank()); renderSet(set); }
+      const d = e.target.closest('[data-del]'); if(d && confirm('Usunąć pozycję?')){ DATA[set].list.splice(+d.dataset.del, 1); renderSet(set); }
+      if(e.target.closest('[data-save]')){ try{ await call('/admin/data/' + set, 'PUT', {list: DATA[set].list}); say($('#pMsg'), 'Zapisano. Strona pokaże zmiany w ciągu 5 minut.', true); loadSet(set); }catch(err){ say($('#pMsg'), err.message); } }
+      if(e.target.closest('[data-undo]') && confirm('Przywrócić poprzednią wersję?')){ try{ await call('/admin/data/' + set + '/undo', 'POST'); say($('#pMsg'), 'Przywrócono.', true); loadSet(set); }catch(err){ say($('#pMsg'), err.message); } }
+    });
+  });
+
+  // baner
+  async function loadBaner(){ try{ const j = await call('/admin/data/baner'); const b = j.list || {};
+    $('#bnText').value = b.tekst || ''; $('#bnDo').value = b.do || ''; $('#bnLvl').value = b.poziom || 'info'; $('#bnLink').value = b.link || ''; }catch(e){ say($('#pMsg'), e.message); } }
+  $('#bnSave').onclick = async () => { const b = {tekst: $('#bnText').value.trim(), poziom: $('#bnLvl').value}; if($('#bnDo').value) b.do = $('#bnDo').value; if($('#bnLink').value) b.link = $('#bnLink').value.trim();
+    try{ await call('/admin/data/baner', 'PUT', {list: b.tekst ? b : null}); say($('#pMsg'), b.tekst ? 'Baner zapisany.' : 'Baner wyłączony.', true); }catch(e){ say($('#pMsg'), e.message); } };
+  $('#bnOff').onclick = async () => { try{ await call('/admin/data/baner', 'PUT', {list: null}); $('#bnText').value = ''; say($('#pMsg'), 'Baner wyłączony.', true); }catch(e){ say($('#pMsg'), e.message); } };
+
+  // listy przed wyjazdem
+  let LISTS = [];
+  const listCard = (g, i) => `<div class="card"><div class="grid"><label>Identyfikator<input data-lk="id" data-i="${i}" value="${esc(g.id)}"></label><label class="w2">Nazwa listy<input data-lk="n" data-i="${i}" value="${esc(g.n)}"></label></div>
+    <label class="note" style="display:block;margin-top:8px">Punkty (jeden w linii, opis po „|”)<textarea data-lk="p" data-i="${i}" rows="${Math.min(14, g.p.length + 2)}" style="width:100%">${esc(g.p.map(q => q[1] ? q[0] + ' | ' + q[1] : q[0]).join('\n'))}</textarea></label>
+    <div class="flags"><button class="del" data-ldel="${i}" style="margin-left:auto">Usuń listę</button></div></div>`;
+  async function loadLists(){ try{ const j = await call('/admin/data/listy');
+    LISTS = j.list || (await (await fetch('assets/dane/lista.json', {cache: 'no-store'})).json()).listy.map(g => ({id: g.id, n: g.n, p: g.p.map(q => q[1] ? [q[0], q[1]] : [q[0]])}));
+    $('#liList').innerHTML = LISTS.map(listCard).join(''); }catch(e){ say($('#pMsg'), e.message); } }
+  $('#liList').addEventListener('input', e => { const el = e.target, k = el.dataset.lk; if(!k) return; const g = LISTS[+el.dataset.i];
+    if(k === 'p') g.p = el.value.split('\n').map(l => l.trim()).filter(Boolean).map(l => { const [a, ...b] = l.split('|'); const o = b.join('|').trim(); return o ? [a.trim(), o] : [a.trim()]; });
+    else g[k] = el.value.trim(); });
+  $('#liList').addEventListener('click', e => { const d = e.target.closest('[data-ldel]'); if(d && confirm('Usunąć listę?')){ LISTS.splice(+d.dataset.ldel, 1); $('#liList').innerHTML = LISTS.map(listCard).join(''); } });
+  $('#liAdd').onclick = () => { LISTS.push({id: 'lista-' + (LISTS.length + 1), n: 'Nowa lista', p: []}); $('#liList').innerHTML = LISTS.map(listCard).join(''); };
+  $('#liSave').onclick = async () => { try{ await call('/admin/data/listy', 'PUT', {list: LISTS}); say($('#pMsg'), 'Listy zapisane.', true); }catch(e){ say($('#pMsg'), e.message); } };
+  $('#liUndo').onclick = async () => { if(confirm('Przywrócić poprzednią wersję list?')){ try{ await call('/admin/data/listy/undo', 'POST'); say($('#pMsg'), 'Przywrócono.', true); loadLists(); }catch(e){ say($('#pMsg'), e.message); } } };
+
+  // granice
+  let BDEF = [];
+  const toLines = l => [...new Set(l.map(p => p.split('>').sort().join('-')))].join('\n');
+  async function loadBorders(){ try{ const j = await call('/admin/data/granice'); BDEF = j.defaults || [];
+    $('#grText').value = toLines(j.list || BDEF); $('#grInfo').textContent = j.list ? 'Lista z panelu.' : 'Lista domyślna.'; }catch(e){ say($('#pMsg'), e.message); } }
+  $('#grSave').onclick = async () => { const pairs = $('#grText').value.split('\n').map(l => l.trim().toUpperCase()).filter(Boolean).flatMap(l => { const [a, b] = l.split(/[-> ]+/); return [a + '>' + b, b + '>' + a]; });
+    try{ await call('/admin/data/granice', 'PUT', {list: pairs}); say($('#pMsg'), `Zapisano ${pairs.length / 2} granic (${pairs.length} kierunków). Cron weźmie je przy następnym uruchomieniu.`, true); loadBorders(); }catch(e){ say($('#pMsg'), e.message); } };
+  $('#grDef').onclick = () => { $('#grText').value = toLines(BDEF); };
+
+  // narzędzia
+  async function loadTools(){ try{ const s = await call('/admin/tools/status'); const lr = s.cron && s.cron.last_run;
+    $('#toStatus').innerHTML = `<b>Worker ${esc(s.version)}</b><br>Wyznaczanie tras: ${s.ors_block ? '<b style="color:var(--bad)">wstrzymane po błędzie ORS ' + esc(s.ors_block) + '</b>' : 'działa'}<br>
+      Zapamiętane trasy: ${esc(s.routes_cached)} · miejscowości w bazie: ${s.cities}<br>
+      Kolejki: ${s.border_pairs} kierunków, aktualizacja ${s.borders_updated ? new Date(s.borders_updated).toLocaleString('pl-PL') : '–'}<br>
+      Paliwo: ${s.fuel_countries.length} krajów, aktualizacja ${s.fuel_updated ? new Date(s.fuel_updated).toLocaleString('pl-PL') : '–'}<br>
+      Ostatni cron: ${lr ? new Date(lr.started).toLocaleString('pl-PL') + ` (kolejki ${lr.border_calls}, paliwo ${lr.fuel_calls}${lr.errors && lr.errors.length ? ', błędy: ' + esc(lr.errors.join('; ')) : ''})` : '–'}<br>
+      Dziś zapytań do nakordoni.eu: ${s.cron ? (s.cron.calls_today || 0) : 0}`; }catch(e){ say($('#pMsg'), e.message); } }
+  $('#toRefresh').onclick = loadTools;
+  $('#toCron').onclick = async () => { say($('#pMsg'), 'Cron działa – to może potrwać do 2 minut…', true); try{ await call('/admin/tools/cron', 'POST'); say($('#pMsg'), 'Cron zakończony.', true); loadTools(); }catch(e){ say($('#pMsg'), e.message); } };
+  $('#toUnblock').onclick = async () => { try{ await call('/admin/tools/unblock', 'POST'); say($('#pMsg'), 'Blokada zdjęta.', true); loadTools(); }catch(e){ say($('#pMsg'), e.message); } };
+  $('#toClear').onclick = async () => { if(!confirm('Usunąć zapamiętane trasy? Kolejne wyszukiwania pójdą od nowa do ORS.')) return;
+    try{ const j = await call('/admin/tools/clear-routes', 'POST'); say($('#pMsg'), `Usunięto ${j.deleted} tras${j.more ? ' (kliknij ponownie, by usunąć kolejne)' : ''}.`, true); loadTools(); }catch(e){ say($('#pMsg'), e.message); } };
 
   if(TOKEN) enter().catch(() => logout());
 })();

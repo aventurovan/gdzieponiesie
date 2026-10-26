@@ -1,4 +1,5 @@
 // gdzieponiesie.pl — pośrednik do OpenRouteService (Cloudflare Worker), wersja 15
+// v33: panel – winiety, ceny paliw, komunikaty, baner, listy, granice do kolejek, narzędzia.
 // v32: panel administracyjny – logowanie e-mail + hasło, edycja promów (KV „data:promy”), /data dla strony.
 // v31: kody błędów dla użytkownika (GP-xxx) i dziennik błędów w KV z podglądem /admin/log (sekret ADMIN_TOKEN).
 // v30: /reverse z własnej bazy GeoNames – ORS używany już tylko do tras i (rzadko) do wyszukiwania małych miejscowości.
@@ -34,7 +35,7 @@ const ROUTE_KV_SECONDS = 30 * 24 * 3600;
 // Wersja formatu zapisanej trasy – zmieniaj tylko, gdy zmienia się to, co zwraca summarize().
 // (Wcześniej klucz zależał od CACHE_VERSION i każde wdrożenie Workera kasowało zapamiętane trasy.)
 const ROUTE_FORMAT = 'r1';   // trasy w KV: 30 dni (drogi zmieniają się rzadko)
-const CACHE_VERSION = 'v32';
+const CACHE_VERSION = 'v33';
 const GEOCODE_URL = 'https://api.openrouteservice.org/geocode/autocomplete';
 const GEOCODE_CACHE_SECONDS = 24 * 3600;
 const ORS_TIMEOUT_MS = 40000;
@@ -966,7 +967,7 @@ const FUEL_COUNTRIES = ['PL', 'CZ', 'SK', 'HU', 'AT', 'SI', 'HR', 'MK', 'BG', 'R
   'DE', 'IT', 'FR', 'ES', 'PT', 'NL', 'BE', 'LU', 'CH', 'DK', 'SE', 'NO', 'LT', 'LV', 'EE', 'UA', 'MD'];
 // Pary granic poza Schengen pobierane co 3 h (oba kierunki osobno). Każda para = 1 zapytanie.
 // Lista celowo krótka: tylko granice z tras planera. Dopisz parę, gdy dojdzie nowy kierunek.
-const BORDER_PAIRS = (() => {
+const BORDER_PAIRS_DEFAULT = (() => {
   // granice poza Schengen na trasach z Polski na Bałkany, do Turcji i na wschód (oba kierunki)
   const g = [['HU', 'RS'], ['HR', 'RS'], ['HR', 'BA'], ['HR', 'ME'], ['RS', 'ME'], ['RS', 'BA'], ['BA', 'ME'], ['RS', 'MK'], ['RS', 'BG'],
     ['RS', 'RO'], ['MK', 'GR'], ['MK', 'BG'], ['MK', 'AL'], ['ME', 'AL'], ['AL', 'GR'], ['BG', 'TR'], ['GR', 'TR'],
@@ -1013,7 +1014,8 @@ async function runNakordoniCron(env, now) {
   const prev = (await env.NK.get('borders', 'json')) || { pairs: {} };
   if (hoursSince(prev.updated) >= BORDERS_EVERY_H - 0.25) {
     const pairs = { ...prev.pairs };
-    for (const p of BORDER_PAIRS) {
+    const custom = (await env.NK.get('data:granice', 'json'))?.list;
+    for (const p of (Array.isArray(custom) && custom.length ? custom : BORDER_PAIRS_DEFAULT)) {
       if (stop) break;
       const path = nkBorderPath(p, 'v4');
       if (!path) continue;
@@ -1291,9 +1293,65 @@ function validFerries(list) {
   }
   return null;
 }
+const CC_OK = (c) => /^[A-Z]{2}$/.test(c);
+const str = (v, n) => typeof v === 'string' && v.length <= n;
+const DATA_SETS = {
+  promy: { label: 'Promy', public: true, validate: validFerries },
+  winiety: { label: 'Winiety i opłaty', public: true, validate: (l) => {
+    if (!Array.isArray(l) || l.length > 300) return 'lista pozycji (maks. 300)';
+    for (const [i, x] of l.entries()) { const n = 'Pozycja ' + (i + 1) + ': ';
+      if (!CC_OK(x.kraj)) return n + 'kraj (kod, np. HU)';
+      if (!['wszystkie', 'kamper', 'ciezki', 'zestaw'].includes(x.typ)) return n + 'typ pojazdu';
+      if (!str(x.k, 120) || !x.k) return n + 'nazwa (np. Winieta 10 dni)';
+      if (x.eur != null && !(typeof x.eur === 'number' && x.eur >= 0 && x.eur < 5000)) return n + 'kwota w € (puste = wg km)';
+      if (x.link && !/^https:\/\//.test(x.link)) return n + 'link https://';
+      if (x.opis != null && !str(x.opis, 400)) return n + 'opis do 400 znaków'; }
+    return null; } },
+  paliwa: { label: 'Ceny paliw', public: true, validate: (l) => {
+    if (!Array.isArray(l) || l.length > 60) return 'lista krajów';
+    for (const [i, x] of l.entries()) { const n = 'Wiersz ' + (i + 1) + ': ';
+      if (!CC_OK(x.kraj)) return n + 'kraj (kod, np. RS)';
+      for (const k of ['on', 'pb', 'lpg']) if (x[k] != null && !(typeof x[k] === 'number' && x[k] > 0 && x[k] < 30)) return n + k.toUpperCase() + ' w zł/l';
+      if (x.data != null && !str(x.data, 20)) return n + 'data'; }
+    return null; } },
+  komunikaty: { label: 'Komunikaty', public: true, validate: (l) => {
+    if (!Array.isArray(l) || l.length > 100) return 'lista komunikatów';
+    for (const [i, x] of l.entries()) { const n = 'Komunikat ' + (i + 1) + ': ';
+      if (!(x.kraj === 'ALL' || CC_OK(x.kraj))) return n + 'kraj (kod albo „ALL”)';
+      if (!str(x.tytul, 80) || !x.tytul) return n + 'tytuł do 80 znaków';
+      if (!str(x.tekst, 500) || !x.tekst) return n + 'treść do 500 znaków';
+      if (x.do != null && x.do !== '' && !/^\d{4}-\d{2}-\d{2}$/.test(x.do)) return n + 'data „ważne do”';
+      if (!['info', 'uwaga'].includes(x.poziom || 'info')) return n + 'poziom'; }
+    return null; } },
+  baner: { label: 'Baner', public: true, validate: (x) => {
+    if (x === null) return null;
+    if (typeof x !== 'object' || Array.isArray(x)) return 'zły format';
+    if (!str(x.tekst, 300)) return 'treść do 300 znaków';
+    if (x.do && !/^\d{4}-\d{2}-\d{2}$/.test(x.do)) return 'data „ważny do”';
+    if (x.link && !/^https:\/\//.test(x.link)) return 'link https://';
+    return null; } },
+  listy: { label: 'Listy przed wyjazdem', public: true, validate: (l) => {
+    if (!Array.isArray(l) || l.length > 20) return 'lista list (maks. 20)';
+    for (const [i, g] of l.entries()) { const n = 'Lista ' + (i + 1) + ': ';
+      if (!/^[a-z0-9-]{2,30}$/.test(g.id || '')) return n + 'identyfikator';
+      if (!str(g.n, 60) || !g.n) return n + 'nazwa';
+      if (!Array.isArray(g.p) || g.p.length > 60) return n + 'punkty (maks. 60)';
+      for (const q of g.p) if (!Array.isArray(q) || !str(q[0], 120) || !q[0] || (q[1] != null && !str(q[1], 200))) return n + 'punkt: „nazwa | opis”'; }
+    return null; } },
+  granice: { label: 'Granice do kolejek', public: false, defaults: () => BORDER_PAIRS_DEFAULT, validate: (l) => {
+    if (!Array.isArray(l) || l.length > 80) return 'lista par (maks. 80 kierunków)';
+    for (const x of l) if (!/^[A-Z]{2}>[A-Z]{2}$/.test(x) || !nkBorderPath(x, 'v4')) return 'nieobsługiwana para: ' + x;
+    return null; } },
+};
+
 async function handlePublicData(env, cors) {
-  const promy = env.NK ? await env.NK.get('data:promy', 'json') : null;
-  return json({ promy: promy?.list || null, updated: promy?.updated || null }, 200, cors, { 'Cache-Control': 'public, max-age=300' });
+  const out = {};
+  if (env.NK) {
+    const names = Object.keys(DATA_SETS).filter((n) => DATA_SETS[n].public);
+    const vals = await Promise.all(names.map((n) => env.NK.get('data:' + n, 'json')));
+    names.forEach((n, i) => { out[n] = vals[i]?.list ?? null; });
+  }
+  return json(out, 200, cors, { 'Cache-Control': 'public, max-age=300' });
 }
 async function handleAdmin(request, url, env, cors) {
   if (!env.NK) return json({ error: 'brak magazynu KV' }, 500, cors);
@@ -1356,29 +1414,58 @@ async function handleAdmin(request, url, env, cors) {
     return json({ ok: true, users: Object.keys(users) }, 200, cors);
   }
 
-  // promy
-  if (p === '/admin/data/promy' && m === 'GET') {
-    const [cur, prev] = await Promise.all([env.NK.get('data:promy', 'json'), env.NK.get('data:promy:prev', 'json')]);
-    return json({ list: cur?.list || null, updated: cur?.updated || null, by: cur?.by || null, prev: prev ? { updated: prev.updated, by: prev.by } : null }, 200, cors);
+  // dane edytowalne: /admin/data/<nazwa> (GET, PUT), /admin/data/<nazwa>/undo (POST)
+  const dm = p.match(/^\/admin\/data\/([a-z]+)(\/undo)?$/);
+  if (dm && DATA_SETS[dm[1]]) {
+    const name = dm[1], key = 'data:' + name, ds = DATA_SETS[name];
+    if (!dm[2] && m === 'GET') {
+      const [cur, prev] = await Promise.all([env.NK.get(key, 'json'), env.NK.get(key + ':prev', 'json')]);
+      return json({ list: cur?.list ?? null, updated: cur?.updated || null, by: cur?.by || null, prev: prev ? { updated: prev.updated, by: prev.by } : null,
+        defaults: ds.defaults ? ds.defaults() : null }, 200, cors);
+    }
+    if (!dm[2] && m === 'PUT') {
+      const { list } = await body();
+      const err = ds.validate(list);
+      if (err) return json({ error: err }, 400, cors);
+      const cur = await env.NK.get(key);
+      if (cur) await env.NK.put(key + ':prev', cur);
+      await env.NK.put(key, JSON.stringify({ list, updated: new Date().toISOString(), by: me.email }));
+      await audit(env, me.email, ds.label + ': zapisano' + (Array.isArray(list) ? ' (' + list.length + ' poz.)' : ''));
+      return json({ ok: true }, 200, cors);
+    }
+    if (dm[2] && m === 'POST') {
+      const prev = await env.NK.get(key + ':prev');
+      if (!prev) return json({ error: 'Brak poprzedniej wersji.' }, 400, cors);
+      const cur = await env.NK.get(key);
+      await env.NK.put(key, prev);
+      if (cur) await env.NK.put(key + ':prev', cur);
+      await audit(env, me.email, ds.label + ': przywrócona poprzednia wersja');
+      return json({ ok: true }, 200, cors);
+    }
   }
-  if (p === '/admin/data/promy' && m === 'PUT') {
-    const { list } = await body();
-    const err = validFerries(list);
-    if (err) return json({ error: err }, 400, cors);
-    const cur = await env.NK.get('data:promy');
-    if (cur) await env.NK.put('data:promy:prev', cur);
-    await env.NK.put('data:promy', JSON.stringify({ list, updated: new Date().toISOString(), by: me.email }));
-    await audit(env, me.email, 'promy: zapisano ' + list.length + ' pozycji');
+
+  // narzędzia
+  if (p === '/admin/tools/status') {
+    const [status, quota, fuel, borders, routes] = await Promise.all([env.NK.get('status', 'json'), env.NK.get('ors:quota'),
+      env.NK.get('fuel', 'json'), env.NK.get('borders', 'json'), env.NK.list({ prefix: 'route:', limit: 1000 })]);
+    return json({ version: CACHE_VERSION, ors_block: quota, cron: status, fuel_updated: fuel?.updated || null, fuel_countries: Object.keys(fuel?.byCountry || {}),
+      borders_updated: borders?.updated || null, border_pairs: Object.keys(borders?.pairs || {}).length,
+      routes_cached: routes.keys.length + (routes.list_complete ? '' : '+'), cities: MIASTA.miasta.length }, 200, cors);
+  }
+  if (p === '/admin/tools/unblock' && m === 'POST') {
+    await env.NK.delete('ors:quota'); await audit(env, me.email, 'narzędzia: zdjęta blokada tras ORS');
     return json({ ok: true }, 200, cors);
   }
-  if (p === '/admin/data/promy/undo' && m === 'POST') {
-    const prev = await env.NK.get('data:promy:prev');
-    if (!prev) return json({ error: 'Brak poprzedniej wersji.' }, 400, cors);
-    const cur = await env.NK.get('data:promy');
-    await env.NK.put('data:promy', prev);
-    if (cur) await env.NK.put('data:promy:prev', cur);
-    await audit(env, me.email, 'promy: przywrócona poprzednia wersja');
-    return json({ ok: true }, 200, cors);
+  if (p === '/admin/tools/cron' && m === 'POST') {
+    await runNakordoniCron(env, new Date());   // te same zasady co cron: kolejki min. co 3 h, paliwo raz na dobę
+    await audit(env, me.email, 'narzędzia: ręczne uruchomienie crona');
+    return json({ ok: true, status: await env.NK.get('status', 'json') }, 200, cors);
+  }
+  if (p === '/admin/tools/clear-routes' && m === 'POST') {
+    const l = await env.NK.list({ prefix: 'route:', limit: 500 });
+    for (const k of l.keys) await env.NK.delete(k.name);
+    await audit(env, me.email, 'narzędzia: usunięte zapamiętane trasy (' + l.keys.length + ')');
+    return json({ ok: true, deleted: l.keys.length, more: !l.list_complete }, 200, cors);
   }
   if (p === '/admin/audit') return json({ entries: (await env.NK.get('audit', 'json')) || [] }, 200, cors);
   return json({ error: 'Nie ma takiego adresu.' }, 404, cors);

@@ -508,6 +508,8 @@ const tollsFor = c => {
   if(R.api && WINIETY.has(c) && !(R.hwKm[c] > 1)) return [{k: 'Trasa bez autostrad i ekspresówek', e: 0, free: true, opis: 'Na tej trasie winieta nie jest potrzebna.'}];
   if(R.api && KR[c].stawki && KR[c].stawki.kmI && !(R.tollKm[c] > 1)) return [{k: 'Bez płatnych odcinków', e: 0, free: true}];
   if(!R.api && KR[c].stawki && KR[c].stawki.kmI && !(R.war.bramki || {})[c]) return [{k: 'Bez płatnych odcinków na tej trasie', e: 0, free: true}];
+  const ov = (OVR.winiety || []).filter(x => x.kraj === c && (x.typ === 'wszystkie' || x.typ === V().typ));
+  if(ov.length) return ov.map(x => ({k: x.k, e: x.eur != null ? x.eur * RATE : null, link: x.link, opis: x.opis}));   // wpisane w panelu
   return TOLL[c] ? TOLL[c](V()) : [];
 };
 function tollSum(){ let e = 0, open = 0; R.order.forEach(c => tollsFor(c).forEach(t => { if(t.e == null) open++; else e += t.e; })); return {e, open}; }
@@ -887,7 +889,7 @@ function renderTrasa(){
       : R.war.prom ? `<div class="tile wide"><span class="tw"><small>na trasie jest prom${R.war.prom.trasa && R.war.prom.trasa !== 'Przeprawa promowa' ? ' ' + esc(R.war.prom.trasa) : ''}</small><b style="font-size:17px">Bilet płatny osobno – nie ma go w sumie</b><small>Cenę sprawdź u przewoźnika. Linki do promów są w zakładce Winiety.</small></span></div>` : ''}`;
   renderDeskExtra(f, t, fc);
   $('#attr').hidden = !R.borders.length;
-  const notes = R.order.filter(c => KR[c].kontrole).map(c => `<div class="calm"><b>${esc(KR[c].n)}</b>${esc(KR[c].kontrole)}</div>`).join('');
+  const notes = panelNotes() + R.order.filter(c => KR[c].kontrole).map(c => `<div class="calm"><b>${esc(KR[c].n)}</b>${esc(KR[c].kontrole)}</div>`).join('');
   const B = R.borders;
   if(!B.length){
     $('#borders').innerHTML = `<div class="notes">${R.order.some(c => KR[c].eu === false) ? '' : `<div class="calm"><b>Cała trasa w strefie Schengen</b>Kontrole wyrywkowe są możliwe – miej przy sobie dowód.</div>`}${notes}</div>`;
@@ -1441,9 +1443,30 @@ function renderAll(){ if(!R) return; renderTrasa(); renderPaliwo(); renderWiniet
 async function loadData(){
   try{
     const j = await Promise.race([getJSON(CONFIG.routeApi + '/data'), new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 2000))]);
+    OVR = j || {};
     if(Array.isArray(j.promy) && j.promy.length) T.promyPorty = j.promy;
+    if(Array.isArray(j.listy) && j.listy.length) LST.listy = j.listy.map(g => ({...g, p: g.p.map(q => [q[0], q[1] || ''])}));
+    applyFuelOverrides(); renderBanner();
   }catch(e){}
 }
+let OVR = {};
+const today = () => new Date().toISOString().slice(0, 10);
+const active = x => !x.do || x.do >= today();
+// ceny paliw wpisane ręcznie w panelu (zł/l) – mają pierwszeństwo przed nakordoni.eu i plikiem
+function applyFuelOverrides(){
+  (OVR.paliwa || []).forEach(x => { if(!KR[x.kraj]) return;
+    if(x.on > 0) KR[x.kraj].on = x.on / RATE; if(x.pb > 0) KR[x.kraj].pb = x.pb / RATE; if(x.lpg > 0) KR[x.kraj].lpg = x.lpg / RATE; });
+}
+function renderBanner(){
+  const b = OVR.baner; let el = document.getElementById('gpBanner');
+  if(!b || !b.tekst || !active(b)){ if(el) el.remove(); return; }
+  if(!el){ el = document.createElement('div'); el.id = 'gpBanner'; el.setAttribute('role', 'status'); document.querySelector('main').prepend(el); }
+  el.className = 'gp-banner ' + (b.poziom === 'uwaga' ? 'warn' : '');
+  el.innerHTML = esc(b.tekst) + (b.link ? ` <a href="${esc(b.link)}" target="_blank" rel="noopener">Więcej</a>` : '');
+}
+// komunikaty z panelu dla krajów na trasie (i ogólne)
+const panelNotes = () => (OVR.komunikaty || []).filter(x => active(x) && (x.kraj === 'ALL' || R.order.includes(x.kraj)))
+  .map(x => `<div class="calm${x.poziom === 'uwaga' ? ' warn' : ''}"><b>${esc(x.tytul)}</b>${esc(x.tekst)}</div>`).join('');
 // Ceny paliwa (nakordoni.eu, z crona Workera) i kurs EUR (NBP) – pobierane przy starcie, niezależnie od wyznaczania tras.
 let fxSrc = '';
 async function loadLive(){
@@ -1459,6 +1482,7 @@ async function loadLive(){
       if(p.lpg > 0 && KR[c].lpg != null) KR[c].lpg = typeof KR[c].lpg === 'object' ? KR[c].lpg : p.lpg / RATE;
     }
     if(n) fuelSrc = 'nakordoni.eu' + (j.fuel_updated ? ', aktualizacja ' + new Date(j.fuel_updated).toLocaleDateString('pl-PL') : '') + ' (kraje bez danych: tolls.eu, 19.10.2026)';
+    applyFuelOverrides();
     if(R) renderAll();
   }catch(e){ /* zostają ceny z pliku */ }
 }
