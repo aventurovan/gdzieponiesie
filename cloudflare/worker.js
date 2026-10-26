@@ -1,4 +1,5 @@
 // gdzieponiesie.pl — pośrednik do OpenRouteService (Cloudflare Worker), wersja 15
+// v34: pierwsze konto bez ADMIN_TOKEN – tylko dla pawel@modrzejewski.info i tylko gdy nie ma żadnego konta.
 // v33: panel – winiety, ceny paliw, komunikaty, baner, listy, granice do kolejek, narzędzia.
 // v32: panel administracyjny – logowanie e-mail + hasło, edycja promów (KV „data:promy”), /data dla strony.
 // v31: kody błędów dla użytkownika (GP-xxx) i dziennik błędów w KV z podglądem /admin/log (sekret ADMIN_TOKEN).
@@ -35,7 +36,7 @@ const ROUTE_KV_SECONDS = 30 * 24 * 3600;
 // Wersja formatu zapisanej trasy – zmieniaj tylko, gdy zmienia się to, co zwraca summarize().
 // (Wcześniej klucz zależał od CACHE_VERSION i każde wdrożenie Workera kasowało zapamiętane trasy.)
 const ROUTE_FORMAT = 'r1';   // trasy w KV: 30 dni (drogi zmieniają się rzadko)
-const CACHE_VERSION = 'v33';
+const CACHE_VERSION = 'v34';
 const GEOCODE_URL = 'https://api.openrouteservice.org/geocode/autocomplete';
 const GEOCODE_CACHE_SECONDS = 24 * 3600;
 const ORS_TIMEOUT_MS = 40000;
@@ -1254,6 +1255,7 @@ async function handleAdminLog(request, env, cors) {
 // ===================== Panel administracyjny: konta, sesje, edytowalne dane =====================
 // Konta w KV „users” ({email: {salt, hash, it}}), sesje „sess:<sha256(token)>” na 7 dni.
 // Pierwsze konto zakłada się raz przez /admin/setup z nagłówkiem Authorization: Bearer <ADMIN_TOKEN>.
+const ADMIN_EMAIL = 'pawel@modrzejewski.info';   // tylko ten adres może założyć pierwsze konto (bez tokenu)
 const PBKDF2_IT = 5000;   // darmowy plan Workers ma limit czasu CPU; siłę daje dodatkowo sekret ADMIN_TOKEN jako „pieprz”
 const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
 const randomToken = (n = 32) => b64(crypto.getRandomValues(new Uint8Array(n))).replace(/[+/=]/g, (c) => ({ '+': '-', '/': '_', '=': '' }[c]));
@@ -1357,6 +1359,24 @@ async function handleAdmin(request, url, env, cors) {
   if (!env.NK) return json({ error: 'brak magazynu KV' }, 500, cors);
   const p = url.pathname, m = request.method;
   const body = async () => { try { return await request.json(); } catch { return {}; } };
+
+  // pierwsze konto bez tokenu: tylko gdy nie ma jeszcze żadnego konta i tylko dla adresu administratora
+  if (p === '/admin/setup') {
+    const users = (await env.NK.get('users', 'json')) || {};
+    const needed = Object.keys(users).length === 0;
+    if (m === 'GET') return json({ needed, email: needed ? ADMIN_EMAIL : null }, 200, cors);
+    if (m === 'POST') {
+      if (!needed) return json({ error: 'Konto administratora już istnieje – zaloguj się.' }, 403, cors);
+      const { email = '', password = '' } = await body();
+      const e = String(email).toLowerCase().trim();
+      if (e !== ADMIN_EMAIL) return json({ error: 'Pierwsze konto można założyć tylko dla adresu administratora.' }, 403, cors);
+      if (String(password).length < 10) return json({ error: 'Hasło musi mieć co najmniej 10 znaków.' }, 400, cors);
+      const salt = randomToken(16);
+      await env.NK.put('users', JSON.stringify({ [e]: { salt, it: PBKDF2_IT, hash: await hashPassword(password, salt, env) } }));
+      await audit(env, e, 'założone pierwsze konto administratora');
+      return json({ ok: true }, 200, cors);
+    }
+  }
 
   // logowanie (z limitem prób na adres IP)
   if (p === '/admin/login' && m === 'POST') {

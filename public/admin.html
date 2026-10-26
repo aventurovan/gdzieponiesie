@@ -48,13 +48,13 @@
     <input id="lPass" type="password" placeholder="Hasło" autocomplete="current-password">
     <button class="pri" id="lGo">Zaloguj</button>
     <div class="msg" id="lMsg"></div>
-    <details><summary class="note">Pierwsze uruchomienie – załóż konto</summary>
-      <p class="note">Potrzebny jest sekret <code>ADMIN_TOKEN</code> z ustawień Workera w Cloudflare.</p>
-      <input id="sTok" type="password" placeholder="ADMIN_TOKEN" autocomplete="off" style="width:100%;margin-bottom:6px">
-      <input id="sEmail" type="email" placeholder="E-mail nowego konta" value="pawel@modrzejewski.info" style="width:100%;margin-bottom:6px">
+    <div id="setupBox" class="card" hidden>
+      <b>Pierwsze uruchomienie</b>
+      <p class="note">Nie ma jeszcze żadnego konta. Ustaw hasło dla administratora <b id="sEmailTxt"></b>.</p>
       <input id="sPass" type="password" placeholder="Hasło (min. 10 znaków)" autocomplete="new-password" style="width:100%;margin-bottom:6px">
-      <button id="sGo">Załóż konto</button>
-    </details>
+      <input id="sPass2" type="password" placeholder="Powtórz hasło" autocomplete="new-password" style="width:100%;margin-bottom:6px">
+      <button class="pri" id="sGo">Załóż konto</button>
+    </div>
   </section>
 
   <section id="vPanel" hidden>
@@ -181,8 +181,13 @@
   $('#lGo').onclick = async () => { try{ const j = await call('/admin/login', 'POST', {email: $('#lEmail').value, password: $('#lPass').value}, '');
     TOKEN = j.token; sessionStorage.setItem('gp-panel', TOKEN); $('#lPass').value = ''; say($('#lMsg'), ''); await enter(); }catch(e){ say($('#lMsg'), e.message); } };
   $('#lPass').onkeydown = e => { if(e.key === 'Enter') $('#lGo').click(); };
-  $('#sGo').onclick = async () => { try{ await call('/admin/users', 'POST', {email: $('#sEmail').value, password: $('#sPass').value}, $('#sTok').value.trim());
-    say($('#lMsg'), 'Konto założone – zaloguj się.', true); $('#lEmail').value = $('#sEmail').value; $('#sTok').value = $('#sPass').value = ''; }catch(e){ say($('#lMsg'), e.message); } };
+  let SETUP_EMAIL = '';
+  call('/admin/setup', 'GET', null, '').then(j => { if(j.needed){ SETUP_EMAIL = j.email; $('#sEmailTxt').textContent = j.email; $('#setupBox').hidden = false; } }).catch(() => {});
+  $('#sGo').onclick = async () => {
+    if($('#sPass').value !== $('#sPass2').value) return say($('#lMsg'), 'Hasła się różnią.');
+    try{ await call('/admin/setup', 'POST', {email: SETUP_EMAIL, password: $('#sPass').value}, '');
+      $('#setupBox').hidden = true; $('#lEmail').value = SETUP_EMAIL; $('#lPass').value = $('#sPass').value; $('#sPass').value = $('#sPass2').value = '';
+      say($('#lMsg'), 'Konto założone – logowanie…', true); $('#lGo').click(); }catch(e){ say($('#lMsg'), e.message); } };
   $('#logout').onclick = async () => { try{ await call('/admin/logout', 'POST'); }catch(e){} logout(); };
 
   $$('.tabs [data-tab]').forEach(b => b.onclick = () => {
