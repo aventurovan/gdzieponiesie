@@ -1,4 +1,5 @@
 // gdzieponiesie.pl — pośrednik do OpenRouteService (Cloudflare Worker), wersja 15
+// v30: /reverse z własnej bazy GeoNames – ORS używany już tylko do tras i (rzadko) do wyszukiwania małych miejscowości.
 // v29: /prices – ceny paliw i kurs EUR dla strony niezależnie od tras (działa też bez ORS).
 // v28: trasy zapamiętywane w KV na 30 dni (wspólnie dla wszystkich serwerowni), blokada zapytań do ORS po wyczerpaniu dziennego limitu.
 // v27: własna baza ok. 20 tys. miejscowości z GeoNames (polskie nazwy), ORS tylko gdy w bazie nic nie ma.
@@ -31,7 +32,7 @@ const ROUTE_KV_SECONDS = 30 * 24 * 3600;
 // Wersja formatu zapisanej trasy – zmieniaj tylko, gdy zmienia się to, co zwraca summarize().
 // (Wcześniej klucz zależał od CACHE_VERSION i każde wdrożenie Workera kasowało zapamiętane trasy.)
 const ROUTE_FORMAT = 'r1';   // trasy w KV: 30 dni (drogi zmieniają się rzadko)
-const CACHE_VERSION = 'v29';
+const CACHE_VERSION = 'v30';
 const GEOCODE_URL = 'https://api.openrouteservice.org/geocode/autocomplete';
 const GEOCODE_CACHE_SECONDS = 24 * 3600;
 const ORS_TIMEOUT_MS = 40000;
@@ -1165,25 +1166,21 @@ async function handlePoiLpg(request, cors) {
 }
 
 
-// GET /reverse?lat=..&lon=.. → nazwa najbliższej miejscowości (ORS, cache 30 dni) – do nazw noclegów
+// GET /reverse?lat=..&lon=.. → najbliższa miejscowość z własnej bazy GeoNames (bez ORS) – do nazw noclegów.
+// Wybiera większe miasto, jeśli jest niewiele dalej (ludność „przyciąga” w promieniu do 25 km).
 async function handleReverse(url, env, cors) {
   const lat = Number(url.searchParams.get('lat')), lon = Number(url.searchParams.get('lon'));
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) return json({ error: 'brak lat/lon' }, 400, cors);
-  const req = new Request('https://cache.gdzieponiesie.internal/rev/' + lat.toFixed(2) + ',' + lon.toFixed(2));
-  const hit = await caches.default.match(req);
-  if (hit) return json(await hit.json(), 200, cors, { 'X-Cache': 'HIT' });
-  const params = new URLSearchParams({ api_key: env.ORS_API_KEY || '', 'point.lat': lat, 'point.lon': lon, size: '1', layers: 'locality,localadmin' });
-  let body = { name: null };
-  try {
-    const res = await fetch('https://api.openrouteservice.org/geocode/reverse?' + params, { signal: AbortSignal.timeout(8000) });
-    if (res.ok) {
-      const f = (await res.json()).features?.[0];
-      if (f) body = { name: f.properties?.name || null, country: ISO3_TO_ISO2[f.properties?.country_a] || null,
-        d: Math.round((f.properties?.distance ?? 0) * 10) / 10 };
-    } else return json({ name: null, error: 'ORS ' + res.status }, 200, cors);
-  } catch (e) { return json({ name: null, error: String(e.message || e) }, 200, cors); }
-  await caches.default.put(req, new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'max-age=' + 30 * 24 * 3600 } }));
-  return json(body, 200, cors, { 'X-Cache': 'MISS' });
+  let best = null, bestScore = Infinity, bestD = 0;
+  for (const c of cityIndex()) {
+    if (Math.abs(c.lat - lat) > 0.5 || Math.abs(c.lon - lon) > 0.8) continue;
+    const d = haversineKm([lon, lat], [c.lon, c.lat]);
+    if (d > 40) continue;
+    const score = d - Math.min(15, Math.log10(Math.max(c.pop, 1000)) * 3 - 9);   // 10 tys. ≈ 3 km premii, 1 mln ≈ 9 km
+    if (score < bestScore) { bestScore = score; best = c; bestD = d; }
+  }
+  const body = best ? { name: best.pl || best.name, country: best.cc, d: Math.round(bestD * 10) / 10 } : { name: null };
+  return json(body, 200, cors, { 'Cache-Control': 'public, max-age=2592000' });
 }
 
 

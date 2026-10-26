@@ -350,7 +350,6 @@ function drawML(){
   (R.via || []).forEach((p, i) => mlMarker(String(i + 1), 'mk-via', [p.lon, p.lat], 'Przez: ' + p.name));
   nights().stops.forEach((s, i) => mlMarker(`<span>${i + 1}</span>`, 'mk-night', [s.lon, s.lat], `Nocleg ${i + 1}: ${s.place}`));
   if(false) campsAll().forEach(x => mlMarker(x.kind === 'kamper' ? 'P' : '⛺', 'mk-camp ' + x.kind, [x.lon, x.lat], (x.name || 'Kemping') + ` (${x.kind === 'kamper' ? 'dla kamperów' : 'kemping'})`));
-  if(LPG.show && LPG.items && LPG.key === lpgKey()) LPG.items.forEach(x => mlMarker('LPG', 'mk-lpg', [x.lon, x.lat], 'LPG: ' + (x.name || 'stacja')));
   // dopasowanie widoku do trasy
   const b = new maplibregl.LngLatBounds(); R.chain.forEach(p => b.extend([p[1], p[2]]));
   const key = R.fromName + R.toName + R.km;
@@ -979,8 +978,7 @@ const STUB = '<rect class="a-f1 a-l" x="14" y="51" width="26" height="18"/><path
 const adSvg = t => `<svg viewBox="0 0 240 120" role="img" aria-label="Rysunek złącza ${ADP[t].n}">${STUB}${ADP[t].s}<text class="a-x" x="78" y="116" text-anchor="middle">z boku</text><text class="a-x" x="190" y="116" text-anchor="middle">od czoła</text></svg>`;
 let gasOpen = null;
 function renderGaz(){
-  const lb = $('#lpgBox'); if(lb) lb.innerHTML = `<h2 class="sub">Stacje LPG na trasie${LPG.items && LPG.items.length ? ` (${LPG.items.length})` : ''}</h2>` + lpgHtml();
-  if(API() && R && R.api && !$('#v-gaz').hidden) loadLpg();
+
   const list = S.gas === 'route' ? R.order.slice() : Object.keys(KR);
   if(S.gas === 'all') list.sort((a, b) => (R.order.includes(b) - R.order.includes(a)));
   $('#gas').innerHTML = list.map(c => { const v = KR[c], prim = v.gaz[0], open = gasOpen === c;
