@@ -21,6 +21,16 @@ const store = {
   get(k, d){ try{ const v = localStorage.getItem('gp-' + k); return v == null ? d : JSON.parse(v); }catch(e){ return d; } },
   set(k, v){ try{ localStorage.setItem('gp-' + k, JSON.stringify(v)); }catch(e){} }
 };
+// Błędy dla użytkownika: krótki komunikat i kod (GP-xxx). Szczegóły trafiają do dziennika Workera (/admin/log).
+function gpError(code, message, detail){ logClient(code, detail || message); return Object.assign(new Error(message), {code}); }
+function logClient(code, detail){ try{ if(API()) navigator.sendBeacon && navigator.sendBeacon(CONFIG.routeApi + '/log', new Blob([JSON.stringify({code, where: location.hash || '/', detail: String(detail).slice(0, 400)})], {type: 'application/json'})); }catch(e){} }
+function userError(x){
+  const c = x.code || 'GP-299';
+  if(c === 'GP-104') return `${x.error} (kod błędu: ${c})`;
+  if(c === 'GP-101' || c === 'GP-102' || c === 'GP-103') return `Wyznaczanie tras jest chwilowo niedostępne. Spróbuj ponownie później. Kod błędu: ${c}`;
+  if(c === 'GP-201') return `Brak połączenia z serwerem tras. Sprawdź internet i spróbuj ponownie. Kod błędu: ${c}`;
+  return `Nie udało się wyznaczyć trasy. Spróbuj ponownie za chwilę. Kod błędu: ${c}`;
+}
 const getJSON = async url => { const r = await fetch(url, {cache: 'no-cache'}); if(!r.ok) throw new Error(url + ' ' + r.status); return r.json(); };
 const hav = (a, b) => { const r = Math.PI / 180, dA = (b[1] - a[1]) * r, dO = (b[0] - a[0]) * r;
   const h = Math.sin(dA / 2) ** 2 + Math.cos(a[1] * r) * Math.cos(b[1] * r) * Math.sin(dO / 2) ** 2;
@@ -610,8 +620,12 @@ async function setRouteApi(){
   ALTS = [...(S.opt.freeC.length ? [['mix', freeLabel()]] : []), ...ALTS_BASE, ...extra.map(([id, n]) => [id, n])];
   const viaOf = Object.fromEntries(extra.map(([id, , via]) => [id, via]));
   const sel = S.opt.freeC.length ? 'mix' : ALTS.some(([k]) => k === S.altSel) ? S.altSel : 'fast';
-  const post = async body => { const r = await fetch(CONFIG.routeApi + '/route', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
-    const j = await r.json(); if(!r.ok) throw new Error(j.error || 'błąd ' + r.status); return j; };
+  const post = async body => {
+    let r, j;
+    try{ r = await fetch(CONFIG.routeApi + '/route', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)}); j = await r.json(); }
+    catch(e){ throw gpError('GP-201', 'Brak połączenia z serwerem tras.', 'trasa: ' + e.message); }
+    if(!r.ok) throw Object.assign(new Error(j.error || 'Nie udało się wyznaczyć trasy.'), {code: j.code || 'GP-2' + r.status});
+    return j; };
   const one = async id => {
     try{
       let j;
@@ -641,12 +655,12 @@ async function setRouteApi(){
         built.war.prom = fwd ? f : {...f, trasa: f.trasa.split(' – ').reverse().join(' – ')};
       }
       built.via = via; ALT[id] = built;
-    }catch(e){ if(seq === apiSeq) ALT[id] = {error: e.message}; if(id.startsWith('prom-')) console.warn('Wariant ukryty:', id, e.message); }
+    }catch(e){ if(seq === apiSeq) ALT[id] = {error: e.message, code: e.code || 'GP-299'}; if(id.startsWith('prom-')) console.warn('Wariant ukryty:', id, e.message); }
     if(seq !== apiSeq) return;
     if(id === sel || (!R || !R.api) && ALT[id] && !ALT[id].error) useAlt(ALT[sel] && !ALT[sel].error ? sel : id);
     else renderTrasa();
     if(id === sel){ document.body.classList.remove('loading');
-      if(ALT[id] && ALT[id].error) msg('Nie udało się wyznaczyć trasy: ' + ALT[id].error); }
+      if(ALT[id] && ALT[id].error) msg(userError(ALT[id])); }
     PENDING.delete(id); if(R && R.api) renderTrasa();
   };
   // oszczędzamy limit ORS: od razu liczymy tylko wybrany wariant, pozostałe po kliknięciu
@@ -855,7 +869,7 @@ function renderTrasa(){
       if(isProm(id) && x && x.error) return '';
       if(!x) return PENDING.has(id) ? `<button class="var" disabled><span>${n}<small>liczę trasę…</small></span></button>`
         : `<button class="var calc" data-calc="${id}"><span>${n}<small>pokaż ten wariant – policzę trasę</small></span></button>`;
-      if(x.error) return `<button class="var" disabled><span>${n}<small>${esc(x.error)}</small></span></button>`;
+      if(x.error) return `<button class="var" disabled><span>${n}<small>${esc(x.code === 'GP-104' ? x.error : 'nie udało się policzyć')} (kod ${esc(x.code || 'GP-299')})</small></span></button>`;
       const c = costsOf(x), eco = id === cheapestAlt();
       return `<button class="var" data-alt="${id}" aria-pressed="${R === x}"><span>${n}${eco ? ' <em class="eco">najtańsza</em>' : ''}<small>${fmt(Math.round(x.km))} km, ${Math.round(c.h)} h, ok. ${money(c.total)}${x.war.prom && !c.fc ? ' + prom' : ''}${x.tollKm && Object.keys(x.tollKm).length ? '' : ', bez płatnych odcinków'}${x.war.prom && !id.startsWith('prom-') ? `<br>${c.fc ? 'z promem ' + esc(x.war.prom.trasa) + ' (cena w sumie)' : 'trasa z promem – bilet płatny osobno, cena u przewoźnika'}` : ''}</small></span></button>`; }).join('');
     if(promTried) $('#variants').insertAdjacentHTML('beforeend', `<p class="var-info">Do Skandynawii pływa więcej promów, np. Świnoujście – Malmö, Gdańsk – Nynäshamn, Rostock – Trelleborg czy Hirtshals – Larvik. Wybór portu sprawdź w nawigacji, a wybrany port dodaj jako przystanek <b>przez</b>. Linki do przewoźników są w zakładce <a href="#winiety">Winiety</a>.</p>`);

@@ -1,4 +1,5 @@
 // gdzieponiesie.pl — pośrednik do OpenRouteService (Cloudflare Worker), wersja 15
+// v31: kody błędów dla użytkownika (GP-xxx) i dziennik błędów w KV z podglądem /admin/log (sekret ADMIN_TOKEN).
 // v30: /reverse z własnej bazy GeoNames – ORS używany już tylko do tras i (rzadko) do wyszukiwania małych miejscowości.
 // v29: /prices – ceny paliw i kurs EUR dla strony niezależnie od tras (działa też bez ORS).
 // v28: trasy zapamiętywane w KV na 30 dni (wspólnie dla wszystkich serwerowni), blokada zapytań do ORS po wyczerpaniu dziennego limitu.
@@ -32,7 +33,7 @@ const ROUTE_KV_SECONDS = 30 * 24 * 3600;
 // Wersja formatu zapisanej trasy – zmieniaj tylko, gdy zmienia się to, co zwraca summarize().
 // (Wcześniej klucz zależał od CACHE_VERSION i każde wdrożenie Workera kasowało zapamiętane trasy.)
 const ROUTE_FORMAT = 'r1';   // trasy w KV: 30 dni (drogi zmieniają się rzadko)
-const CACHE_VERSION = 'v30';
+const CACHE_VERSION = 'v31';
 const GEOCODE_URL = 'https://api.openrouteservice.org/geocode/autocomplete';
 const GEOCODE_CACHE_SECONDS = 24 * 3600;
 const ORS_TIMEOUT_MS = 40000;
@@ -170,6 +171,13 @@ export default {
         if (!ALLOWED_ORIGINS.includes(origin)) return json({ error: 'Ta strona nie ma dostępu do API.' }, 403, cors);
         return await handlePoiLpg(request, cors);
       }
+      if (url.pathname === '/log' && request.method === 'POST') {
+        if (!ALLOWED_ORIGINS.includes(origin)) return json({ error: 'brak dostępu' }, 403, cors);
+        return await handleClientLog(request, env, cors);
+      }
+      if (url.pathname === '/admin/log') {
+        return await handleAdminLog(request, env, cors);
+      }
       if (url.pathname === '/prices' && request.method === 'GET') {
         return await handlePrices(env, cors);
       }
@@ -187,15 +195,16 @@ export default {
       }
       return json({ error: 'Nie ma takiego adresu.' }, 404, cors);
     } catch (e) {
-      return json({ error: 'Błąd Workera: ' + e.message }, 500, cors);
+      await logEvent(env, { code: 'GP-500', path: new URL(request.url).pathname, detail: String(e && e.stack || e).slice(0, 500) });
+      return json({ error: 'Wystąpił błąd serwera.', code: 'GP-500' }, 500, cors);
     }
   },
 };
 
 function corsHeaders(origin) {
   const h = {
-    'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Methods': 'POST, GET, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400',
     'Vary': 'Origin',
   };
@@ -545,8 +554,9 @@ async function handleGeocode(url, env, cors) {
     feats = await ask(COARSE);
     if (ex) feats = feats.concat(await ask(COARSE, q));   // np. „Praga” – także dzielnica Warszawy
   } catch (e) {
-    if (e.name === 'TimeoutError' || e.name === 'AbortError') return json({ error: 'Wyszukiwarka adresów nie odpowiedziała. Spróbuj ponownie.' }, 504, cors);
-    return json({ error: e.message }, e.code || 502, cors);
+    const code = e.name === 'TimeoutError' || e.name === 'AbortError' ? 'GP-302' : e.code === 429 ? 'GP-301' : 'GP-303';
+    await logEvent(env, { code, path: '/geocode', detail: q + ' | ' + e.message });
+    return json({ error: 'Wyszukiwanie miejscowości chwilowo nie działa.', code }, 502, cors);
   }
 
   const seen = new Set();
@@ -635,18 +645,20 @@ async function handleRoute(request, env, cors) {
   } else {
     // limit ORS wyczerpany – nie pytamy do północy UTC (każde kolejne zapytanie i tak by odbiło)
     const q = env.NK && await env.NK.get('ors:quota');
-    if (q) {
-      return json({ error: q === '429' ? 'Za dużo tras naraz – spróbuj ponownie za minutę.' : 'Limit wyznaczania tras w OpenRouteService został wyczerpany. Spróbuj później – zapisane i wcześniej liczone trasy działają.', quota: true }, 429, cors);
-    }
+    if (q) return json({ error: 'Wyznaczanie tras jest chwilowo niedostępne.', code: 'GP-103' }, 503, cors);
     const res = await orsRoute(buildPayload(variant, { points, avoidHighways, avoidFerries, avoidCountries, dims }), env, heavy);
     if (!res.ok) {
-      if (env.NK && (res.status === 403 || res.status === 429)) {
+      const os = res.orsStatus;
+      const code = os === 403 ? 'GP-101' : os === 429 ? 'GP-102' : os === 404 ? 'GP-104' : res.status === 504 ? 'GP-105' : 'GP-1' + (os || res.status || 0);
+      await logEvent(env, { code, path: '/route', detail: res.error + (res.detail && !String(res.error).includes(res.detail) ? ' | ' + res.detail : ''),
+        variant: variantId, from: points[0], to: points[points.length - 1] });
+      if (env.NK && (os === 403 || os === 429)) {
         // 429 = limit na minutę (40/min) – przerwa 1 min; 403 = limit dzienny – przerwa 30 min, potem próbujemy znowu
-        const ttl = res.status === 429 ? 60 : 1800;
-        await env.NK.put('ors:quota', String(res.status), { expirationTtl: ttl });
-        return json({ error: res.status === 429 ? 'Za dużo tras naraz – spróbuj ponownie za minutę.' : 'Limit wyznaczania tras w OpenRouteService został wyczerpany. Spróbuj później – zapisane i wcześniej liczone trasy działają.', quota: true }, 429, cors);
+        await env.NK.put('ors:quota', String(os), { expirationTtl: os === 429 ? 60 : 1800 });
       }
-      return json({ error: res.error }, res.status || 502, cors);
+      // użytkownik widzi prosty komunikat z kodem; szczegóły są w dzienniku (/admin/log)
+      const userMsg = os === 404 ? res.error : 'Nie udało się wyznaczyć trasy.';
+      return json({ error: userMsg, code }, os === 404 ? 404 : 502, cors);
     }
     // profil ciężarowy ma już wolniejsze prędkości, więc bez dodatkowego mnożnika
     route = { id: variantId, title: variant.title, profile: heavy ? 'hgv' : 'car', ...summarize(res.data, heavy ? 1 : TIME_FACTOR) };
@@ -727,13 +739,13 @@ async function orsOnce(payload, env, endpoint = ORS_URL) {
   let data = null;
   try { data = JSON.parse(text); } catch { /* zostaje null */ }
 
-  if (res.status === 429) return { ok: false, status: 429, error: 'Limit zapytań ORS wyczerpany. Spróbuj później.' };
+  if (res.status === 429) return { ok: false, status: 429, orsStatus: 429, error: 'Limit zapytań ORS wyczerpany. Spróbuj później.', detail: text.slice(0, 200) };
   if (res.status === 404) {
-    return { ok: false, status: 404, error: 'Nie znaleziono trasy przy tych ograniczeniach. Odznacz część omijanych krajów albo autostrad.' };
+    return { ok: false, status: 404, orsStatus: 404, error: 'Nie znaleziono trasy przy tych ograniczeniach. Odznacz część omijanych krajów albo autostrad.', detail: text.slice(0, 200) };
   }
   if (!res.ok || !data?.features?.[0]) {
     const msg = data?.error?.message || (typeof data?.error === 'string' ? data.error : text.slice(0, 300));
-    return { ok: false, status: 502, retry: res.status >= 500, error: `ORS odpowiedział kodem ${res.status}: ${msg}` };
+    return { ok: false, status: 502, orsStatus: res.status, retry: res.status >= 500, error: `ORS odpowiedział kodem ${res.status}: ${msg}`, detail: msg };
   }
   return { ok: true, data };
 }
@@ -1195,4 +1207,37 @@ async function handlePrices(env, cors) {
   }
   return json({ eur_pln: r2(fx.rates.EUR), fx_source: fx.source, fx_date: fx.date || null, fuel_updated: fuel?.updated || null, prices },
     200, cors, { 'Cache-Control': 'public, max-age=1800' });
+}
+
+
+// ===================== Dziennik błędów (KV „log”, ostatnie 300 wpisów) =====================
+// Kody: GP-101 limit dzienny ORS, GP-102 limit na minutę, GP-103 przerwa po limicie, GP-104 brak trasy,
+//       GP-105 ORS nie odpowiedział, GP-1xxx inny kod ORS, GP-2xx błędy po stronie przeglądarki,
+//       GP-30x wyszukiwanie miejscowości, GP-500 błąd Workera.
+const LOG_MAX = 300;
+let logWrites = 0, logHour = 0;
+async function logEvent(env, entry) {
+  if (!env.NK) return;
+  const h = Math.floor(Date.now() / 3600e3);
+  if (h !== logHour) { logHour = h; logWrites = 0; }
+  if (++logWrites > 40) return;                 // limit zapisów na instancję i godzinę (KV ma dzienny limit zapisów)
+  try {
+    const list = (await env.NK.get('log', 'json')) || [];
+    list.unshift({ t: new Date().toISOString(), ...entry });
+    await env.NK.put('log', JSON.stringify(list.slice(0, LOG_MAX)));
+  } catch { /* dziennik nie może psuć odpowiedzi */ }
+}
+async function handleClientLog(request, env, cors) {
+  let b; try { b = await request.json(); } catch { return json({ ok: false }, 400, cors); }
+  const s = (v, n) => String(v ?? '').slice(0, n);
+  const code = /^GP-\d{3,4}$/.test(b.code) ? b.code : 'GP-299';
+  await logEvent(env, { code, path: 'przeglądarka: ' + s(b.where, 60), detail: s(b.detail, 400), ua: s(request.headers.get('User-Agent'), 120) });
+  return json({ ok: true }, 200, cors);
+}
+async function handleAdminLog(request, env, cors) {
+  const auth = request.headers.get('Authorization') || '';
+  if (!env.ADMIN_TOKEN || auth !== 'Bearer ' + env.ADMIN_TOKEN) return json({ error: 'brak dostępu' }, 401, cors);
+  if (request.method === 'DELETE') { if (env.NK) await env.NK.put('log', '[]'); return json({ ok: true }, 200, cors); }
+  const [list, quota, status] = env.NK ? await Promise.all([env.NK.get('log', 'json'), env.NK.get('ors:quota'), env.NK.get('status', 'json')]) : [[], null, null];
+  return json({ version: CACHE_VERSION, ors_block: quota, cron: status?.last_run || null, entries: list || [] }, 200, cors, { 'Cache-Control': 'no-store' });
 }

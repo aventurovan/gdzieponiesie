@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Dziennik – gdzieponiesie</title>
+<style>
+  :root{--bg:#fff;--ink:#16181D;--mut:#5c6370;--rule:#e3e5e8;--tile:#f2f3f5;--amb:#F2A900;--bad:#C8102E}
+  @media (prefers-color-scheme:dark){:root{--bg:#111317;--ink:#eef0f3;--mut:#9aa1ab;--rule:#2a2e35;--tile:#1c1f25}}
+  body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,sans-serif}
+  main{max-width:1100px;margin:0 auto;padding:20px 16px 60px}
+  h1{font-size:22px;margin:0 0 12px}
+  .bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+  input,button,select{font:inherit;border:1px solid var(--rule);background:var(--tile);color:var(--ink);border-radius:8px;padding:8px 10px}
+  button{cursor:pointer;font-weight:700}
+  .info{color:var(--mut);margin:6px 0 12px}
+  table{width:100%;border-collapse:collapse}
+  th{text-align:left;font-size:12px;color:var(--mut);padding:6px;border-bottom:2px solid var(--ink)}
+  td{padding:6px;border-bottom:1px solid var(--rule);vertical-align:top;word-break:break-word}
+  .code{font-weight:800;white-space:nowrap}
+  .c1{color:var(--bad)} .c2{color:#1F6FD1} .c3{color:#7a5af5} .c5{color:var(--bad)}
+  .wrap{overflow-x:auto}
+  .legend{font-size:12.5px;color:var(--mut);line-height:1.7;margin-top:16px}
+</style>
+</head>
+<body>
+<main>
+  <h1>Dziennik błędów</h1>
+  <div class="bar">
+    <input id="tok" type="password" placeholder="Token administratora" autocomplete="off" size="28">
+    <button id="load">Pokaż</button>
+    <select id="filter"><option value="">wszystkie kody</option><option value="GP-1">trasy (GP-1xx)</option><option value="GP-2">przeglądarka (GP-2xx)</option><option value="GP-3">wyszukiwanie (GP-3xx)</option><option value="GP-5">Worker (GP-500)</option></select>
+    <button id="clear">Wyczyść dziennik</button>
+  </div>
+  <div class="info" id="info"></div>
+  <div class="wrap"><table><thead><tr><th>Czas</th><th>Kod</th><th>Gdzie</th><th>Szczegóły</th></tr></thead><tbody id="rows"></tbody></table></div>
+  <div class="legend">
+    <b>Kody:</b> GP-101 dzienny limit ORS (przerwa 30 min) · GP-102 limit na minutę (przerwa 1 min) · GP-103 trasa odrzucona w czasie przerwy ·
+    GP-104 brak trasy przy wybranych ograniczeniach · GP-105 ORS nie odpowiedział · GP-1xxx inny kod ORS ·
+    GP-201 przeglądarka bez połączenia z Workerem · GP-2xx inne błędy w przeglądarce · GP-301/302/303 wyszukiwanie miejscowości · GP-500 błąd Workera.
+  </div>
+</main>
+<script src="assets/config.js"></script>
+<script>
+(function(){
+  const API = (window.GP_CONFIG || {}).routeApi;
+  const $ = s => document.querySelector(s);
+  const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  let data = null;
+  try{ $('#tok').value = localStorage.getItem('gp-admin') || ''; }catch(e){}
+  async function call(method){
+    const tok = $('#tok').value.trim(); try{ localStorage.setItem('gp-admin', tok); }catch(e){}
+    const r = await fetch(API + '/admin/log', {method, headers: {Authorization: 'Bearer ' + tok}, cache: 'no-store'});
+    if(r.status === 401) throw new Error('Zły token.');
+    return r.json();
+  }
+  function render(){
+    if(!data) return;
+    const f = $('#filter').value;
+    const list = data.entries.filter(e => !f || String(e.code).startsWith(f));
+    $('#info').textContent = `Worker ${data.version}. ` + (data.ors_block ? `Trasy wstrzymane po błędzie ORS ${data.ors_block}. ` : 'Trasy działają. ')
+      + `Wpisów: ${data.entries.length} (pokazane: ${list.length}).` + (data.cron ? ` Ostatni cron: ${new Date(data.cron.started).toLocaleString('pl-PL')}.` : '');
+    $('#rows').innerHTML = list.map(e => `<tr><td>${new Date(e.t).toLocaleString('pl-PL')}</td><td class="code c${String(e.code).charAt(3)}">${esc(e.code)}</td>
+      <td>${esc(e.path)}${e.variant ? '<br><small>' + esc(e.variant) + '</small>' : ''}</td>
+      <td>${esc(e.detail)}${e.from ? `<br><small>z ${esc(e.from.join(', '))} do ${esc((e.to || []).join(', '))}</small>` : ''}${e.ua ? '<br><small>' + esc(e.ua) + '</small>' : ''}</td></tr>`).join('')
+      || '<tr><td colspan="4">Brak wpisów.</td></tr>';
+  }
+  $('#load').onclick = async () => { try{ data = await call('GET'); render(); }catch(e){ $('#info').textContent = e.message; } };
+  $('#clear').onclick = async () => { if(!confirm('Wyczyścić cały dziennik?')) return; try{ await call('DELETE'); data = await call('GET'); render(); }catch(e){ $('#info').textContent = e.message; } };
+  $('#filter').onchange = render;
+  if($('#tok').value) $('#load').click();
+})();
+</script>
+</body>
+</html>
