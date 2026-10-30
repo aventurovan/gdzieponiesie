@@ -19,3 +19,8 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           workingDirectory: cloudflare
           command: deploy
+          # sekrety Workera z GitHub Secrets (ORS/NAKORDONI są już w Cloudflare – keep_vars je zostawia)
+          secrets: |
+            TOMTOM_KEY
+        env:
+          TOMTOM_KEY: ${{ secrets.TOMTOM_KEY }}

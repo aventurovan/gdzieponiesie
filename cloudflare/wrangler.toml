@@ -5,7 +5,7 @@ main = "worker.js"
 compatibility_date = "2025-09-01"
 workers_dev = true
 keep_vars = true          # nie kasuj zmiennych ustawionych ręcznie w panelu Cloudflare
-# Sekrety (ORS_API_KEY, NAKORDONI_KEY) zostają w Cloudflare – wdrożenie ich nie zmienia.
+# Sekrety ORS_API_KEY, NAKORDONI_KEY zostają w Cloudflare; TOMTOM_KEY wgrywa workflow z GitHub Secrets.
 
 # Cron: kolejki na granicach co 3 h, paliwo raz na dobę (Worker sam pilnuje odstępów)
 [triggers]

@@ -149,7 +149,7 @@ export default {
         return json(await nkStatus(env), 200, cors);
       }
       if (url.pathname === '/health') {
-        return json({ ok: true, ors_key: Boolean(env.ORS_API_KEY), version: CACHE_VERSION }, 200, cors);
+        return json({ ok: true, ors_key: Boolean(env.ORS_API_KEY), tomtom_key: Boolean(env.TOMTOM_KEY), version: CACHE_VERSION }, 200, cors);
       }
       if (url.pathname === '/nk/probe' && request.method === 'GET') {
         if (!ALLOWED_ORIGINS.includes(origin)) {

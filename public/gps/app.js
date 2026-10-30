@@ -364,7 +364,15 @@ $('#btnPoi').addEventListener('click', () => speak('Lista POI będzie w kolejnym
 $('#etaBox').addEventListener('click', () => { if (confirm('Zakończyć nawigację?')) { stopNav(); showTab('trasa'); } });
 
 /* start */
+// komputer (mysz, brak dotyku, szeroki ekran) – tylko informacja z kodem QR; ?desk=1 wymusza pełną wersję do testów
+function isDesktop() {
+  if (new URLSearchParams(location.search).get('desk') === '1') return false;
+  const touch = navigator.maxTouchPoints > 0 || 'ontouchstart' in window;
+  const coarse = matchMedia('(pointer: coarse)').matches;
+  return !touch && !coarse && window.innerWidth > 1024;
+}
 function init() {
+  if (isDesktop()) { $('#desk').classList.remove('hidden'); $('.tabs').classList.add('hidden'); $('#sheet').classList.add('hidden'); return; }
   document.body.classList.toggle('night', !!S.opt.night);
   $('#optVoice').checked = !!S.opt.voice; $('#opt3d').checked = !!S.opt.d3; $('#optNight').checked = !!S.opt.night; $('#optSim').checked = !!S.opt.sim;
   $$('#modes button').forEach(x => x.setAttribute('aria-pressed', x.dataset.mode === S.mode));
