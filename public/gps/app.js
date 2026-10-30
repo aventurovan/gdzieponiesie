@@ -65,17 +65,34 @@ function initMap() {
   el.innerHTML = '<svg viewBox="0 0 36 36"><path d="M18 3 L31 31 L18 24 L5 31 Z" fill="#3A74FF" stroke="#fff" stroke-width="3" stroke-linejoin="round"/></svg>';
   meMarker = new maplibregl.Marker({ element: el, rotationAlignment: 'map', pitchAlignment: 'map' });
 }
+function tuneStyle() {
+  // paleta pod makietę: cieplejsze tło, zielone lasy i parki, łososiowe budynki
+  const night = S.opt.night;
+  for (const l of map.getStyle().layers) {
+    const id = l.id.toLowerCase();
+    try {
+      if (l.type === 'background') map.setPaintProperty(l.id, 'background-color', night ? '#1C2029' : '#EFEBE2');
+      else if (l.type === 'fill' && /wood|forest/.test(id)) { map.setPaintProperty(l.id, 'fill-color', night ? '#1F2A2C' : '#C5D9AE'); map.setPaintProperty(l.id, 'fill-opacity', 1); }
+      else if (l.type === 'fill' && /park|grass|meadow|farmland|cemetery|pitch|garden|scrub/.test(id)) { map.setPaintProperty(l.id, 'fill-color', night ? '#232E30' : '#DCE7C9'); map.setPaintProperty(l.id, 'fill-opacity', 1); }
+      else if (l.type === 'fill' && /residential|neighbourhood|suburb/.test(id)) map.setPaintProperty(l.id, 'fill-color', night ? '#20252F' : '#EAE4D6');
+      else if (l.type === 'fill' && /building/.test(id)) { map.setPaintProperty(l.id, 'fill-color', night ? '#3B4252' : '#E3B6A2'); map.setPaintProperty(l.id, 'fill-opacity', 0.9); }
+      else if (l.type === 'fill' && /water/.test(id)) map.setPaintProperty(l.id, 'fill-color', night ? '#15202E' : '#9EC4E6');
+    } catch (e) {}
+  }
+}
 function addLayers() {
+  tuneStyle();
   // budynki 3D z kafelków OpenMapTiles (warstwa building, render_height)
   if (!map.getLayer('bud3d')) {
     const labelId = (map.getStyle().layers.find(l => l.type === 'symbol') || {}).id;
     map.addLayer({
-      id: 'bud3d', type: 'fill-extrusion', source: 'openmaptiles', 'source-layer': 'building', minzoom: 14,
+      id: 'bud3d', type: 'fill-extrusion', source: 'openmaptiles', 'source-layer': 'building', minzoom: 13.5,
       paint: {
         'fill-extrusion-color': S.opt.night ? '#3B4252' : '#E3B6A2',
-        'fill-extrusion-height': ['coalesce', ['get', 'render_height'], 8],
+        'fill-extrusion-height': ['coalesce', ['get', 'render_height'], 7],
         'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0],
-        'fill-extrusion-opacity': 0.85,
+        'fill-extrusion-opacity': 0.9,
+        'fill-extrusion-vertical-gradient': true,
       },
     }, labelId);
     map.setLayoutProperty('bud3d', 'visibility', S.opt.d3 ? 'visible' : 'none');
@@ -210,7 +227,12 @@ function startGps() {
   watchId = navigator.geolocation.watchPosition(p => {
     const c = p.coords;
     onFix({ lon: c.longitude, lat: c.latitude, speed: c.speed, heading: c.heading, acc: c.accuracy, t: p.timestamp });
-  }, e => { $('#msg').textContent = 'GPS: ' + e.message; }, { enableHighAccuracy: true, maximumAge: 1000, timeout: 15000 });
+  }, e => {
+    watchId = null;
+    $('#msg').textContent = e.code === 1
+      ? 'Brak zgody na lokalizację. Safari: „aA" w pasku adresu → Ustawienia strony → Lokalizacja → Zezwól, potem odśwież.'
+      : e.code === 2 ? 'Nie udało się ustalić pozycji (brak sygnału GPS).' : 'GPS nie odpowiada – spróbuj ponownie.';
+  }, { enableHighAccuracy: true, maximumAge: 1000, timeout: 15000 });
 }
 function onFix(f) {
   const prev = S.pos;
