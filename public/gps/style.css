@@ -111,9 +111,15 @@ body.night .veh{color:#cfd3dc}
 .desk-box svg{background:#fff;padding:12px;border-radius:16px}
 .desk-box a{color:#1F3F9E;font-weight:700;text-decoration:none}
 
-/* jazda bez trasy */
-.idle-card{position:fixed;left:14px;right:14px;bottom:calc(var(--sab) + 86px);z-index:5;padding:14px 16px;display:flex;align-items:center;gap:14px}
-.idle-card b{display:block;font-size:17px;font-weight:800}
-.idle-card small{display:block;font-size:12px;font-weight:600;color:var(--sub);margin-top:2px}
-.idle-card button{margin-left:auto;flex:none;height:44px;padding:0 16px;border:0;border-radius:12px;background:var(--blue);color:#fff;font-size:14px;font-weight:800}
-.maplibregl-ctrl-top-right{top:calc(var(--sat) + 4px)}
+/* jazda bez trasy – pływające przyciski */
+.idle>*{position:fixed;z-index:5}
+.fab{width:60px;height:60px;border:0;border-radius:18px;background:var(--panel);color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:800;box-shadow:0 4px 14px rgba(0,0,0,.25)}
+.fab.tr{right:14px;top:calc(var(--sat) + 14px)}
+.fab.tr2{right:14px;top:calc(var(--sat) + 84px);border-radius:50%}
+.fab.bl{left:14px;bottom:calc(var(--sab) + 96px)}
+.fab.bl2{left:14px;bottom:calc(var(--sab) + 26px)}
+.fab.br{right:14px;bottom:calc(var(--sab) + 26px);width:72px;height:72px;background:var(--blue)}
+.chip-veh{left:50%;transform:translateX(-50%);bottom:calc(var(--sab) + 30px);border:0;border-radius:16px;background:var(--panel);color:#fff;padding:8px 16px;display:flex;flex-direction:column;align-items:center;gap:2px;box-shadow:0 4px 14px rgba(0,0,0,.25)}
+.chip-veh small{font-size:11px;font-weight:600;color:var(--sub)}
+.chip-veh b{font-size:15px;font-weight:800;white-space:nowrap}
+.maplibregl-ctrl-top-right{top:calc(var(--sat) + 150px)}

@@ -12,7 +12,7 @@
 <link rel="apple-touch-icon" href="../icons/apple-touch-icon.png">
 <link rel="icon" href="../icons/favicon-32.png">
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
-<link rel="stylesheet" href="style.css?v=3">
+<link rel="stylesheet" href="style.css?v=4">
 </head>
 <body>
 <div id="desk" class="desk hidden">
@@ -55,12 +55,14 @@
   <div class="progress"><i id="progBar"></i></div>
 </div>
 
-<!-- JAZDA bez trasy -->
+<!-- JAZDA bez trasy: pływające przyciski jak w nawigacjach -->
 <div id="idle" class="idle hidden">
-  <div class="card idle-card">
-    <div><b>Dokąd jedziemy?</b><small>Ustaw cel, a nawigacja poprowadzi z ograniczeniami Twojego kampera.</small></div>
-    <button type="button" id="idleGo">Ustaw cel</button>
-  </div>
+  <button type="button" class="fab tr" id="fMenu" aria-label="Menu"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 7H20M4 12H20M4 17H20"/></svg></button>
+  <button type="button" class="fab tr2" id="fCompass" aria-label="Północ u góry"><svg id="compassIco" viewBox="0 0 24 24" width="30" height="30"><path d="M12 3 L15 12 L12 10.5 L9 12 Z" fill="#E5533D"/><path d="M12 21 L9 12 L12 13.5 L15 12 Z" fill="#cfd3dc"/></svg></button>
+  <button type="button" class="fab bl" id="fView" aria-label="Widok 2D/3D"><span id="fViewTxt">3D</span></button>
+  <button type="button" class="fab bl2" id="fCenter" aria-label="Moja pozycja"><svg viewBox="0 0 24 24" width="26" height="26"><path d="M12 3 L19 20 L12 16 L5 20 Z" fill="currentColor"/></svg></button>
+  <button type="button" class="chip-veh" id="fVeh"><small>Profil pojazdu</small><b id="fVehTxt">🚐 Kamper</b></button>
+  <button type="button" class="fab br search" id="fSearch" aria-label="Szukaj celu"><svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20L16.5 16.5"/></svg></button>
 </div>
 
 <!-- ekran TRASA -->
@@ -122,6 +124,6 @@
 
 <script src="../assets/config.js"></script>
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
-<script src="app.js?v=5"></script>
+<script src="app.js?v=6"></script>
 </body>
 </html>

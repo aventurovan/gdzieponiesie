@@ -59,6 +59,7 @@ function initMap() {
   });
   map.addControl(new maplibregl.AttributionControl({ compact: true }), 'top-right');
   map.on('style.load', addLayers);
+  map.on('rotate', () => { const el = $('#compassIco'); if (el) el.style.transform = `rotate(${-map.getBearing()}deg)`; });
   map.on('dragstart', () => { if (S.nav) { S.follow = false; $('#btnRecenter').hidden = false; } });
   map.on('load', () => { mapReady = true; if (S.route) drawRoute(); const at = document.querySelector('.maplibregl-ctrl-attrib'); if (at) at.classList.remove('maplibregl-compact-show'); });
   const el = document.createElement('div'); el.className = 'me';
@@ -223,7 +224,7 @@ function startNav() {
 }
 function stopNav() {
   S.nav = false; $('#hud').classList.add('hidden'); stopSim(); $('#btnRecenter').hidden = true;
-  map.easeTo({ pitch: 0, bearing: 0, zoom: 14.5, duration: 600 });
+  map.easeTo({ pitch: 0, bearing: 0, zoom: 14.5, duration: 600 }); showTab('jazda');
   if (wake) { wake.release().catch(() => {}); wake = null; }
 }
 
@@ -380,6 +381,8 @@ function showTab(t) {
   $('#sheet').classList.toggle('hidden', t !== 'trasa'); $('#veh').classList.toggle('hidden', t !== 'veh'); $('#menu').classList.toggle('hidden', t !== 'menu');
   $('#hud').classList.toggle('hidden', !(t === 'jazda' && S.nav));
   $('#idle').classList.toggle('hidden', !(t === 'jazda' && !S.nav));
+  $('.tabs').classList.toggle('hidden', t === 'jazda');
+  if (t === 'jazda' && !S.nav) { $('#fVehTxt').textContent = `🚐 Kamper ${fmt1(S.veh.h)} m · ${fmt1(S.veh.t)} t`; $('#fViewTxt').textContent = S.opt.d3 ? '3D' : '2D'; }
   $$('.tabs button').forEach(b => { if (b.dataset.tab === t) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
   if (t === 'veh') fillVeh();
 }
@@ -390,10 +393,15 @@ $('#opt3d').addEventListener('change', e => setView3d(e.target.checked));
 $('#optNight').addEventListener('change', e => setNight(e.target.checked));
 $('#optVoice').addEventListener('change', e => { S.opt.voice = e.target.checked; store.set('opt', S.opt); });
 $('#optSim').addEventListener('change', e => { S.opt.sim = e.target.checked; store.set('opt', S.opt); if (S.nav) { if (S.opt.sim) startSim(); else stopSim(); } });
-$('#idleGo').addEventListener('click', () => showTab('trasa'));
+$('#fSearch').addEventListener('click', () => { showTab('trasa'); setTimeout(() => $('#to').focus(), 50); });
+$('#fMenu').addEventListener('click', () => showTab('menu'));
+$('#fVeh').addEventListener('click', () => showTab('veh'));
+$('#fCompass').addEventListener('click', () => map.easeTo({ bearing: 0, pitch: S.opt.d3 ? 45 : 0, duration: 400 }));
+$('#fCenter').addEventListener('click', () => { if (S.pos) map.easeTo({ center: [S.pos.lon, S.pos.lat], zoom: 15, duration: 500 }); else startGps(); });
+$('#fView').addEventListener('click', () => { setView3d(!S.opt.d3); $('#fViewTxt').textContent = S.opt.d3 ? '3D' : '2D'; map.easeTo({ pitch: S.opt.d3 ? 45 : 0, duration: 500 }); });
 $('#btnRecenter').addEventListener('click', () => { S.follow = true; $('#btnRecenter').hidden = true; });
 $('#btnPoi').addEventListener('click', () => speak('Lista POI będzie w kolejnym etapie.'));
-$('#etaBox').addEventListener('click', () => { if (confirm('Zakończyć nawigację?')) { stopNav(); showTab('trasa'); } });
+$('#etaBox').addEventListener('click', () => { if (confirm('Zakończyć nawigację?')) stopNav(); });
 
 /* start */
 // komputer (mysz, brak dotyku, szeroki ekran) – tylko informacja z kodem QR; ?desk=1 wymusza pełną wersję do testów
@@ -413,6 +421,6 @@ function init() {
   // ?to=lon,lat,Nazwa – wejście z planera
   const u = new URLSearchParams(location.search);
   if (u.get('to')) { const [lon, lat, ...n] = u.get('to').split(','); S.to = { lon: +lon, lat: +lat, name: n.join(',') || 'Cel' }; $('#to').value = S.to.name; }
-  showTab('trasa');
+  showTab(S.to ? 'trasa' : 'jazda');
 }
 init();
