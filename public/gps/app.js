@@ -65,7 +65,9 @@ function initMap() {
   el.innerHTML = '<svg viewBox="0 0 36 36"><path d="M18 3 L31 31 L18 24 L5 31 Z" fill="#3A74FF" stroke="#fff" stroke-width="3" stroke-linejoin="round"/></svg>';
   meMarker = new maplibregl.Marker({ element: el, rotationAlignment: 'map', pitchAlignment: 'map' });
 }
+let BUD3D = null;   // id warstwy budynków 3D (ze stylu Liberty albo nasza)
 function tuneStyle() {
+  BUD3D = null;
   // paleta pod makietę: cieplejsze tło, zielone lasy i parki, łososiowe budynki
   const night = S.opt.night;
   for (const l of map.getStyle().layers) {
@@ -76,6 +78,7 @@ function tuneStyle() {
       else if (l.type === 'fill' && /park|grass|meadow|farmland|cemetery|pitch|garden|scrub/.test(id)) { map.setPaintProperty(l.id, 'fill-color', night ? '#232E30' : '#DCE7C9'); map.setPaintProperty(l.id, 'fill-opacity', 1); }
       else if (l.type === 'fill' && /residential|neighbourhood|suburb/.test(id)) map.setPaintProperty(l.id, 'fill-color', night ? '#20252F' : '#EAE4D6');
       else if (l.type === 'fill' && /building/.test(id)) { map.setPaintProperty(l.id, 'fill-color', night ? '#3B4252' : '#E3B6A2'); map.setPaintProperty(l.id, 'fill-opacity', 0.9); }
+      else if (l.type === 'fill-extrusion') { BUD3D = l.id; map.setPaintProperty(l.id, 'fill-extrusion-color', night ? '#3B4252' : '#E3B6A2'); map.setPaintProperty(l.id, 'fill-extrusion-opacity', 0.9); }
       else if (l.type === 'fill' && /water/.test(id)) map.setPaintProperty(l.id, 'fill-color', night ? '#15202E' : '#9EC4E6');
     } catch (e) {}
   }
@@ -83,7 +86,9 @@ function tuneStyle() {
 function addLayers() {
   tuneStyle();
   // budynki 3D z kafelków OpenMapTiles (warstwa building, render_height)
-  if (!map.getLayer('bud3d')) {
+  if (BUD3D) { map.setLayoutProperty(BUD3D, 'visibility', S.opt.d3 ? 'visible' : 'none'); }
+  else if (!map.getLayer('bud3d')) {
+    BUD3D = 'bud3d';
     const labelId = (map.getStyle().layers.find(l => l.type === 'symbol') || {}).id;
     map.addLayer({
       id: 'bud3d', type: 'fill-extrusion', source: 'openmaptiles', 'source-layer': 'building', minzoom: 13.5,
@@ -121,7 +126,7 @@ function drawRoute() {
 }
 function setView3d(on) {
   S.opt.d3 = on; store.set('opt', S.opt); $('#opt3d').checked = on; $('#btnView').textContent = on ? '3D' : '2D';
-  if (map.getLayer('bud3d')) map.setLayoutProperty('bud3d', 'visibility', on ? 'visible' : 'none');
+  if (BUD3D && map.getLayer(BUD3D)) map.setLayoutProperty(BUD3D, 'visibility', on ? 'visible' : 'none');
   map.easeTo({ pitch: on && S.nav ? 58 : 0, duration: 500 });
 }
 function setNight(on) {
@@ -250,7 +255,8 @@ function navStep(f) {
   const r = S.route, p = [f.lon, f.lat];
   const sn = snap(p, r.coords, r.cum, NAV.idx);
   if (sn.off > 60) { NAV.offCount++; } else { NAV.offCount = 0; NAV.idx = sn.idx; NAV.prog = sn.prog; }
-  if (NAV.offCount >= 5 && Date.now() - NAV.lastReroute > 20000) reroute(f);
+  // przeliczenie tylko w ruchu (>8 km/h) – na postoju obok drogi nie zjadamy limitu ORS
+  if (NAV.offCount >= 5 && (f.speed || 0) > 2.2 && Date.now() - NAV.lastReroute > 20000) reroute(f);
   // kamera
   if (S.follow) {
     const kmh = (f.speed || 0) * 3.6, zoom = kmh > 90 ? 15 : kmh > 50 ? 15.8 : 16.6;

@@ -1616,9 +1616,12 @@ async function handleGpsRoute(request, env, cors) {
       steps.push({ t: s.type, i: s.instruction, n: s.name && s.name !== '-' ? s.name : '', d: Math.round(s.distance), s: Math.round(s.duration), wp: s.way_points, ...(s.exit_number ? { exit: s.exit_number } : {}) });
     }
   }
+  // czas: profil ciężarowy liczy prędkości TIR-a – kamper do 3,5 t jedzie szybciej; osobowy – wolniej niż auto
+  const tf = profile === 'hgv' ? 0.78 : 1.1;
+  for (const s of steps) s.s = Math.round(s.s * tf);
   const out = {
     km: Math.round((p.summary?.distance ?? 0) / 100) / 10,
-    sec: Math.round(p.summary?.duration ?? 0),
+    sec: Math.round((p.summary?.duration ?? 0) * tf),
     coords, cum: cum.map(Math.round), steps, path, crossings, tolls, profile, mode,
     bbox: f.bbox || null,
   };
