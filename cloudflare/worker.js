@@ -209,6 +209,12 @@ export default {
         }
         return await handleGpsRoute(request, env, cors);
       }
+      if (url.pathname === '/gps/poi' && request.method === 'POST') {
+        if (!ALLOWED_ORIGINS.includes(origin)) {
+          return json({ error: 'Ta strona nie ma dostępu do API.' }, 403, cors);
+        }
+        return await handleGpsPoi(request, env, cors);
+      }
       return json({ error: 'Nie ma takiego adresu.' }, 404, cors);
     } catch (e) {
       await logEvent(env, { code: 'GP-500', path: new URL(request.url).pathname, detail: String(e && e.stack || e).slice(0, 500) });
@@ -1530,7 +1536,6 @@ const GPS_MODES = {
 const GPS_KV_SECONDS = 7 * 24 * 3600;
 
 async function handleGpsRoute(request, env, cors) {
-  if (!env.ORS_API_KEY) return json({ error: 'Worker nie ma sekretu ORS_API_KEY.' }, 500, cors);
   let body;
   try { body = await request.json(); } catch { return json({ error: 'Niepoprawny JSON.' }, 400, cors); }
   const via = Array.isArray(body.via) ? body.via : [];
@@ -1549,6 +1554,14 @@ async function handleGpsRoute(request, env, cors) {
   };
   const av = body.avoid || {};
   const avoidCountries = Array.isArray(av.countries) ? [...new Set(av.countries)].filter((k) => ISO_TO_ID[k]).sort().slice(0, 10) : [];
+
+  // 1) TomTom – trasa z korkami, limitami prędkości, tunelami; 2) ORS jako zapas
+  if (env.TOMTOM_KEY && body.engine !== 'ors') {
+    const tt = await tomtomGpsRoute({ points, mode, dims, av, env });
+    if (tt.ok) return json(tt.out, 200, cors, { 'X-Cache': tt.cached ? 'HIT' : 'MISS' });
+    await logEvent(env, { code: 'GP-TT', path: '/gps/route', detail: tt.error });
+  }
+  if (!env.ORS_API_KEY) return json({ error: 'Worker nie ma sekretu ORS_API_KEY.' }, 500, cors);
   const options = { vehicle_type: 'hgv', profile_params: { restrictions: dims } };
   const features = [];
   if (av.highways === true) features.push('highways');
@@ -1626,5 +1639,141 @@ async function handleGpsRoute(request, env, cors) {
     bbox: f.bbox || null,
   };
   if (env.NK) await env.NK.put(kvKey, JSON.stringify(out), { expirationTtl: GPS_KV_SECONDS });
+  return json(out, 200, cors);
+}
+
+// ---- TomTom Routing: trasa dla kampera (travelMode=truck z wymiarami), z korkami i sekcjami ----
+const TT_URL = 'https://api.tomtom.com/routing/1/calculateRoute/';
+const TT_MANEUVER = {
+  TURN_LEFT: 0, TURN_RIGHT: 1, SHARP_LEFT: 2, SHARP_RIGHT: 3, BEAR_LEFT: 4, BEAR_RIGHT: 5, STRAIGHT: 6,
+  ROUNDABOUT_LEFT: 7, ROUNDABOUT_RIGHT: 7, ROUNDABOUT_CROSS: 7, ROUNDABOUT_BACK: 7, ENTER_ROUNDABOUT: 7,
+  EXIT_ROUNDABOUT: 8, TRY_MAKE_UTURN: 9, MAKE_UTURN: 9, ARRIVE: 10, ARRIVE_LEFT: 10, ARRIVE_RIGHT: 10,
+  DEPART: 11, KEEP_LEFT: 12, KEEP_RIGHT: 13, TAKE_EXIT: 13, MOTORWAY_EXIT_LEFT: 12, MOTORWAY_EXIT_RIGHT: 13,
+  ENTER_MOTORWAY: 6, ENTER_FREEWAY: 6, ENTER_HIGHWAY: 6, FOLLOW: 6, SWITCH_PARALLEL_ROAD: 13, SWITCH_MAIN_ROAD: 12,
+  TAKE_FERRY: 6, WAYPOINT_LEFT: 6, WAYPOINT_RIGHT: 6, WAYPOINT_REACHED: 6,
+};
+async function tomtomGpsRoute({ points, mode, dims, av, env }) {
+  const locs = points.map(([lon, lat]) => `${lat},${lon}`).join(':');
+  const q = new URLSearchParams({
+    key: env.TOMTOM_KEY, travelMode: 'truck', traffic: 'true', computeTravelTimeFor: 'all',
+    routeType: mode === 'eco' ? 'eco' : mode === 'short' ? 'shortest' : 'fastest',
+    instructionsType: 'text', language: 'pl-PL', maxAlternatives: '0',
+    vehicleHeight: String(dims.height), vehicleWidth: String(dims.width), vehicleLength: String(dims.length),
+    vehicleWeight: String(Math.round(dims.weight * 1000)), vehicleCommercial: 'false',
+  });
+  for (const s of ['traffic', 'tollRoad', 'tollVignette', 'country', 'tunnel', 'speedLimit', 'motorway', 'ferry']) q.append('sectionType', s);
+  const avoid = new Set();
+  if (av.highways === true) avoid.add('motorways');
+  if (av.tolls === true || mode === 'notoll') avoid.add('tollRoads');
+  if (mode === 'main') avoid.add('unpavedRoads');
+  for (const a of avoid) q.append('avoid', a);
+  const url = TT_URL + encodeURIComponent(locs) + '/json?' + q.toString();
+  const kvKey = 'gps:tt:' + (await sha256(url.replace(env.TOMTOM_KEY, '') + '|' + (av.countries || []).join(','))).slice(0, 32);
+  if (env.NK) { const hit = await env.NK.get(kvKey, 'json'); if (hit) return { ok: true, out: { ...hit, cached: true }, cached: true }; }
+  let res, data;
+  try {
+    res = await fetch(url, { signal: AbortSignal.timeout(20000) });
+    data = await res.json();
+  } catch (e) { return { ok: false, error: 'TomTom: ' + (e.message || 'błąd sieci') }; }
+  if (!res.ok || !data.routes?.length) {
+    return { ok: false, error: 'TomTom ' + res.status + ': ' + (data?.detailedError?.message || data?.error?.description || 'brak trasy') };
+  }
+  const r = data.routes[0];
+  // geometria: TomTom zwraca legs[].points (lat/lon); indeksy w sekcjach i manewrach odnoszą się do spłaszczonej listy
+  const coords = [];
+  for (const leg of r.legs) for (const p of leg.points) {
+    const c = [Math.round(p.longitude * 1e5) / 1e5, Math.round(p.latitude * 1e5) / 1e5];
+    if (!coords.length || coords[coords.length - 1][0] !== c[0] || coords[coords.length - 1][1] !== c[1]) coords.push(c);
+  }
+  const n = coords.length - 1;
+  const cum = new Array(coords.length).fill(0);
+  for (let i = 0; i < n; i++) cum[i + 1] = cum[i] + haversineKm(coords[i], coords[i + 1]) * 1000;
+  const clampIdx = (i) => Math.max(0, Math.min(n, i | 0));
+  // uwaga: punkty legów są spłaszczone bez duplikatów; TomTom indeksuje po pełnej liście – różnica to co najwyżej liczba legów, tolerujemy
+  const secs = r.sections || [];
+  const pick = (type) => secs.filter((s) => s.sectionType === type);
+  const path = []; const crossings = []; let prev = null;
+  for (const s of pick('COUNTRY')) {
+    const cc = s.countryCode; const i = clampIdx(s.startPointIndex);
+    if (cc && cc !== prev) { if (prev) crossings.push({ from: prev, to: cc, at: Math.round(cum[i]), idx: i }); path.push(cc); prev = cc; }
+  }
+  const tolls = [...pick('TOLL_ROAD'), ...pick('TOLL_VIGNETTE')].map((s) => [clampIdx(s.startPointIndex), clampIdx(s.endPointIndex)]);
+  const traffic = pick('TRAFFIC').filter((s) => (s.delayInSeconds || 0) > 30 || (s.magnitudeOfDelay || 0) >= 1).map((s) => ({
+    a: clampIdx(s.startPointIndex), b: clampIdx(s.endPointIndex), delay: s.delayInSeconds || 0, mag: s.magnitudeOfDelay || 0, kmh: s.effectiveSpeedInKmh || null,
+  }));
+  const limits = pick('SPEED_LIMIT').map((s) => ({ a: clampIdx(s.startPointIndex), b: clampIdx(s.endPointIndex), kmh: s.maxSpeedLimitInKmh || null })).filter((s) => s.kmh);
+  const tunnels = pick('TUNNEL').map((s) => ({ a: clampIdx(s.startPointIndex), b: clampIdx(s.endPointIndex), at: Math.round(cum[clampIdx(s.startPointIndex)]), len: Math.round(cum[clampIdx(s.endPointIndex)] - cum[clampIdx(s.startPointIndex)]), cat: s.tunnelCategory || null }));
+  const ferries = pick('FERRY').map((s) => ({ a: clampIdx(s.startPointIndex), b: clampIdx(s.endPointIndex), at: Math.round(cum[clampIdx(s.startPointIndex)]) }));
+  // manewry
+  const steps = [];
+  const ins = r.guidance?.instructions || [];
+  for (let k = 0; k < ins.length; k++) {
+    const g = ins[k]; const next = ins[k + 1];
+    const i0 = clampIdx(g.pointIndex ?? 0); const i1 = next ? clampIdx(next.pointIndex ?? n) : n;
+    const t = TT_MANEUVER[g.maneuver] ?? 6;
+    const name = [g.roadNumbers?.length ? g.roadNumbers.join(' / ') : '', g.street || ''].filter(Boolean).join(' · ') || (g.signpostText || '');
+    steps.push({ t, i: g.message || '', n: name, d: Math.round(cum[i1] - cum[i0]), s: Math.round(g.travelTimeInSeconds ?? 0), wp: [i0, i1],
+      ...(g.exitNumber ? { exit: g.exitNumber } : {}), ...(g.signpostText ? { sign: g.signpostText } : {}), ...(g.roundaboutExitNumber ? { rexit: g.roundaboutExitNumber } : {}) });
+  }
+  // czas kroku = różnica czasów do kolejnego manewru (travelTimeInSeconds to czas od startu)
+  for (let k = 0; k < steps.length; k++) { const a = ins[k].travelTimeInSeconds ?? 0; const b = ins[k + 1] ? (ins[k + 1].travelTimeInSeconds ?? a) : (r.summary.travelTimeInSeconds ?? a); steps[k].s = Math.max(0, Math.round(b - a)); }
+  const sum = r.summary;
+  const out = {
+    engine: 'tomtom', profile: 'truck', mode,
+    km: Math.round(sum.lengthInMeters / 100) / 10,
+    sec: sum.travelTimeInSeconds, secNoTraffic: sum.noTrafficTravelTimeInSeconds ?? null, delay: sum.trafficDelayInSeconds ?? 0,
+    coords, cum: cum.map(Math.round), steps, path, crossings, tolls, traffic, limits, tunnels, ferries,
+    bbox: [Math.min(...coords.map((c) => c[0])), Math.min(...coords.map((c) => c[1])), Math.max(...coords.map((c) => c[0])), Math.max(...coords.map((c) => c[1]))],
+  };
+  // korki żyją krótko – cache 10 min
+  if (env.NK) await env.NK.put(kvKey, JSON.stringify(out), { expirationTtl: 600 });
+  return { ok: true, out };
+}
+
+// ---- POI przy trasie (OSM Overpass): kempingi, zrzuty, woda, stacje (LPG) ----
+// (OVERPASS zdefiniowany wyżej)
+async function handleGpsPoi(request, env, cors) {
+  let body;
+  try { body = await request.json(); } catch { return json({ error: 'Niepoprawny JSON.' }, 400, cors); }
+  const coords = Array.isArray(body.coords) ? body.coords.filter(isPoint) : [];
+  if (coords.length < 2) return json({ error: 'Brak trasy.' }, 400, cors);
+  // próbkujemy trasę co ~2 km, maks. 250 punktów – Overpass „around” wzdłuż łamanej
+  const step = Math.max(1, Math.ceil(coords.length / 250));
+  const line = coords.filter((_, i) => i % step === 0 || i === coords.length - 1).map(([x, y]) => `${y.toFixed(4)},${x.toFixed(4)}`).join(',');
+  const radius = clampNum(body.radius, 500, 10000, 3000);
+  const kvKey = 'gps:poi:' + (await sha256(line + '|' + radius)).slice(0, 32);
+  if (env.NK) { const hit = await env.NK.get(kvKey, 'json'); if (hit) return json({ ...hit, cached: true }, 200, cors); }
+  const ql = `[out:json][timeout:40];(
+    nwr["tourism"~"^(camp_site|caravan_site)$"](around:${radius},${line});
+    nwr["amenity"="sanitary_dump_station"](around:${radius},${line});
+    nwr["amenity"="fuel"](around:${Math.min(radius, 1500)},${line});
+  );out center tags 400;`;
+  let data = null, lastErr = '';
+  for (const ep of OVERPASS) {
+    try {
+      const res = await fetch(ep, { method: 'POST', body: 'data=' + encodeURIComponent(ql), headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, signal: AbortSignal.timeout(40000) });
+      if (!res.ok) { lastErr = 'Overpass ' + res.status; continue; }
+      data = await res.json(); break;
+    } catch (e) { lastErr = 'Overpass: ' + (e.message || 'błąd'); }
+  }
+  if (!data) return json({ error: lastErr || 'Overpass nie odpowiada' }, 502, cors);
+  const items = [];
+  for (const el of data.elements || []) {
+    const t = el.tags || {}; const lat = el.lat ?? el.center?.lat; const lon = el.lon ?? el.center?.lon;
+    if (lat == null) continue;
+    let kind = 'camp';
+    if (t.amenity === 'fuel') kind = 'fuel'; else if (t.amenity === 'sanitary_dump_station') kind = 'dump'; else if (t.tourism === 'caravan_site') kind = 'caravan';
+    items.push({
+      id: el.type[0] + el.id, kind, lon: Math.round(lon * 1e5) / 1e5, lat: Math.round(lat * 1e5) / 1e5,
+      name: t.name || t.brand || t.operator || '', brand: t.brand || '',
+      lpg: t['fuel:lpg'] === 'yes', diesel: t['fuel:diesel'] !== 'no', h24: t.opening_hours === '24/7',
+      water: t.drinking_water === 'yes' || t['sanitary_dump_station'] === 'yes' ? true : undefined,
+      dump: t['sanitary_dump_station'] === 'yes' || kind === 'dump' ? true : undefined,
+      hours: t.opening_hours || '', fee: t.fee || '', web: t.website || t['contact:website'] || '', phone: t.phone || t['contact:phone'] || '',
+      caravans: t.caravans === 'yes' ? true : undefined, motorhome: t.motorhome === 'yes' ? true : undefined,
+    });
+  }
+  const out = { items, count: items.length, radius, updated: new Date().toISOString() };
+  if (env.NK) await env.NK.put(kvKey, JSON.stringify(out), { expirationTtl: 24 * 3600 });
   return json(out, 200, cors);
 }

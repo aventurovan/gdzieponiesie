@@ -154,3 +154,16 @@ body.night .veh{color:#cfd3dc}
 body.night .hero{background:#0F1420}
 body.night .soon,body.night .chips button{background:#1f2634;color:#fff}
 body.night .note{background:#1f2634;color:#cfd3dc}
+
+/* etap 2: zdarzenia, korki na pasku, lista POI */
+.events{right:14px;top:calc(var(--sat) + 190px);width:150px;background:rgba(26,29,36,.85);color:#fff;border-radius:14px;padding:8px 10px;display:flex;flex-direction:column;gap:6px}
+.events b{display:block;font-size:12px;font-weight:700}.events small{display:block;font-size:11px;font-weight:600;color:var(--sub)}
+.progress{position:relative}.progress span i{position:absolute;top:0;height:100%;display:block}
+.poi-list{margin-top:10px;display:flex;flex-direction:column;gap:8px}
+.poi-it{background:#fff;border-radius:16px;padding:12px 14px;display:flex;align-items:center;gap:12px;cursor:pointer}
+.poi-it i{width:12px;height:12px;border-radius:50%;flex:none}
+.poi-it>div{min-width:0;flex:1}.poi-it b{display:block;font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.poi-it small{display:block;font-size:12px;font-weight:600;color:var(--ink2);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.poi-it .r{flex:none;text-align:right}.poi-it .r b{font-size:16px;font-weight:800}.poi-it .r small{color:#1E8A4C}
+body.night .poi-it{background:#1f2634;color:#fff}
+.maplibregl-popup-content{font-family:inherit;border-radius:12px;padding:12px 14px;color:#1a1d24}
