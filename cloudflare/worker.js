@@ -203,6 +203,12 @@ export default {
         }
         return await handleRoute(request, env, cors);
       }
+      if (url.pathname === '/gps/route' && request.method === 'POST') {
+        if (!ALLOWED_ORIGINS.includes(origin)) {
+          return json({ error: 'Ta strona nie ma dostępu do API.' }, 403, cors);
+        }
+        return await handleGpsRoute(request, env, cors);
+      }
       return json({ error: 'Nie ma takiego adresu.' }, 404, cors);
     } catch (e) {
       await logEvent(env, { code: 'GP-500', path: new URL(request.url).pathname, detail: String(e && e.stack || e).slice(0, 500) });
@@ -1506,4 +1512,116 @@ async function handleAdmin(request, url, env, cors) {
   }
   if (p === '/admin/audit') return json({ entries: (await env.NK.get('audit', 'json')) || [] }, 200, cors);
   return json({ error: 'Nie ma takiego adresu.' }, 404, cors);
+}
+
+
+// ---- Nawigacja (/gps): trasa z manewrami dla kampera ----
+// POST /gps/route
+//   { from:[lon,lat], to:[lon,lat], via:[[lon,lat]...], mode:'fast'|'main'|'notoll'|'eco',
+//     camper:{height,width,length,weight}, avoid:{highways:bool, tolls:bool, countries:['AT',...]} }
+// Zwraca geometrię i listę manewrów (ORS, język polski). Profil ciężarowy z ograniczeniami wymiarów –
+// w nawigacji liczą się niskie wiadukty i limity masy; jeśli ORS nie znajdzie trasy HGV, liczymy osobowym.
+const GPS_MODES = {
+  fast: { preference: 'fastest' },
+  main: { preference: 'recommended' },
+  notoll: { preference: 'fastest', notoll: true },
+  eco: { preference: 'shortest' },
+};
+const GPS_KV_SECONDS = 7 * 24 * 3600;
+
+async function handleGpsRoute(request, env, cors) {
+  if (!env.ORS_API_KEY) return json({ error: 'Worker nie ma sekretu ORS_API_KEY.' }, 500, cors);
+  let body;
+  try { body = await request.json(); } catch { return json({ error: 'Niepoprawny JSON.' }, 400, cors); }
+  const via = Array.isArray(body.via) ? body.via : [];
+  const points = [body.from, ...via, body.to];
+  if (points.length > 8 || !points.every(isPoint)) {
+    return json({ error: 'Punkty muszą być w formacie [długość, szerokość], w Europie, maks. 8.' }, 400, cors);
+  }
+  const mode = GPS_MODES[body.mode] ? body.mode : 'fast';
+  const m = GPS_MODES[mode];
+  const c = body.camper || {};
+  const dims = {
+    height: clampNum(c.height, 2, 4.5, 3.1),
+    width: clampNum(c.width, 1.8, 2.6, 2.1),
+    length: clampNum(c.length, 4, 12, 6.4),
+    weight: clampNum(c.weight, 1, 7.5, 3.5),
+  };
+  const av = body.avoid || {};
+  const avoidCountries = Array.isArray(av.countries) ? [...new Set(av.countries)].filter((k) => ISO_TO_ID[k]).sort().slice(0, 10) : [];
+  const options = { vehicle_type: 'hgv', profile_params: { restrictions: dims } };
+  const features = [];
+  if (av.highways === true) features.push('highways');
+  if (av.tolls === true || m.notoll) features.push('tollways');
+  if (features.length) options.avoid_features = features;
+  if (avoidCountries.length) options.avoid_countries = avoidCountries.map((k) => ISO_TO_ID[k]);
+
+  const payload = {
+    coordinates: points,
+    radiuses: points.map(() => 2000),
+    preference: m.preference,
+    instructions: true,
+    instructions_format: 'text',
+    language: 'pl',
+    units: 'm',
+    extra_info: ['countryinfo', 'tollways'],
+    options,
+  };
+  const kvKey = 'gps:' + (await sha256(JSON.stringify(payload))).slice(0, 32);
+  if (env.NK) {
+    const hit = await env.NK.get(kvKey, 'json');
+    if (hit) return json({ ...hit, cached: true }, 200, cors, { 'X-Cache': 'HIT' });
+  }
+
+  let r = await orsRoute(payload, env, true);
+  let profile = 'hgv';
+  if (!r.ok && (r.orsStatus === 404 || r.orsStatus === 500 || r.orsStatus === 503)) {
+    // profil ciężarowy nie znalazł trasy (np. brak danych o drogach lokalnych) – liczymy osobowym, ale mówimy o tym
+    const carPayload = { ...payload, options: { ...options } };
+    delete carPayload.options.vehicle_type; delete carPayload.options.profile_params;
+    if (!Object.keys(carPayload.options).length) delete carPayload.options;
+    r = await orsRoute(carPayload, env, false);
+    profile = 'car';
+  }
+  if (!r.ok) {
+    await logEvent(env, { code: 'GP-4' + (r.orsStatus || r.status), path: '/gps/route', detail: r.detail || r.error });
+    return json({ error: r.error, code: 'GP-4' + (r.orsStatus || r.status) }, r.status || 502, cors);
+  }
+
+  const f = r.data.features[0];
+  const coords = f.geometry.coordinates.map(([x, y]) => [Math.round(x * 1e5) / 1e5, Math.round(y * 1e5) / 1e5]);
+  const p = f.properties;
+  const n = Math.max(coords.length - 1, 0);
+  const countryAt = new Array(n).fill('?');
+  for (const [a, b, id] of p.extras?.countryinfo?.values ?? []) {
+    const code = COUNTRIES[id] || '#' + id;
+    for (let i = a; i < b && i < n; i++) countryAt[i] = code;
+  }
+  const tollAt = new Array(n).fill(false);
+  for (const [a, b, v] of p.extras?.tollways?.values ?? []) if (v === 1) for (let i = a; i < b && i < n; i++) tollAt[i] = true;
+  // dystans narastająco dla każdego punktu geometrii – klient liczy z tego postęp i odległość do manewru
+  const cum = new Array(coords.length).fill(0);
+  const path = []; let prev = null; const crossings = [];
+  for (let i = 0; i < n; i++) {
+    cum[i + 1] = cum[i] + haversineKm(coords[i], coords[i + 1]) * 1000;
+    const cc = countryAt[i];
+    if (cc !== '?' && cc[0] !== '#' && cc !== prev) { if (prev) crossings.push({ from: prev, to: cc, at: Math.round(cum[i]), idx: i }); path.push(cc); prev = cc; }
+  }
+  // odcinki płatne jako [startIdx, endIdx] – do oznaczenia na mapie
+  const tolls = []; let ts = -1;
+  for (let i = 0; i <= n; i++) { const on = i < n && tollAt[i]; if (on && ts < 0) ts = i; if (!on && ts >= 0) { tolls.push([ts, i]); ts = -1; } }
+  const steps = [];
+  for (const seg of p.segments || []) {
+    for (const s of seg.steps || []) {
+      steps.push({ t: s.type, i: s.instruction, n: s.name && s.name !== '-' ? s.name : '', d: Math.round(s.distance), s: Math.round(s.duration), wp: s.way_points, ...(s.exit_number ? { exit: s.exit_number } : {}) });
+    }
+  }
+  const out = {
+    km: Math.round((p.summary?.distance ?? 0) / 100) / 10,
+    sec: Math.round(p.summary?.duration ?? 0),
+    coords, cum: cum.map(Math.round), steps, path, crossings, tolls, profile, mode,
+    bbox: f.bbox || null,
+  };
+  if (env.NK) await env.NK.put(kvKey, JSON.stringify(out), { expirationTtl: GPS_KV_SECONDS });
+  return json(out, 200, cors);
 }

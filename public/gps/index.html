@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<title>Nawigacja kamper – gdzieponiesie.pl</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Nawigacja">
+<meta name="theme-color" content="#1a1d24">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="../icons/apple-touch-icon.png">
+<link rel="icon" href="../icons/favicon-32.png">
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<link rel="stylesheet" href="style.css?v=1">
+</head>
+<body>
+<div id="map"></div>
+
+<!-- ekran JAZDA -->
+<div id="hud" class="hud hidden">
+  <div class="card man" id="manCard">
+    <div class="row">
+      <svg id="manIcon" viewBox="0 0 64 64" width="64" height="64" aria-hidden="true"></svg>
+      <div class="col">
+        <div class="dist" id="manDist">—</div>
+        <div class="road" id="manRoad"></div>
+      </div>
+    </div>
+  </div>
+  <div class="chip next hidden" id="nextChip"></div>
+
+  <div class="pill road-now" id="roadNow"></div>
+
+  <div class="limit hidden" id="limit"><span id="limitVal">50</span></div>
+
+  <button class="round" id="btnPoi" type="button">POI</button>
+  <button class="round" id="btnView" type="button">3D</button>
+  <button class="round plus" id="btnRecenter" type="button" aria-label="Wyśrodkuj" hidden>⌖</button>
+
+  <div class="speed card" id="speedBox"><b id="speedVal">0</b><small>km/h</small></div>
+
+  <div class="card eta" id="etaBox">
+    <div class="row1"><b id="etaTime">--:--</b><small>przyjazd</small></div>
+    <div class="row2"><span id="etaKm">0 km</span><span id="etaMin">0 min</span><span class="warn" id="etaNote"></span></div>
+  </div>
+  <div class="progress"><i id="progBar"></i></div>
+</div>
+
+<!-- ekran TRASA -->
+<div id="sheet" class="sheet">
+  <div class="grip"></div>
+  <h1>Trasa</h1>
+  <div class="box">
+    <label><i class="dot a"></i><span>Z</span><input id="from" placeholder="Bieżąca pozycja" autocomplete="off"></label>
+    <label><i class="dot b"></i><span>Do</span><input id="to" placeholder="Miejscowość" autocomplete="off"></label>
+  </div>
+  <ul id="sugg" class="sugg hidden"></ul>
+  <div class="veh" id="vehLine"></div>
+  <div class="modes" id="modes">
+    <button type="button" data-mode="fast" aria-pressed="true">Szybka</button>
+    <button type="button" data-mode="main" aria-pressed="false">Główne drogi</button>
+    <button type="button" data-mode="notoll" aria-pressed="false">Bez myta</button>
+    <button type="button" data-mode="eco" aria-pressed="false">Ekonomiczna</button>
+  </div>
+  <div class="tiles" id="tiles"></div>
+  <div class="info" id="routeInfo"></div>
+  <div class="msg" id="msg"></div>
+  <button class="primary" id="btnRoute" type="button">Wyznacz trasę</button>
+  <button class="primary go hidden" id="btnGo" type="button">▶ Rozpocznij jazdę</button>
+</div>
+
+<!-- ekran POJAZD -->
+<div id="veh" class="sheet hidden">
+  <div class="grip"></div>
+  <h1>Pojazd</h1>
+  <div class="box">
+    <label class="num"><span>Wysokość</span><input id="vH" inputmode="decimal"><small>m</small></label>
+    <label class="num"><span>Długość</span><input id="vL" inputmode="decimal"><small>m</small></label>
+    <label class="num"><span>Szerokość</span><input id="vW" inputmode="decimal"><small>m</small></label>
+    <label class="num"><span>Masa (DMC)</span><input id="vT" inputmode="decimal"><small>t</small></label>
+  </div>
+  <p class="fine">Kamper do 3,5 t. Trasa jest liczona z ograniczeniami wysokości i masy (profil ciężarowy ORS).</p>
+  <button class="primary" id="btnVehSave" type="button">Zapisz profil</button>
+</div>
+
+<!-- MENU -->
+<div id="menu" class="sheet hidden">
+  <div class="grip"></div>
+  <h1>Menu</h1>
+  <div class="box list">
+    <label class="sw"><span>Głos (polski)</span><input type="checkbox" id="optVoice" checked></label>
+    <label class="sw"><span>Mapa 3D</span><input type="checkbox" id="opt3d" checked></label>
+    <label class="sw"><span>Tryb nocny</span><input type="checkbox" id="optNight"></label>
+    <label class="sw"><span>Symulacja jazdy (test bez GPS)</span><input type="checkbox" id="optSim"></label>
+  </div>
+  <p class="fine" id="about">Nawigacja kamper · wersja 0.1 · dane © OpenStreetMap, OpenFreeMap, trasy: openrouteservice</p>
+</div>
+
+<nav class="tabs">
+  <button type="button" data-tab="jazda">Jazda</button>
+  <button type="button" data-tab="trasa" aria-current="page">Trasa</button>
+  <button type="button" data-tab="veh">Pojazd</button>
+  <button type="button" data-tab="menu">Menu</button>
+</nav>
+
+<script src="../assets/config.js"></script>
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="app.js?v=1"></script>
+</body>
+</html>
