@@ -11,8 +11,9 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="../icons/apple-touch-icon.png">
 <link rel="icon" href="../icons/favicon-32.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800&display=swap">
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
-<link rel="stylesheet" href="style.css?v=5">
+<link rel="stylesheet" href="style.css?v=6">
 </head>
 <body>
 <div id="desk" class="desk hidden">
@@ -57,8 +58,7 @@
 
 <!-- JAZDA bez trasy: pływające przyciski jak w nawigacjach -->
 <div id="idle" class="idle hidden">
-  <button type="button" class="fab tr" id="fMenu" aria-label="Menu"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 7H20M4 12H20M4 17H20"/></svg></button>
-  <button type="button" class="fab tr2" id="fCompass" aria-label="Północ u góry"><svg id="compassIco" viewBox="0 0 24 24" width="30" height="30"><path d="M12 3 L15 12 L12 10.5 L9 12 Z" fill="#E5533D"/><path d="M12 21 L9 12 L12 13.5 L15 12 Z" fill="#cfd3dc"/></svg></button>
+  <button type="button" class="fab tr" id="fCompass" aria-label="Północ u góry"><svg id="compassIco" viewBox="0 0 24 24" width="30" height="30"><path d="M12 3 L15 12 L12 10.5 L9 12 Z" fill="#E5533D"/><path d="M12 21 L9 12 L12 13.5 L15 12 Z" fill="#cfd3dc"/></svg></button>
   <button type="button" class="fab bl" id="fView" aria-label="Widok 2D/3D"><span id="fViewTxt">3D</span></button>
   <button type="button" class="fab bl2" id="fCenter" aria-label="Moja pozycja"><svg viewBox="0 0 24 24" width="26" height="26"><path d="M12 3 L19 20 L12 16 L5 20 Z" fill="currentColor"/></svg></button>
   <button type="button" class="chip-veh" id="fVeh"><small>Profil pojazdu</small><b id="fVehTxt">🚐 Kamper</b></button>
@@ -93,13 +93,20 @@
 <div id="veh" class="sheet hidden">
   <div class="grip"></div>
   <h1>Pojazd</h1>
+  <div class="hero">
+    <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 16 V8 H14 L17 11 H21 V16 Z"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg>
+    <div><b>Kamper do 3,5 t</b><small>Fiat Ducato · winiety jak osobowy, limity jak ciężarowy</small></div>
+  </div>
   <div class="box">
     <label class="num"><span>Wysokość</span><input id="vH" inputmode="decimal"><small>m</small></label>
     <label class="num"><span>Długość</span><input id="vL" inputmode="decimal"><small>m</small></label>
     <label class="num"><span>Szerokość</span><input id="vW" inputmode="decimal"><small>m</small></label>
     <label class="num"><span>Masa (DMC)</span><input id="vT" inputmode="decimal"><small>t</small></label>
   </div>
-  <p class="fine">Kamper do 3,5 t. Trasa jest liczona z ograniczeniami wysokości i masy (profil ciężarowy ORS).</p>
+  <div class="box list" style="margin-top:12px">
+    <label class="sw"><span>Kraj rejestracji</span><b style="font-size:17px;font-weight:800">PL</b></label>
+  </div>
+  <p class="note">Trasy liczone są z zapasem 10 cm wysokości. Węgry: zawsze e-matrica D2. Austria: winieta + opłaty odcinkowe (Brenner, Tauern).</p>
   <button class="primary" id="btnVehSave" type="button">Zapisz profil</button>
 </div>
 
@@ -107,24 +114,51 @@
 <div id="menu" class="sheet hidden">
   <div class="grip"></div>
   <h1>Menu</h1>
+  <div class="sec">Mapy i dane</div>
   <div class="box list">
-    <label class="sw"><span>Głos (polski)</span><input type="checkbox" id="optVoice" checked></label>
-    <label class="sw"><span>Mapa 3D</span><input type="checkbox" id="opt3d" checked></label>
-    <label class="sw"><span>Tryb nocny</span><input type="checkbox" id="optNight"></label>
-    <label class="sw"><span>Symulacja jazdy (test bez GPS)</span><input type="checkbox" id="optSim"></label>
+    <div class="it"><div><b>Mapy offline</b><small>etap 2 — PMTiles per region</small></div><span class="soon">wkrótce</span></div>
+    <div class="it"><div><b>Dane kamperowe</b><small>niskie mosty, limity masy, kempingi, LPG</small></div><span class="soon">wkrótce</span></div>
   </div>
-  <p class="fine" id="about">Nawigacja kamper · wersja 0.1 · dane © OpenStreetMap, OpenFreeMap, trasy: openrouteservice</p>
+  <div class="sec">Jazda</div>
+  <div class="box list">
+    <label class="sw"><span><b>Głos</b><small>polski · manewry i ostrzeżenia</small></span><input type="checkbox" id="optVoice" checked></label>
+    <label class="sw"><span><b>Mapa 3D</b><small>pochylona kamera i bryły budynków</small></span><input type="checkbox" id="opt3d" checked></label>
+    <label class="sw"><span><b>Tryb nocny</b><small>ciemna mapa i panele</small></span><input type="checkbox" id="optNight"></label>
+    <label class="sw"><span><b>Symulacja jazdy</b><small>test bez GPS — jedzie po trasie 70 km/h</small></span><input type="checkbox" id="optSim"></label>
+    <div class="it"><div><b>Fotoradary i odcinkowe</b><small>wyłączone w DE, FR, CH (zakaz)</small></div><span class="soon">wkrótce</span></div>
+  </div>
+  <div class="sec">Kamper</div>
+  <div class="box list">
+    <div class="it"><div><b>Checklista przed wyjazdem</b><small>gaz, woda, antena, stopnie</small></div><span class="soon">wkrótce</span></div>
+    <div class="it"><div><b>Serwis</b><small>z planera gdzieponiesie.pl</small></div><span class="soon">wkrótce</span></div>
+  </div>
+  <div class="sec">Aplikacja</div>
+  <div class="box list">
+    <a class="it" href="/"><div><b>Planer gdzieponiesie.pl</b><small>trasy, winiety, paliwo, granice</small></div><span class="chev">›</span></a>
+    <div class="it"><div><b>O aplikacji</b><small id="about">Nawigacja kamper · 0.2 · © OpenStreetMap, OpenFreeMap, openrouteservice</small></div></div>
+  </div>
 </div>
 
-<nav class="tabs">
-  <button type="button" data-tab="jazda">Jazda</button>
-  <button type="button" data-tab="trasa" aria-current="page">Trasa</button>
-  <button type="button" data-tab="veh">Pojazd</button>
-  <button type="button" data-tab="menu">Menu</button>
+<!-- POI -->
+<div id="poi" class="sheet hidden">
+  <div class="grip"></div>
+  <div class="row-h"><h1>Przy trasie</h1><small>do 5 km od trasy</small></div>
+  <div class="chips">
+    <button type="button" aria-pressed="true">Wszystko</button><button type="button">Kemping</button><button type="button">Zrzut</button><button type="button">Woda</button><button type="button">LPG</button><button type="button">Paliwo</button>
+  </div>
+  <p class="note">Lista kempingów, zrzutów, wody, LPG i stacji z cenami wzdłuż trasy — etap 2 (dane z OSM i z planera).</p>
+</div>
+
+<nav class="tabs" aria-label="Menu">
+  <button type="button" data-tab="jazda"><svg viewBox="0 0 24 24" width="22" height="22"><path d="M12 2 L21 21 L12 16 L3 21 Z" fill="currentColor"/></svg>Jazda</button>
+  <button type="button" data-tab="trasa"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="6" cy="18" r="3"/><circle cx="18" cy="6" r="3"/><path d="M9 18 H14 Q18 18 18 14 V9"/></svg>Trasa</button>
+  <button type="button" data-tab="poi"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 22 S5 14 5 9 a7 7 0 0 1 14 0 c0 5 -7 13 -7 13 Z"/><circle cx="12" cy="9" r="2.5"/></svg>POI</button>
+  <button type="button" data-tab="veh"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 16 V8 H14 L17 11 H21 V16 Z"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg>Pojazd</button>
+  <button type="button" data-tab="menu"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 7H20M4 12H20M4 17H20"/></svg>Menu</button>
 </nav>
 
 <script src="../assets/config.js"></script>
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
-<script src="app.js?v=7"></script>
+<script src="app.js?v=8"></script>
 </body>
 </html>

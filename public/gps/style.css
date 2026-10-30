@@ -82,9 +82,10 @@ button{font-family:inherit}
 .list input[type=checkbox]:checked::after{left:23px}
 
 /* dolne menu */
-.tabs{position:fixed;left:0;right:0;bottom:0;z-index:9;height:calc(var(--sab) + 72px);padding:8px 10px var(--sab);background:rgba(26,29,36,.96);display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
-.tabs button{border:0;background:none;color:var(--sub);font-size:12px;font-weight:600;border-radius:12px}
+.tabs{position:fixed;left:0;right:0;bottom:0;z-index:9;height:calc(var(--sab) + 76px);padding:8px 10px var(--sab);background:rgba(26,29,36,.96);display:grid;grid-template-columns:repeat(5,1fr);gap:4px}
+.tabs button{border:0;background:none;color:var(--sub);font-size:11px;font-weight:600;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:4px;padding-top:4px}
 .tabs button[aria-current=page]{color:#fff;font-weight:800}
+.tabs button[aria-current=page] svg{color:var(--blue)}
 
 /* marker pozycji */
 .me{width:36px;height:36px}
@@ -116,10 +117,10 @@ body.night .veh{color:#cfd3dc}
 .fab{width:60px;height:60px;border:0;border-radius:18px;background:var(--panel);color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:800;box-shadow:0 4px 14px rgba(0,0,0,.25)}
 .fab.tr{right:14px;top:calc(var(--sat) + 14px)}
 .fab.tr2{right:14px;top:calc(var(--sat) + 84px);border-radius:50%}
-.fab.bl{left:14px;bottom:calc(var(--sab) + 96px)}
-.fab.bl2{left:14px;bottom:calc(var(--sab) + 26px)}
-.fab.br{right:14px;bottom:calc(var(--sab) + 26px);width:72px;height:72px;background:var(--blue)}
-.chip-veh{left:50%;transform:translateX(-50%);bottom:calc(var(--sab) + 30px);border:0;border-radius:16px;background:var(--panel);color:#fff;padding:8px 16px;display:flex;flex-direction:column;align-items:center;gap:2px;box-shadow:0 4px 14px rgba(0,0,0,.25)}
+.fab.bl{left:14px;bottom:calc(var(--sab) + 166px)}
+.fab.bl2{left:14px;bottom:calc(var(--sab) + 96px)}
+.fab.br{right:14px;bottom:calc(var(--sab) + 96px);width:72px;height:72px;background:var(--blue)}
+.chip-veh{left:50%;transform:translateX(-50%);bottom:calc(var(--sab) + 100px);border:0;border-radius:16px;background:var(--panel);color:#fff;padding:8px 16px;display:flex;flex-direction:column;align-items:center;gap:2px;box-shadow:0 4px 14px rgba(0,0,0,.25)}
 .chip-veh small{font-size:11px;font-weight:600;color:var(--sub)}
 .chip-veh b{font-size:15px;font-weight:800;white-space:nowrap}
 .maplibregl-ctrl-top-right{top:calc(var(--sat) + 150px)}
@@ -131,3 +132,25 @@ body.night .veh{color:#cfd3dc}
 .sheet .grip{cursor:pointer}
 .sheet.half .edit-link{display:block}
 .edit-link{display:none;margin:0 4px 8px;font-size:13px;font-weight:700;color:var(--blue2)}
+
+/* Pojazd / Menu / POI jak w makiecie */
+.hero{background:var(--ink);color:#fff;border-radius:18px;padding:14px 16px;display:flex;align-items:center;gap:14px;margin-bottom:12px}
+.hero b{display:block;font-size:17px;font-weight:800}.hero small{display:block;font-size:12px;font-weight:600;color:var(--sub);margin-top:2px}
+.note{margin:12px 0 0;background:#EAF1FF;border-radius:14px;padding:12px 14px;font-size:13px;font-weight:600;color:var(--blue2);line-height:1.4}
+.sec{margin:14px 4px 6px;font-size:12px;font-weight:700;color:var(--ink2);text-transform:uppercase;letter-spacing:.5px}
+.sec:first-of-type{margin-top:0}
+.list .it{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--line);color:inherit;text-decoration:none}
+.list .it:last-child{border-bottom:0}
+.list .it b,.list .sw b{display:block;font-size:15px;font-weight:700}
+.list .it small,.list .sw small{display:block;font-size:12px;font-weight:600;color:var(--ink2);margin-top:2px}
+.list .it>div{flex:1;min-width:0}
+.soon{font-size:11px;font-weight:700;color:var(--ink2);background:var(--sheet);padding:4px 8px;border-radius:8px}
+.chev{font-size:22px;color:#9a9fa8}
+.row-h{display:flex;align-items:baseline;justify-content:space-between;margin-right:4px}
+.row-h small{font-size:13px;font-weight:600;color:var(--ink2)}
+.chips{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px}
+.chips button{flex:none;height:40px;padding:0 14px;border:0;border-radius:20px;background:#fff;color:var(--ink);font-size:13px;font-weight:700}
+.chips button[aria-pressed=true]{background:var(--ink);color:#fff}
+body.night .hero{background:#0F1420}
+body.night .soon,body.night .chips button{background:#1f2634;color:#fff}
+body.night .note{background:#1f2634;color:#cfd3dc}

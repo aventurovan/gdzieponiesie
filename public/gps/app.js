@@ -382,10 +382,10 @@ function stopSim() { if (simT) { clearInterval(simT); simT = null; } }
 /* ---------- UI ---------- */
 function showTab(t) {
   S.tab = t;
-  $('#sheet').classList.toggle('hidden', t !== 'trasa'); $('#veh').classList.toggle('hidden', t !== 'veh'); $('#menu').classList.toggle('hidden', t !== 'menu');
+  $('#sheet').classList.toggle('hidden', t !== 'trasa'); $('#veh').classList.toggle('hidden', t !== 'veh'); $('#menu').classList.toggle('hidden', t !== 'menu'); $('#poi').classList.toggle('hidden', t !== 'poi');
   $('#hud').classList.toggle('hidden', !(t === 'jazda' && S.nav));
+  if (t === 'jazda' && S.nav) $('.tabs').classList.add('hidden'); else $('.tabs').classList.remove('hidden');
   $('#idle').classList.toggle('hidden', !(t === 'jazda' && !S.nav));
-  $('.tabs').classList.toggle('hidden', t === 'jazda');
   if (t === 'jazda' && !S.nav) { $('#fVehTxt').textContent = `🚐 Kamper ${fmt1(S.veh.h)} m · ${fmt1(S.veh.t)} t`; $('#fViewTxt').textContent = S.opt.d3 ? '3D' : '2D'; }
   $$('.tabs button').forEach(b => { if (b.dataset.tab === t) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
   if (t === 'veh') fillVeh();
@@ -398,13 +398,12 @@ $('#optNight').addEventListener('change', e => setNight(e.target.checked));
 $('#optVoice').addEventListener('change', e => { S.opt.voice = e.target.checked; store.set('opt', S.opt); });
 $('#optSim').addEventListener('change', e => { S.opt.sim = e.target.checked; store.set('opt', S.opt); if (S.nav) { if (S.opt.sim) startSim(); else stopSim(); } });
 $('#fSearch').addEventListener('click', () => { showTab('trasa'); setTimeout(() => $('#to').focus(), 50); });
-$('#fMenu').addEventListener('click', () => showTab('menu'));
 $('#fVeh').addEventListener('click', () => showTab('veh'));
 $('#fCompass').addEventListener('click', () => map.easeTo({ bearing: 0, pitch: S.opt.d3 ? 45 : 0, duration: 400 }));
 $('#fCenter').addEventListener('click', () => { if (S.pos) map.easeTo({ center: [S.pos.lon, S.pos.lat], zoom: 15, duration: 500 }); else startGps(); });
 $('#fView').addEventListener('click', () => { setView3d(!S.opt.d3); $('#fViewTxt').textContent = S.opt.d3 ? '3D' : '2D'; map.easeTo({ pitch: S.opt.d3 ? 45 : 0, duration: 500 }); });
 $('#btnRecenter').addEventListener('click', () => { S.follow = true; $('#btnRecenter').hidden = true; });
-$('#btnPoi').addEventListener('click', () => speak('Lista POI będzie w kolejnym etapie.'));
+$('#btnPoi').addEventListener('click', () => showTab('poi'));
 $('#etaBox').addEventListener('click', () => { if (confirm('Zakończyć nawigację?')) stopNav(); });
 
 /* start */
