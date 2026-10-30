@@ -12,7 +12,7 @@
 <link rel="apple-touch-icon" href="../icons/apple-touch-icon.png">
 <link rel="icon" href="../icons/favicon-32.png">
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
-<link rel="stylesheet" href="style.css?v=4">
+<link rel="stylesheet" href="style.css?v=5">
 </head>
 <body>
 <div id="desk" class="desk hidden">
@@ -67,8 +67,9 @@
 
 <!-- ekran TRASA -->
 <div id="sheet" class="sheet">
-  <div class="grip"></div>
+  <div class="grip" id="sheetGrip"></div>
   <h1>Trasa</h1>
+  <a href="#" class="edit-link" id="editRoute">✎ Zmień punkty lub tryb</a>
   <div class="box">
     <label><i class="dot a"></i><span>Z</span><input id="from" placeholder="Bieżąca pozycja" autocomplete="off"></label>
     <label><i class="dot b"></i><span>Do</span><input id="to" placeholder="Miejscowość" autocomplete="off"></label>
@@ -124,6 +125,6 @@
 
 <script src="../assets/config.js"></script>
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
-<script src="app.js?v=6"></script>
+<script src="app.js?v=7"></script>
 </body>
 </html>

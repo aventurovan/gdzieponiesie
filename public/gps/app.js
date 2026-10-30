@@ -122,9 +122,10 @@ function drawRoute() {
   const r = S.route, f = [];
   f.push({ type: 'Feature', properties: { k: 'main' }, geometry: { type: 'LineString', coordinates: r.coords } });
   for (const [a, b] of r.tolls || []) f.push({ type: 'Feature', properties: { k: 'toll' }, geometry: { type: 'LineString', coordinates: r.coords.slice(a, b + 1) } });
+  f.push({ type: 'Feature', properties: { k: 'pt', c: '#3A74FF' }, geometry: { type: 'Point', coordinates: r.coords[0] } });
   f.push({ type: 'Feature', properties: { k: 'pt', c: '#1a1d24' }, geometry: { type: 'Point', coordinates: r.coords[r.coords.length - 1] } });
   map.getSource('route').setData({ type: 'FeatureCollection', features: f });
-  if (!S.nav && r.bbox) map.fitBounds([[r.bbox[0], r.bbox[1]], [r.bbox[2], r.bbox[3]]], { padding: { top: 120, bottom: window.innerHeight * 0.55, left: 40, right: 40 }, pitch: 0, bearing: 0, duration: 600 });
+  if (!S.nav && r.bbox) map.fitBounds([[r.bbox[0], r.bbox[1]], [r.bbox[2], r.bbox[3]]], { padding: { top: 70 + 30, bottom: window.innerHeight * 0.5 + 20, left: 40, right: 40 }, pitch: 0, bearing: 0, duration: 600 });
 }
 function setView3d(on) {
   S.opt.d3 = on; store.set('opt', S.opt); $('#opt3d').checked = on; $('#btnView').textContent = on ? '3D' : '2D';
@@ -151,7 +152,7 @@ $('#sugg').addEventListener('click', e => {
   const li = e.target.closest('li'); if (!li) return;
   const x = $('#sugg')._res[+li.dataset.i]; const pt = { name: x.name, lon: x.lon, lat: x.lat };
   suggFor.value = x.name; if (suggFor.id === 'from') S.from = pt; else S.to = pt;
-  $('#sugg').classList.add('hidden'); $('#btnGo').classList.add('hidden'); S.route = null;
+  $('#sugg').classList.add('hidden'); $('#btnGo').classList.add('hidden'); S.route = null; setSheetHalf(false);
 });
 ['from', 'to'].forEach(id => {
   const inp = $('#' + id);
@@ -177,6 +178,9 @@ $('#modes').addEventListener('click', e => {
   if (S.route) computeRoute();
 });
 $('#btnRoute').addEventListener('click', () => computeRoute());
+function setSheetHalf(on) { $('#sheet').classList.toggle('half', on); if (on) $('#sheet').scrollTop = 0; }
+$('#sheetGrip').addEventListener('click', () => { if (S.route) setSheetHalf(!$('#sheet').classList.contains('half')); });
+$('#editRoute').addEventListener('click', e => { e.preventDefault(); setSheetHalf(false); });
 async function computeRoute(fromPos) {
   const msg = $('#msg'); msg.textContent = '';
   if (!API) { msg.textContent = 'Brak adresu API w assets/config.js.'; return; }
@@ -193,7 +197,7 @@ async function computeRoute(fromPos) {
   } catch (e) { msg.textContent = e.message; $('#btnRoute').disabled = false; return null; }
   $('#btnRoute').disabled = false; msg.textContent = '';
   S.route = j; S.route.total = j.cum[j.cum.length - 1];
-  if (!fromPos) { renderSummary(); drawRoute(); $('#btnGo').classList.remove('hidden'); }
+  if (!fromPos) { renderSummary(); setSheetHalf(true); drawRoute(); $('#btnGo').classList.remove('hidden'); }
   return j;
 }
 function renderSummary() {
@@ -216,7 +220,7 @@ $('#btnGo').addEventListener('click', () => { startNav(); });
 function startNav() {
   if (!S.route) return;
   S.nav = true; S.follow = true; NAV.idx = 0; NAV.prog = 0; NAV.offCount = 0; NAV.stepI = 0; NAV.said = {};
-  showTab('jazda'); $('#hud').classList.remove('hidden');
+  showTab('jazda'); $('#hud').classList.remove('hidden'); setSheetHalf(false);
   speak('Rozpoczynam nawigację.'); keepAwake();
   map.easeTo({ pitch: S.opt.d3 ? 58 : 0, zoom: 16, duration: 800 });
   if (S.opt.sim) startSim(); else startGps();
