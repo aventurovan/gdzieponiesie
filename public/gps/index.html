@@ -12,7 +12,7 @@
 <link rel="apple-touch-icon" href="../icons/apple-touch-icon.png">
 <link rel="icon" href="../icons/favicon-32.png">
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
-<link rel="stylesheet" href="style.css?v=2">
+<link rel="stylesheet" href="style.css?v=3">
 </head>
 <body>
 <div id="desk" class="desk hidden">
@@ -53,6 +53,14 @@
     <div class="row2"><span id="etaKm">0 km</span><span id="etaMin">0 min</span><span class="warn" id="etaNote"></span></div>
   </div>
   <div class="progress"><i id="progBar"></i></div>
+</div>
+
+<!-- JAZDA bez trasy -->
+<div id="idle" class="idle hidden">
+  <div class="card idle-card">
+    <div><b>Dokąd jedziemy?</b><small>Ustaw cel, a nawigacja poprowadzi z ograniczeniami Twojego kampera.</small></div>
+    <button type="button" id="idleGo">Ustaw cel</button>
+  </div>
 </div>
 
 <!-- ekran TRASA -->
@@ -114,6 +122,6 @@
 
 <script src="../assets/config.js"></script>
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
-<script src="app.js?v=4"></script>
+<script src="app.js?v=5"></script>
 </body>
 </html>

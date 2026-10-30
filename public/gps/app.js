@@ -55,12 +55,12 @@ let map, meMarker, mapReady = false;
 function initMap() {
   map = new maplibregl.Map({
     container: 'map', style: STYLE[S.opt.night ? 'dark' : 'light'], center: [19.05, 49.82], zoom: 13,
-    pitch: S.opt.d3 ? 58 : 0, attributionControl: false, maxPitch: 70, fadeDuration: 0,
+    pitch: 0, attributionControl: false, maxPitch: 70, fadeDuration: 0,
   });
   map.addControl(new maplibregl.AttributionControl({ compact: true }), 'top-right');
   map.on('style.load', addLayers);
   map.on('dragstart', () => { if (S.nav) { S.follow = false; $('#btnRecenter').hidden = false; } });
-  map.on('load', () => { mapReady = true; if (S.route) drawRoute(); });
+  map.on('load', () => { mapReady = true; if (S.route) drawRoute(); const at = document.querySelector('.maplibregl-ctrl-attrib'); if (at) at.classList.remove('maplibregl-compact-show'); });
   const el = document.createElement('div'); el.className = 'me';
   el.innerHTML = '<svg viewBox="0 0 36 36"><path d="M18 3 L31 31 L18 24 L5 31 Z" fill="#3A74FF" stroke="#fff" stroke-width="3" stroke-linejoin="round"/></svg>';
   meMarker = new maplibregl.Marker({ element: el, rotationAlignment: 'map', pitchAlignment: 'map' });
@@ -78,6 +78,7 @@ function tuneStyle() {
       else if (l.type === 'fill' && /park|grass|meadow|farmland|cemetery|pitch|garden|scrub/.test(id)) { map.setPaintProperty(l.id, 'fill-color', night ? '#232E30' : '#DCE7C9'); map.setPaintProperty(l.id, 'fill-opacity', 1); }
       else if (l.type === 'fill' && /residential|neighbourhood|suburb/.test(id)) map.setPaintProperty(l.id, 'fill-color', night ? '#20252F' : '#EAE4D6');
       else if (l.type === 'fill' && /building/.test(id)) { map.setPaintProperty(l.id, 'fill-color', night ? '#3B4252' : '#E3B6A2'); map.setPaintProperty(l.id, 'fill-opacity', 0.9); }
+      else if (l.type === 'symbol' && /poi|transit|bus|station|airport|housenum/.test(id)) map.setLayoutProperty(l.id, 'visibility', 'none');
       else if (l.type === 'fill-extrusion') { BUD3D = l.id; map.setPaintProperty(l.id, 'fill-extrusion-color', night ? '#3B4252' : '#E3B6A2'); map.setPaintProperty(l.id, 'fill-extrusion-opacity', 0.9); }
       else if (l.type === 'fill' && /water/.test(id)) map.setPaintProperty(l.id, 'fill-color', night ? '#15202E' : '#9EC4E6');
     } catch (e) {}
@@ -86,12 +87,12 @@ function tuneStyle() {
 function addLayers() {
   tuneStyle();
   // budynki 3D z kafelków OpenMapTiles (warstwa building, render_height)
-  if (BUD3D) { map.setLayoutProperty(BUD3D, 'visibility', S.opt.d3 ? 'visible' : 'none'); }
+  if (BUD3D) { map.setLayoutProperty(BUD3D, 'visibility', S.opt.d3 ? 'visible' : 'none'); try { map.setLayerZoomRange(BUD3D, 15, 24); } catch (e) {} }
   else if (!map.getLayer('bud3d')) {
     BUD3D = 'bud3d';
     const labelId = (map.getStyle().layers.find(l => l.type === 'symbol') || {}).id;
     map.addLayer({
-      id: 'bud3d', type: 'fill-extrusion', source: 'openmaptiles', 'source-layer': 'building', minzoom: 13.5,
+      id: 'bud3d', type: 'fill-extrusion', source: 'openmaptiles', 'source-layer': 'building', minzoom: 15,
       paint: {
         'fill-extrusion-color': S.opt.night ? '#3B4252' : '#E3B6A2',
         'fill-extrusion-height': ['coalesce', ['get', 'render_height'], 7],
@@ -222,6 +223,7 @@ function startNav() {
 }
 function stopNav() {
   S.nav = false; $('#hud').classList.add('hidden'); stopSim(); $('#btnRecenter').hidden = true;
+  map.easeTo({ pitch: 0, bearing: 0, zoom: 14.5, duration: 600 });
   if (wake) { wake.release().catch(() => {}); wake = null; }
 }
 
@@ -247,7 +249,7 @@ function onFix(f) {
   if (f.heading == null) f.heading = prev ? prev.heading : 0;
   S.pos = f;
   meMarker.setLngLat([f.lon, f.lat]).setRotation(f.heading || 0);
-  if (!meMarker._added) { meMarker.addTo(map); meMarker._added = true; if (!S.nav && !S.route) map.jumpTo({ center: [f.lon, f.lat], zoom: 14 }); }
+  if (!meMarker._added) { meMarker.addTo(map); meMarker._added = true; if (!S.nav && !S.route) map.jumpTo({ center: [f.lon, f.lat], zoom: 14.5, pitch: 0, bearing: 0 }); }
   if (!S.nav) { if (S.from === null && !$('#from').value) $('#from').placeholder = 'Bieżąca pozycja (GPS)'; return; }
   navStep(f);
 }
@@ -377,6 +379,7 @@ function showTab(t) {
   S.tab = t;
   $('#sheet').classList.toggle('hidden', t !== 'trasa'); $('#veh').classList.toggle('hidden', t !== 'veh'); $('#menu').classList.toggle('hidden', t !== 'menu');
   $('#hud').classList.toggle('hidden', !(t === 'jazda' && S.nav));
+  $('#idle').classList.toggle('hidden', !(t === 'jazda' && !S.nav));
   $$('.tabs button').forEach(b => { if (b.dataset.tab === t) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
   if (t === 'veh') fillVeh();
 }
@@ -387,6 +390,7 @@ $('#opt3d').addEventListener('change', e => setView3d(e.target.checked));
 $('#optNight').addEventListener('change', e => setNight(e.target.checked));
 $('#optVoice').addEventListener('change', e => { S.opt.voice = e.target.checked; store.set('opt', S.opt); });
 $('#optSim').addEventListener('change', e => { S.opt.sim = e.target.checked; store.set('opt', S.opt); if (S.nav) { if (S.opt.sim) startSim(); else stopSim(); } });
+$('#idleGo').addEventListener('click', () => showTab('trasa'));
 $('#btnRecenter').addEventListener('click', () => { S.follow = true; $('#btnRecenter').hidden = true; });
 $('#btnPoi').addEventListener('click', () => speak('Lista POI będzie w kolejnym etapie.'));
 $('#etaBox').addEventListener('click', () => { if (confirm('Zakończyć nawigację?')) { stopNav(); showTab('trasa'); } });
