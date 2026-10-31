@@ -554,3 +554,11 @@ input,select,textarea{font-size:max(16px,1em)}
 .gp-banner.warn{background:#FFF4D6;color:#5a4300} :root[data-theme="dark"] .gp-banner.warn{background:#3a3010;color:#ffe08a}
 .gp-banner a{color:inherit;font-weight:800}
 .calm.warn{border-left:4px solid var(--amb)}
+
+/* menu Udostępnij */
+.actions{position:relative}
+.share-menu{position:absolute;left:0;bottom:calc(100% + 8px);z-index:30;background:var(--bg);border:1px solid var(--rule);border-radius:14px;box-shadow:0 12px 32px rgba(0,0,0,.25);padding:6px;display:flex;flex-direction:column;min-width:240px}
+.share-menu[hidden]{display:none}
+.share-menu button{display:flex;flex-direction:column;align-items:flex-start;gap:1px;border:0;background:none;color:var(--ink);padding:10px 12px;border-radius:10px;text-align:left;cursor:pointer}
+.share-menu button:hover{background:var(--tile)}
+.share-menu small{color:var(--mut);font-size:12.5px}

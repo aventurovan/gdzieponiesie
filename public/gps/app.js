@@ -989,6 +989,8 @@ function init() {
   // ?to=lon,lat,Nazwa – wejście z planera
   const u = new URLSearchParams(location.search);
   if (u.get('to')) { const [lon, lat, ...n] = u.get('to').split(','); S.to = { lon: +lon, lat: +lat, name: n.join(',') || 'Cel' }; $('#to').textContent = S.to.name; $('#to').classList.remove('empty'); } else { $('#to').classList.add('empty'); }
+  // ?via=dł,szer,Nazwa|dł,szer,Nazwa – przystanki z planera (przycisk „Prowadź w Azimo”)
+  if (u.get('via')) { S.via = u.get('via').split('|').map(s => { const [lon, lat, ...n] = s.split(','); return { lon: +lon, lat: +lat, name: n.join(',') || 'Przystanek' }; }).filter(v => isFinite(v.lon) && isFinite(v.lat)).slice(0, 8); renderViaChips(); }
   $('#from').classList.add('empty'); $('#viaAdd').classList.add('empty');
   showTab(S.to ? 'trasa' : 'jazda');
 }
