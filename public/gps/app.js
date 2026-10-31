@@ -7,6 +7,11 @@ const store = {
   set: (k, v) => { try { localStorage.setItem('gps.' + k, JSON.stringify(v)); } catch (e) {} },
 };
 
+/* ---------- most do aplikacji natywnej (Capacitor, wersja IPA) ---------- */
+const NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+function plugin(name) { try { const C = window.Capacitor; if (!C) return null; if (C.Plugins && C.Plugins[name]) return C.Plugins[name]; if (C.registerPlugin) return C.registerPlugin(name); } catch (e) {} return null; }
+const NTTS = NATIVE ? plugin('TextToSpeech') : null, NBG = NATIVE ? plugin('BackgroundGeolocation') : null, NKA = NATIVE ? plugin('KeepAwake') : null;
+
 /* ---------- stan ---------- */
 const S = {
   veh: store.get('veh', { h: 3.1, l: 6.36, w: 2.05, t: 3.5 }),
@@ -472,7 +477,7 @@ function startNav() {
   if (!S.route) return;
   S.nav = true; S.follow = true; NAV.idx = 0; NAV.prog = 0; NAV.offCount = 0; NAV.stepI = 0; NAV.said = {};
   showTab('jazda'); $('#hud').classList.remove('hidden'); altMarkers.forEach(m => m.remove()); altMarkers = []; if (map.getSource('alts')) map.getSource('alts').setData({ type: 'FeatureCollection', features: [] });
-  speak('Rozpoczynam nawigację.'); keepAwake();
+  speak('Rozpoczynam nawigację.'); keepAwake(); if (NBG) startBgGps();
   MK.zoom = 16; NAV.zoomT = 16.5; map.jumpTo({ pitch: S.opt.d3 ? 60 : 0, zoom: 16 });
   if (S.opt.sim) startSim(); else startGps();
   updateHud(); updatePoiCol(); applyOpts(); autoNight();
@@ -481,6 +486,7 @@ function stopNav() {
   S.nav = false; $('#rbar').innerHTML = ''; $('#poiCol').innerHTML = ''; $('#quick').classList.add('hidden'); $('#hud').classList.add('hidden'); stopSim(); $('#btnRecenter').hidden = true;
   map.easeTo({ pitch: 0, bearing: 0, zoom: 14.5, duration: 600 }); showTab('jazda');
   if (wake) { wake.release().catch(() => {}); wake = null; }
+  stopBgGps(); if (NKA) NKA.allowSleep().catch(() => {});
 }
 
 /* płynna strzałka + kamera: jedna pętla rAF; między pozycjami GPS pozycja jest przewidywana wzdłuż trasy */
@@ -516,7 +522,15 @@ function tickMarker(now) {
 }
 
 /* GPS */
-let watchId = null;
+let watchId = null, bgWatch = null;
+async function startBgGps() {
+  if (!NBG || bgWatch) return;
+  try {
+    bgWatch = await NBG.addWatcher({ backgroundMessage: 'Nawigacja prowadzi po trasie.', backgroundTitle: 'GdziePoniesie GPS', requestPermissions: true, stale: false, distanceFilter: 3 },
+      (loc, err) => { if (err || !loc) return; onFix({ lon: loc.longitude, lat: loc.latitude, speed: loc.speed, heading: loc.bearing, acc: loc.accuracy, t: loc.time || Date.now() }); });
+  } catch (e) { bgWatch = null; }
+}
+async function stopBgGps() { if (NBG && bgWatch) { try { await NBG.removeWatcher({ id: bgWatch }); } catch (e) {} bgWatch = null; } }
 function startGps() {
   if (watchId != null || !navigator.geolocation) return;
   watchId = navigator.geolocation.watchPosition(p => {
@@ -682,9 +696,20 @@ function speak(t, urgent) {
   if (urgent) { VQ.length = 0; try { speechSynthesis.cancel(); } catch (e) {} vBusy = true; setTimeout(() => { vBusy = false; VQ.push(t); vNext(); }, 300); return; }
   VQ.push(t); if (!vBusy) vNext();
 }
-function vNext() {
+let nativeVoices = null;
+async function vNext() {
   const t = VQ.shift(); if (!t) { vBusy = false; return; }
   vBusy = true;
+  if (NTTS) {
+    try {
+      if (!nativeVoices) { try { nativeVoices = (await NTTS.getSupportedVoices()).voices || []; } catch (e) { nativeVoices = []; } }
+      let vi; if (S.opt.voiceName) { vi = nativeVoices.findIndex(v => v.name === S.opt.voiceName || v.voiceURI === S.opt.voiceName); }
+      if (vi == null || vi < 0) { vi = nativeVoices.findIndex(v => /^pl/i.test(v.lang) && /premium|enhanced|rozszerz/i.test(v.name + ' ' + (v.voiceURI || ''))); }
+      if (vi < 0) vi = nativeVoices.findIndex(v => /^pl/i.test(v.lang));
+      await NTTS.speak({ text: t, lang: 'pl-PL', rate: S.opt.rate || 1.0, pitch: 1.0, volume: 1.0, category: 'playback', ...(vi >= 0 ? { voice: vi } : {}) });
+    } catch (e) {}
+    vBusy = false; setTimeout(vNext, 120); return;
+  }
   try {
     const vs = speechSynthesis.getVoices();
     voicePl = (S.opt.voiceName && vs.find(v => v.name === S.opt.voiceName)) || vs.find(v => /^pl/i.test(v.lang) && /premium|enhanced|rozszerz/i.test(v.name)) || vs.find(v => /^pl/i.test(v.lang)) || null;
@@ -694,8 +719,15 @@ function vNext() {
     setTimeout(() => { if (window._utt === u) { window._utt = null; vBusy = false; vNext(); } }, 12000);
   } catch (e) { vBusy = false; }
 }
-function fillVoices() {
-  const sel = $('#optVoiceName'); if (!sel || !('speechSynthesis' in window)) return;
+async function fillVoices() {
+  const sel = $('#optVoiceName'); if (!sel) return;
+  if (NTTS) {
+    try { nativeVoices = (await NTTS.getSupportedVoices()).voices || []; } catch (e) { nativeVoices = []; }
+    const vs = nativeVoices.filter(v => /^pl/i.test(v.lang));
+    sel.innerHTML = '<option value="">Automatycznie (najlepszy polski)</option>' + vs.map(v => `<option value="${esc(v.name)}">${esc(v.name)}${/premium|enhanced|rozszerz/i.test(v.name + ' ' + (v.voiceURI || '')) ? ' ★' : ''}</option>`).join('');
+    sel.value = S.opt.voiceName || ''; $('#voiceHint').textContent = vs.length + ' polskie głosy iOS (★ rozszerzone)'; return;
+  }
+  if (!('speechSynthesis' in window)) return;
   const vs = speechSynthesis.getVoices().filter(v => /^pl/i.test(v.lang));
   sel.innerHTML = '<option value="">Automatycznie</option>' + vs.map(v => `<option value="${esc(v.name)}">${esc(v.name.replace(/\s*\(.*?\)/g, ''))}${/premium|enhanced|rozszerz/i.test(v.name) ? ' ★' : ''}</option>`).join('');
   sel.value = S.opt.voiceName || '';
@@ -708,7 +740,7 @@ $('#voiceTest').addEventListener('click', () => { const was = S.opt.voice; S.opt
 
 /* wake lock – ekran nie gaśnie w czasie jazdy */
 let wake = null;
-async function keepAwake() { try { if ('wakeLock' in navigator) { wake = await navigator.wakeLock.request('screen'); } } catch (e) {} }
+async function keepAwake() { try { if (NKA) { await NKA.keepAwake(); return; } if ('wakeLock' in navigator) { wake = await navigator.wakeLock.request('screen'); } } catch (e) {} }
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && S.nav && !wake) keepAwake(); });
 
 /* symulacja: jedziemy po trasie 70 km/h, do testów w przeglądarce */
@@ -738,7 +770,7 @@ function showTab(t) {
   S.tab = t;
   $('#sheet').classList.toggle('hidden', t !== 'trasa'); $('#veh').classList.toggle('hidden', t !== 'veh'); $('#menu').classList.toggle('hidden', t !== 'menu'); $('#poi').classList.toggle('hidden', t !== 'poi'); $('#search').classList.toggle('hidden', t !== 'search'); $('#pick').classList.add('hidden');
   $('#hud').classList.toggle('hidden', !(t === 'jazda' && S.nav));
-  if (t === 'menu') fillVoices();
+  if (t === 'menu') { fillVoices(); if (NATIVE) $('#about').textContent = $('#about').textContent.replace(/·\s*(PWA|aplikacja natywna)/, '') + ' · aplikacja natywna'; }
   if (t === 'menu') $('#menuVeh').textContent = `Kamper ${fmt1(S.veh.h)} m · ${fmt1(S.veh.l)} m · ${fmt1(S.veh.t)} t`;
   $('#idle').classList.toggle('hidden', !(t === 'jazda' && !S.nav));
   if (t === 'jazda' && !S.nav) { $('#fVehTxt').textContent = `🚐 Kamper ${fmt1(S.veh.h)} m · ${fmt1(S.veh.t)} t`; $('#fViewTxt').textContent = S.opt.d3 ? '3D' : '2D'; }
@@ -892,7 +924,7 @@ $('#poiCol').addEventListener('click', e => { const it = e.target.closest('.pc')
 /* start */
 // komputer (mysz, brak dotyku, szeroki ekran) – tylko informacja z kodem QR; ?desk=1 wymusza pełną wersję do testów
 function isDesktop() {
-  if (new URLSearchParams(location.search).get('desk') === '1') return false;
+  if (NATIVE || new URLSearchParams(location.search).get('desk') === '1') return false;
   const touch = navigator.maxTouchPoints > 0 || 'ontouchstart' in window;
   const coarse = matchMedia('(pointer: coarse)').matches;
   return !touch && !coarse && window.innerWidth > 1024;

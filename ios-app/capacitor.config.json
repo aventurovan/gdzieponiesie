@@ -1,0 +1,26 @@
+{
+  "appId": "pl.gdzieponiesie.gps",
+  "appName": "GdziePoniesie GPS",
+  "webDir": "www",
+  "server": {
+    "url": "https://gdzieponiesie.pl/gps/",
+    "allowNavigation": [
+      "gdzieponiesie.pl",
+      "*.gdzieponiesie.pl",
+      "*.workers.dev",
+      "tiles.openfreemap.org",
+      "unpkg.com",
+      "fonts.googleapis.com",
+      "fonts.gstatic.com"
+    ]
+  },
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#161C2B",
+    "allowsLinkPreview": false,
+    "scrollEnabled": false
+  },
+  "plugins": {
+    "BackgroundGeolocation": {}
+  }
+}

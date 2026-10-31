@@ -1,0 +1,72 @@
+name: Build IPA (iOS)
+
+# Ręcznie: Actions → „Build IPA (iOS)” → Run workflow.
+# Buduje niepodpisany .ipa (Capacitor + Xcode) – podpis w Signulous/Sideloadly.
+on:
+  workflow_dispatch:
+
+concurrency: ipa
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - name: Pobranie plików z repo
+        uses: actions/checkout@v5
+
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Zależności Capacitor
+        working-directory: ios-app
+        run: npm install --no-audit --no-fund
+
+      - name: Projekt Xcode (cap add ios)
+        working-directory: ios-app
+        run: |
+          npx cap add ios
+          npx capacitor-assets generate --ios --iconBackgroundColor '#161C2B' --iconBackgroundColorDark '#161C2B' --splashBackgroundColor '#161C2B' --splashBackgroundColorDark '#161C2B'
+          npx cap sync ios
+
+      - name: Info.plist – lokalizacja w tle, głos, orientacja
+        working-directory: ios-app/ios/App/App
+        run: |
+          PL=Info.plist
+          /usr/libexec/PlistBuddy -c "Add :NSLocationWhenInUseUsageDescription string 'Nawigacja prowadzi kamper po trasie.'" $PL || true
+          /usr/libexec/PlistBuddy -c "Add :NSLocationAlwaysAndWhenInUseUsageDescription string 'Nawigacja działa także przy zgaszonym ekranie.'" $PL || true
+          /usr/libexec/PlistBuddy -c "Add :NSLocationAlwaysUsageDescription string 'Nawigacja działa także przy zgaszonym ekranie.'" $PL || true
+          /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes array" $PL || true
+          /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes:0 string location" $PL || true
+          /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes:1 string audio" $PL || true
+          /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName 'GdziePoniesie'" $PL || /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string 'GdziePoniesie'" $PL
+          /usr/libexec/PlistBuddy -c "Add :CFBundleDevelopmentRegion string pl" $PL || /usr/libexec/PlistBuddy -c "Set :CFBundleDevelopmentRegion pl" $PL
+          /usr/libexec/PlistBuddy -c "Add :UIViewControllerBasedStatusBarAppearance bool true" $PL || true
+          /usr/libexec/PlistBuddy -c "Add :ITSAppUsesNonExemptEncryption bool false" $PL || true
+          plutil -lint $PL
+
+      - name: Archiwum Xcode (bez podpisu)
+        working-directory: ios-app/ios/App
+        run: |
+          xcodebuild -workspace App.xcworkspace -scheme App -configuration Release -sdk iphoneos \
+            -archivePath "$PWD/build/App.xcarchive" archive \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" DEVELOPMENT_TEAM="" \
+            IPHONEOS_DEPLOYMENT_TARGET=15.0 | xcpretty || true
+          test -d "$PWD/build/App.xcarchive/Products/Applications/App.app"
+
+      - name: Pakowanie .ipa
+        working-directory: ios-app/ios/App/build
+        run: |
+          mkdir -p Payload
+          cp -R App.xcarchive/Products/Applications/App.app Payload/
+          zip -qry GdziePoniesie-GPS-unsigned.ipa Payload
+          ls -la GdziePoniesie-GPS-unsigned.ipa
+
+      - name: Artefakt
+        uses: actions/upload-artifact@v4
+        with:
+          name: GdziePoniesie-GPS-unsigned
+          path: ios-app/ios/App/build/GdziePoniesie-GPS-unsigned.ipa
+          retention-days: 14
