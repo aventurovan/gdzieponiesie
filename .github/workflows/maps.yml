@@ -49,19 +49,19 @@ jobs:
           cc = sys.argv[1].upper()
           # kod → (obszar Geofabrik, nazwa)
           M = {
-            'PL': ('europe/poland', 'Polska'), 'CZ': ('europe/czech-republic', 'Czechy'), 'SK': ('europe/slovakia', 'Słowacja'),
-            'AT': ('europe/austria', 'Austria'), 'HU': ('europe/hungary', 'Węgry'), 'HR': ('europe/croatia', 'Chorwacja'),
-            'SI': ('europe/slovenia', 'Słowenia'), 'DE': ('europe/germany', 'Niemcy'), 'CH': ('europe/switzerland', 'Szwajcaria'),
-            'IT-NE': ('europe/italy/nord-est', 'Włochy płn.-wsch.'), 'IT-NW': ('europe/italy/nord-ovest', 'Włochy płn.-zach.'),
-            'IT-C': ('europe/italy/centro', 'Włochy środk.'), 'IT-S': ('europe/italy/sud', 'Włochy płd.'),
-            'RS': ('europe/serbia', 'Serbia'), 'BA': ('europe/bosnia-herzegovina', 'Bośnia i Hercegowina'), 'ME': ('europe/montenegro', 'Czarnogóra'),
-            'AL': ('europe/albania', 'Albania'), 'MK': ('europe/macedonia', 'Macedonia Płn.'), 'GR': ('europe/greece', 'Grecja'),
-            'BG': ('europe/bulgaria', 'Bułgaria'), 'RO': ('europe/romania', 'Rumunia'), 'UA': ('europe/ukraine', 'Ukraina'),
-            'NL': ('europe/netherlands', 'Holandia'), 'BE': ('europe/belgium', 'Belgia'), 'DK': ('europe/denmark', 'Dania'),
-            'SE': ('europe/sweden', 'Szwecja'), 'NO': ('europe/norway', 'Norwegia'), 'LT': ('europe/lithuania', 'Litwa'),
-            'LV': ('europe/latvia', 'Łotwa'), 'EE': ('europe/estonia', 'Estonia'), 'ES': ('europe/spain', 'Hiszpania'), 'PT': ('europe/portugal', 'Portugalia'),
-            'FR-ALPES': ('europe/france/rhone-alpes', 'Francja: Alpy'), 'FR-PACA': ('europe/france/provence-alpes-cote-d-azur', 'Francja: Prowansja'),
-            'FR-ALSACE': ('europe/france/alsace', 'Francja: Alzacja'),
+            'PL': ('poland', 'Polska'), 'CZ': ('czech-republic', 'Czechy'), 'SK': ('slovakia', 'Słowacja'),
+            'AT': ('austria', 'Austria'), 'HU': ('hungary', 'Węgry'), 'HR': ('croatia', 'Chorwacja'),
+            'SI': ('slovenia', 'Słowenia'), 'DE': ('germany', 'Niemcy'), 'CH': ('switzerland', 'Szwajcaria'),
+            'IT-NE': ('italy/nord-est', 'Włochy płn.-wsch.'), 'IT-NW': ('italy/nord-ovest', 'Włochy płn.-zach.'),
+            'IT-C': ('italy/centro', 'Włochy środk.'), 'IT-S': ('italy/sud', 'Włochy płd.'),
+            'RS': ('serbia', 'Serbia'), 'BA': ('bosnia-herzegovina', 'Bośnia i Hercegowina'), 'ME': ('montenegro', 'Czarnogóra'),
+            'AL': ('albania', 'Albania'), 'MK': ('macedonia', 'Macedonia Płn.'), 'GR': ('greece', 'Grecja'),
+            'BG': ('bulgaria', 'Bułgaria'), 'RO': ('romania', 'Rumunia'), 'UA': ('ukraine', 'Ukraina'),
+            'NL': ('netherlands', 'Holandia'), 'BE': ('belgium', 'Belgia'), 'DK': ('denmark', 'Dania'),
+            'SE': ('sweden', 'Szwecja'), 'NO': ('norway', 'Norwegia'), 'LT': ('lithuania', 'Litwa'),
+            'LV': ('latvia', 'Łotwa'), 'EE': ('estonia', 'Estonia'), 'ES': ('spain', 'Hiszpania'), 'PT': ('portugal', 'Portugalia'),
+            'FR-ALPES': ('france/rhone-alpes', 'Francja: Alpy'), 'FR-PACA': ('france/provence-alpes-cote-d-azur', 'Francja: Prowansja'),
+            'FR-ALSACE': ('france/alsace', 'Francja: Alzacja'),
           }
           if cc not in M: raise SystemExit('nieznany kod kraju: ' + cc)
           area, name = M[cc]
