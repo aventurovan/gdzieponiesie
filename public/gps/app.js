@@ -129,6 +129,11 @@ function addLayers() {
   if (S.poi) drawPoi();
 }
 const TRAFFIC_COLOR = m => m >= 3 ? '#D92D20' : m === 2 ? '#F2A33A' : '#F2C230';
+function fitRoute() {
+  const r = S.route; if (!r || !r.bbox) return;
+  const bb = (S.routes || [r]).reduce((b, x) => [Math.min(b[0], x.bbox[0]), Math.min(b[1], x.bbox[1]), Math.max(b[2], x.bbox[2]), Math.max(b[3], x.bbox[3])], r.bbox.slice());
+  map.fitBounds([[bb[0], bb[1]], [bb[2], bb[3]]], { padding: { top: ($('#sheet .top')?.offsetHeight || 230) + 40, bottom: ($('#tBottom')?.offsetHeight || 180) + 40, left: 40, right: 40 }, pitch: 0, bearing: 0, duration: 600 });
+}
 function drawRoute() {
   if (!map.getSource('route')) return;
   const r = S.route, f = [];
@@ -137,8 +142,7 @@ function drawRoute() {
   f.push({ type: 'Feature', properties: { k: 'pt', c: '#3A74FF' }, geometry: { type: 'Point', coordinates: r.coords[0] } });
   f.push({ type: 'Feature', properties: { k: 'pt', c: '#1a1d24' }, geometry: { type: 'Point', coordinates: r.coords[r.coords.length - 1] } });
   map.getSource('route').setData({ type: 'FeatureCollection', features: f });
-  if (!S.nav && r.bbox) { const bb = (S.routes || [r]).reduce((b, x) => [Math.min(b[0], x.bbox[0]), Math.min(b[1], x.bbox[1]), Math.max(b[2], x.bbox[2]), Math.max(b[3], x.bbox[3])], r.bbox.slice());
-    map.fitBounds([[bb[0], bb[1]], [bb[2], bb[3]]], { padding: { top: ($('#sheet .top')?.offsetHeight || 230) + 40, bottom: ($('#tBottom')?.offsetHeight || 180) + 110, left: 40, right: 40 }, pitch: 0, bearing: 0, duration: 600 }); }
+  if (!S.nav) fitRoute();
 }
 function setView3d(on) {
   S.opt.d3 = on; store.set('opt', S.opt); $('#opt3d').checked = on; $('#btnView').textContent = on ? '3D' : '2D';
@@ -221,6 +225,7 @@ async function computeRoute(fromPos) {
 function selectAlt(i) {
   if (!S.routes || !S.routes[i]) return;
   S.altIdx = i; S.route = S.routes[i]; renderSummary(); drawRoute(); drawAlts();
+  if (S.nav) { NAV.idx = 0; NAV.prog = 0; NAV.stepI = 0; NAV.said = {}; drawProgressMarks(); }
 }
 let altMarkers = [];
 function drawAlts() {
@@ -232,15 +237,20 @@ function drawAlts() {
   const rs = S.routes || []; const feats = [];
   rs.forEach((r, i) => {
     if (i !== S.altIdx) feats.push({ type: 'Feature', properties: { i }, geometry: { type: 'LineString', coordinates: r.coords } });
-    if (rs.length > 1 && !S.nav) {
+    if (rs.length > 1 && S.tab === 'trasa') {
       const mid = r.coords[Math.floor(r.coords.length * (0.4 + i * 0.1))];
       const el = document.createElement('div'); el.className = 'bub' + (i === S.altIdx ? ' on' : ''); el.textContent = hm(r.sec); el.addEventListener('click', () => selectAlt(i));
       altMarkers.push(new maplibregl.Marker({ element: el, anchor: 'bottom' }).setLngLat(mid).addTo(map));
     }
   });
   map.getSource('alts').setData({ type: 'FeatureCollection', features: feats });
-  $('#tDots').innerHTML = rs.length > 1 ? rs.map((_, i) => `<i class="${i === S.altIdx ? 'on' : ''}"></i>`).join('') : '';
+  $('#tDots').innerHTML = rs.length > 1 ? rs.map((_, i) => `<i data-alt="${i}" class="${i === S.altIdx ? 'on' : ''}"></i>`).join('') : '';
 }
+$('#tDots').addEventListener('click', e => { const d = e.target.closest('[data-alt]'); if (d) selectAlt(+d.dataset.alt); });
+// przesunięcie palcem po dolnej karcie przełącza wariant
+let swX = null;
+$('#tBottom').addEventListener('touchstart', e => { swX = e.touches[0].clientX; }, { passive: true });
+$('#tBottom').addEventListener('touchend', e => { if (swX == null || !S.routes || S.routes.length < 2) return; const dx = e.changedTouches[0].clientX - swX; swX = null; if (Math.abs(dx) < 40) return; selectAlt((S.altIdx + (dx < 0 ? 1 : S.routes.length - 1)) % S.routes.length); });
 function renderSummary() {
   const r = S.route, eta = new Date(Date.now() + r.sec * 1000);
   const tunnelsTxt = (r.tunnels || []).length ? `<span class="tag">tunele ${r.tunnels.length}</span>` : '';
@@ -356,6 +366,12 @@ function fillRouteOpts() {
   const r = S.route; $('#rNote').textContent = r ? `${Math.round(r.km)} km · ${hm(r.sec)}${r.byCountry ? ' · odcinkami między granicami' : ''}` : '';
   fillCountryTable($('#rCcTable'));
 }
+document.addEventListener('click', e => {
+  const cl = e.target.closest('#veh [data-close], #menu [data-close], #poi [data-close]'); if (cl) { showTab(S.nav ? 'jazda' : (S.prevTab && S.prevTab !== S.tab ? S.prevTab : 'jazda')); return; }
+  const go = e.target.closest('#menu [data-go]'); if (go) { e.preventDefault(); showTab(go.dataset.go); }
+});
+$('#tBack').addEventListener('click', () => showTab('jazda'));
+$('#fMenu').addEventListener('click', () => showTab('menu'));
 $('#tOpts').addEventListener('click', () => { fillRouteOpts(); $('#ropts').classList.remove('hidden'); });
 $('#roptsClose').addEventListener('click', () => $('#ropts').classList.add('hidden'));
 $('#tVeh').addEventListener('click', () => showTab('veh'));
@@ -414,7 +430,7 @@ function navStep(f) {
   // przeliczenie tylko w ruchu (>8 km/h) – na postoju obok drogi nie zjadamy limitu ORS
   if (NAV.offCount >= 5 && (f.speed || 0) > 2.2 && Date.now() - NAV.lastReroute > 20000) reroute(f);
   // kamera
-  if (S.follow) {
+  if (S.follow && S.tab === 'jazda') {
     const kmh = (f.speed || 0) * 3.6;
     let zoom = kmh > 90 ? 15.6 : kmh > 50 ? 16.3 : 17;
     const cs = currentStep(); if (cs && cs.dist < 600 && cs.s.t !== 10) zoom = Math.max(zoom, cs.dist < 250 ? 17.8 : 17.2);
@@ -580,19 +596,20 @@ function stopSim() { if (simT) { clearInterval(simT); simT = null; } }
 
 /* ---------- UI ---------- */
 function showTab(t) {
+  if (t !== S.tab) S.prevTab = S.tab;
   S.tab = t;
   $('#sheet').classList.toggle('hidden', t !== 'trasa'); $('#veh').classList.toggle('hidden', t !== 'veh'); $('#menu').classList.toggle('hidden', t !== 'menu'); $('#poi').classList.toggle('hidden', t !== 'poi');
   $('#hud').classList.toggle('hidden', !(t === 'jazda' && S.nav));
-  if (t === 'jazda' && S.nav) $('.tabs').classList.add('hidden'); else $('.tabs').classList.remove('hidden');
+  if (t === 'menu') $('#menuVeh').textContent = `Kamper ${fmt1(S.veh.h)} m · ${fmt1(S.veh.l)} m · ${fmt1(S.veh.t)} t`;
   $('#idle').classList.toggle('hidden', !(t === 'jazda' && !S.nav));
   if (t === 'jazda' && !S.nav) { $('#fVehTxt').textContent = `🚐 Kamper ${fmt1(S.veh.h)} m · ${fmt1(S.veh.t)} t`; $('#fViewTxt').textContent = S.opt.d3 ? '3D' : '2D'; }
   $$('.tabs button').forEach(b => { if (b.dataset.tab === t) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
   if (t === 'veh') fillVeh();
-  if (t === 'trasa' && S.route && !S.nav) setTimeout(() => { drawRoute(); drawAlts(); }, 50);
+  if (t === 'trasa' && S.route) setTimeout(() => { fitRoute(); drawAlts(); }, 50);
+  if (t === 'jazda' && S.nav) { S.follow = true; $('#btnRecenter').hidden = true; }
   if (t !== 'trasa') { altMarkers.forEach(m => m.remove()); altMarkers = []; }
   if (t === 'poi') renderPoi();
 }
-$('.tabs').addEventListener('click', e => { const b = e.target.closest('button'); if (b) showTab(b.dataset.tab); });
 $('#btnView').addEventListener('click', () => setView3d(!S.opt.d3));
 $('#opt3d').addEventListener('change', e => setView3d(e.target.checked));
 $('#optNight').addEventListener('change', e => setNight(e.target.checked));
@@ -742,7 +759,7 @@ function isDesktop() {
   return !touch && !coarse && window.innerWidth > 1024;
 }
 function init() {
-  if (isDesktop()) { $('#desk').classList.remove('hidden'); $('.tabs').classList.add('hidden'); $('#sheet').classList.add('hidden'); return; }
+  if (isDesktop()) { $('#desk').classList.remove('hidden'); $('#sheet').classList.add('hidden'); return; }
   document.body.classList.toggle('night', !!S.opt.night);
   $('#optVoice').checked = !!S.opt.voice; $('#opt3d').checked = !!S.opt.d3; $('#optNight').checked = !!S.opt.night; $('#optSim').checked = !!S.opt.sim;
   $$('#modes button').forEach(x => x.setAttribute('aria-pressed', x.dataset.mode === S.mode));

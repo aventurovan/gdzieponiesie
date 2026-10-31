@@ -279,3 +279,26 @@ body.night .cc{background:#1f2634}body.night .cc-r{border-color:#2E3647;color:#c
 /* dymki wariantów na mapie */
 .bub{background:#1a1d24;color:#fff;border-radius:12px;padding:6px 12px;font-size:14px;font-weight:800;white-space:nowrap;box-shadow:0 3px 10px rgba(0,0,0,.3);cursor:pointer}
 .bub.on{background:var(--blue)}
+
+/* ===== bez dolnych zakładek; ciemne pełnoekranowe arkusze ===== */
+.tabs{display:none!important}
+.quick.full{top:0;bottom:0;max-height:none;border-radius:0;padding-top:calc(var(--sat) + 10px);padding-bottom:calc(var(--sab) + 20px)}
+.quick .box{background:#222A3A;color:#fff}
+.quick .box label{border-color:#2E3647}
+.quick .box label span,.quick .box .num span,.quick .list .sw span{color:#fff}
+.quick .box .num small,.quick .list .it small,.quick .list .sw small,.quick .sec{color:#8b93a5}
+.quick .box input{color:#fff}.quick .box .num input{background:#161C2B}
+.quick .list .it{border-color:#2E3647;color:#fff}
+.quick .list input[type=checkbox]{background:#3a4256}.quick .list input[type=checkbox]:checked{background:#1E8A4C}
+.quick .hero{background:#0F1420}.quick .note{background:#1f2634;color:#cfd3dc}
+.quick .soon{background:#2E3647;color:#cfd3dc}.quick .chev{color:#8b93a5}
+.quick .chips button{background:#222A3A;color:#fff}.quick .chips button[aria-pressed=true]{background:var(--blue)}
+.quick .poi-it{background:#222A3A;color:#fff}.quick .poi-it small{color:#8b93a5}.quick .poi-it .r small{color:var(--green)}
+.quick .primary{background:var(--blue)}.quick .mini{background:#2E3647;color:#fff}.quick #poiStatus{color:#8b93a5}
+.quick .row-h small{color:#8b93a5}
+.trasa .bottom{bottom:0;padding-bottom:calc(var(--sab) + 14px)}
+.fab.bl{bottom:calc(var(--sab) + 96px)}.fab.bl2{bottom:calc(var(--sab) + 26px)}.fab.br{bottom:calc(var(--sab) + 26px)}.chip-veh{bottom:calc(var(--sab) + 30px)}
+.fab.tr{right:14px;top:calc(var(--sat) + 14px);border-radius:18px}.fab.tr2{right:14px;top:calc(var(--sat) + 84px);border-radius:50%}
+.trow-wrap{display:flex;align-items:flex-start;gap:8px}
+.trows{flex:1;min-width:0}
+.tback{width:44px;height:52px;border:0;background:none;color:#fff;font-size:30px;font-weight:700;line-height:1;flex:none;padding:0}
