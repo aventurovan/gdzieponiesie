@@ -361,3 +361,6 @@ body.night #map{background:#1C2029}
 
 .cam{right:14px;top:calc(var(--sat) + 130px);background:#D92D20;color:#fff;border-radius:16px;padding:8px 12px;display:flex;align-items:center;gap:10px;z-index:6;box-shadow:0 4px 14px rgba(0,0,0,.3)}
 .cam b{display:block;font-size:18px;font-weight:800;line-height:1}.cam small{display:block;font-size:11px;font-weight:700;opacity:.9}
+
+.netbadge{position:fixed;left:50%;transform:translateX(-50%);top:calc(var(--sat) + 8px);z-index:20;background:#D92D20;color:#fff;font-size:12px;font-weight:800;padding:6px 12px;border-radius:12px}
+.tlink{display:block;margin:10px auto 0;border:0;background:none;color:#5B8CFF;font-family:inherit;font-size:14px;font-weight:700}

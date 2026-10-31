@@ -353,7 +353,7 @@ async function computeRoute(fromPos) {
   // warianty z TomTom: główna + alternatywy, każda jako pełna trasa
   S.routes = fromPos ? [j] : [j, ...(j.alts || []).map(alt => ({ ...j, ...alt, alts: undefined, total: alt.cum[alt.cum.length - 1] }))];
   delete j.alts; S.altIdx = 0; S.route = j;
-  if (!fromPos) { renderSummary(); drawRoute(); drawAlts(); $('#btnGo').classList.remove('hidden'); }
+  if (!fromPos) { renderSummary(); drawRoute(); drawAlts(); $('#btnGo').classList.remove('hidden'); $('#tOffline').classList.remove('hidden'); }
   return j;
 }
 function selectAlt(i) {
@@ -691,6 +691,7 @@ function dropPassedVia() {
 function nearestIdx(p) { const r = S.route; let best = Infinity, bi = -1; for (let i = 0; i < r.coords.length; i += 3) { const d = dist(r.coords[i], p); if (d < best) { best = d; bi = i; } } return best < 2000 ? bi : -1; }
 async function reroute(f) {
   NAV.lastReroute = Date.now(); NAV.offCount = 0; dropPassedVia();
+  if (!navigator.onLine) { $('#manRoad').textContent = 'Brak sieci — wróć na trasę'; if (!NAV.said.offl) { NAV.said.offl = 1; speak('Brak zasięgu. Wróć na zapisaną trasę.'); } return; }
   $('#manRoad').textContent = 'Przeliczam trasę…';
   const j = await computeRoute({ lon: f.lon, lat: f.lat });
   if (!j) return;
@@ -864,7 +865,7 @@ function showTab(t) {
   S.tab = t;
   $('#sheet').classList.toggle('hidden', t !== 'trasa'); $('#veh').classList.toggle('hidden', t !== 'veh'); $('#menu').classList.toggle('hidden', t !== 'menu'); $('#poi').classList.toggle('hidden', t !== 'poi'); $('#search').classList.toggle('hidden', t !== 'search'); $('#pick').classList.add('hidden');
   $('#hud').classList.toggle('hidden', !(t === 'jazda' && S.nav));
-  if (t === 'menu') { fillVoices(); fillSettings(); if (NATIVE) { const AP = plugin('App'); (AP ? AP.getInfo() : Promise.resolve(null)).then(i => { $('#about').textContent = $('#about').textContent.replace(/\s*·\s*aplikacja natywna.*$/, '') + ' · aplikacja natywna' + (i ? ' v' + i.version + ' (build ' + i.build + ')' : ''); }).catch(() => {}); } }
+  if (t === 'menu') { fillVoices(); fillSettings(); renderOffline(); if (NATIVE) { const AP = plugin('App'); (AP ? AP.getInfo() : Promise.resolve(null)).then(i => { $('#about').textContent = $('#about').textContent.replace(/\s*·\s*aplikacja natywna.*$/, '') + ' · aplikacja natywna' + (i ? ' v' + i.version + ' (build ' + i.build + ')' : ''); }).catch(() => {}); } }
   if (t === 'menu') { const p = S.profiles.find(x => x.id === S.vehId) || {}; $('#menuVeh').textContent = `${p.name || 'Kamper'} · ${fmt1(S.veh.h)} m · ${fmt1(S.veh.l)} m · ${fmt1(S.veh.t)} t`; }
   $('#idle').classList.toggle('hidden', !(t === 'jazda' && !S.nav));
   if (t === 'jazda' && !S.nav) { const p = S.profiles.find(x => x.id === S.vehId) || {}; $('#fVehTxt').textContent = `🚐 ${p.name || 'Kamper'} · ${fmt1(S.veh.h)} m · ${fmt1(S.veh.t)} t`; $('#fViewTxt').textContent = S.opt.d3 ? '3D' : '2D'; }
@@ -903,6 +904,7 @@ $('#quick').addEventListener('click', e => {
   else if (q === 'steps') { fillSteps(); qPanel('steps'); }
   else if (q === 'data') { fillData(); qPanel('data'); }
   else if (q === 'poi') { $('#quick').classList.add('hidden'); S.openedFrom = 'jazda'; showTab('poi'); }
+  else if (q === 'offline') { $('#quick').classList.add('hidden'); S.openedFrom = 'jazda'; showTab('menu'); setTimeout(saveOffline, 300); }
   else if (q === 'recenter') { S.follow = true; $('#btnRecenter').hidden = true; $('#quick').classList.add('hidden'); }
   else if (q === 'menu') { $('#quick').classList.add('hidden'); S.openedFrom = 'jazda'; showTab('menu'); }
 });
@@ -1016,6 +1018,66 @@ function updatePoiCol() {
 $('#poiCol').addEventListener('click', e => { const it = e.target.closest('.pc'); if (!it) return; const p = S.poi.find(x => x.id === it.dataset.id); if (p && confirm('Nawigować do: ' + (p.name || POI_KIND[p.kind]?.[0] || 'miejsce') + '?')) goTo(p); });
 
 
+/* ---------- offline: zapis trasy + kafelki korytarza ---------- */
+let SWR = null;
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js', { scope: '/gps/' }).then(r => { SWR = r; }).catch(() => {});
+function swMsg(msg, onProgress) {
+  return new Promise(res => {
+    const sw = navigator.serviceWorker.controller || (SWR && SWR.active); if (!sw) return res(null);
+    const ch = new MessageChannel(); ch.port1.onmessage = e => { if (e.data.type === 'progress') onProgress && onProgress(e.data); else res(e.data); };
+    sw.postMessage(msg, [ch.port2]);
+  });
+}
+const d2r = Math.PI / 180;
+function tileXY(lon, lat, z) { const n = 2 ** z; return [Math.floor((lon + 180) / 360 * n), Math.floor((1 - Math.log(Math.tan(lat * d2r) + 1 / Math.cos(lat * d2r)) / Math.PI) / 2 * n)]; }
+function corridorTiles(coords, zooms, widthM) {
+  const set = new Set();
+  for (const z of zooms) {
+    const n = 2 ** z, deg = 360 / n; const pad = Math.ceil(widthM / (40075000 * Math.cos(coords[0][1] * d2r) / n) / 2);
+    const step = Math.max(1, Math.floor(coords.length / 3000));
+    for (let i = 0; i < coords.length; i += step) {
+      const [x, y] = tileXY(coords[i][0], coords[i][1], z);
+      for (let dx = -pad; dx <= pad; dx++) for (let dy = -pad; dy <= pad; dy++) set.add(z + '/' + (x + dx) + '/' + (y + dy));
+    }
+  }
+  return [...set];
+}
+async function saveOffline() {
+  const r = S.route; if (!r) return;
+  const st = $('#offStatus'); st.textContent = 'Przygotowuję…';
+  const src = map.getSource('openmaptiles'); const tpl = src && src.tiles && src.tiles[0]; if (!tpl) { st.textContent = 'Nie mogę ustalić adresu kafelków.'; return; }
+  const keys = [...corridorTiles(r.coords, [6, 7, 8, 9, 10, 11, 12], 3000), ...corridorTiles(r.coords, [13, 14], 1200)];
+  const urls = keys.map(k => { const [z, x, y] = k.split('/'); return tpl.replace('{z}', z).replace('{x}', x).replace('{y}', y); });
+  // styl, sprite, czcionki (łacina + polskie znaki)
+  const style = map.getStyle(); urls.push(STYLE.light, STYLE.dark);
+  if (style.sprite) urls.push(style.sprite + '.json', style.sprite + '.png', style.sprite + '@2x.json', style.sprite + '@2x.png');
+  const fonts = new Set(); for (const l of style.layers) { const f = l.layout && l.layout['text-font']; if (Array.isArray(f)) fonts.add(f.join(',')); }
+  for (const f of fonts) for (const rg of ['0-255', '256-511']) urls.push((style.glyphs || '').replace('{fontstack}', encodeURIComponent(f)).replace('{range}', rg));
+  store.set('offline', { savedAt: Date.now(), to: S.to, via: S.via, route: r, poi: S.poi || [], tiles: urls.length });
+  st.textContent = `Pobieram ${urls.length} kafelków…`;
+  const res = await swMsg({ type: 'prefetch', urls }, p => { st.textContent = `Pobieram… ${p.done}/${urls.length}` + (p.fail ? ` (błędy: ${p.fail})` : ''); });
+  st.textContent = res ? `Zapisano: trasa + ${res.done - res.fail} kafelków` + (res.fail ? ` (${res.fail} nie udało się)` : '') : 'Service worker niedostępny — zapisano tylko trasę.';
+  renderOffline();
+}
+function loadOffline() {
+  const o = store.get('offline', null); if (!o || !o.route) return false;
+  S.to = o.to; S.via = o.via || []; if (S.to) { $('#to').textContent = S.to.name; $('#to').classList.remove('empty'); } renderViaChips();
+  S.route = o.route; S.route.total = o.route.cum[o.route.cum.length - 1]; S.routes = [S.route]; S.altIdx = 0; S.poi = o.poi || [];
+  renderSummary(false); drawRoute(); drawPoi(); $('#btnGo').classList.remove('hidden'); return true;
+}
+async function renderOffline() {
+  const o = store.get('offline', null); const el = $('#offInfo'); if (!el) return;
+  const sz = await swMsg({ type: 'size' });
+  el.innerHTML = o ? `<b>${esc(o.to ? o.to.name : 'trasa')}</b><small>${new Date(o.savedAt).toLocaleString('pl-PL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} · ${Math.round(o.route.km)} km · kafelki w pamięci: ${sz ? sz.count : '?'}</small>` : '<b>Brak zapisanej trasy</b><small>Wyznacz trasę i dotknij „Zapisz offline"</small>';
+  $('#offLoad').hidden = !o; $('#offClear').hidden = !o && !(sz && sz.count);
+}
+$('#offSave').addEventListener('click', saveOffline);
+$('#tOffline').addEventListener('click', () => { S.openedFrom = 'trasa'; showTab('menu'); setTimeout(saveOffline, 300); });
+$('#offLoad').addEventListener('click', () => { if (loadOffline()) showTab('trasa'); });
+$('#offClear').addEventListener('click', async () => { if (!confirm('Usunąć zapisaną trasę i kafelki?')) return; store.set('offline', null); await swMsg({ type: 'clear' }); renderOffline(); });
+window.addEventListener('online', () => $('#netBadge').classList.add('hidden'));
+window.addEventListener('offline', () => $('#netBadge').classList.remove('hidden'));
+
 /* start */
 // komputer (mysz, brak dotyku, szeroki ekran) – tylko informacja z kodem QR; ?desk=1 wymusza pełną wersję do testów
 function isDesktop() {
@@ -1035,6 +1097,7 @@ function init() {
   const u = new URLSearchParams(location.search);
   if (u.get('to')) { const [lon, lat, ...n] = u.get('to').split(','); S.to = { lon: +lon, lat: +lat, name: n.join(',') || 'Cel' }; $('#to').textContent = S.to.name; $('#to').classList.remove('empty'); } else { $('#to').classList.add('empty'); }
   $('#from').classList.add('empty'); $('#viaAdd').classList.add('empty');
+  if (!navigator.onLine) { $('#netBadge').classList.remove('hidden'); if (loadOffline()) { showTab('trasa'); return; } }
   showTab(S.to ? 'trasa' : 'jazda');
 }
 init();

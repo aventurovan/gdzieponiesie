@@ -13,7 +13,7 @@
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800&display=swap">
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
-<link rel="stylesheet" href="style.css?v=22">
+<link rel="stylesheet" href="style.css?v=23">
 </head>
 <body>
 <div id="desk" class="desk hidden">
@@ -25,6 +25,7 @@
   </div>
 </div>
 <div id="map"></div>
+<div id="netBadge" class="netbadge hidden">Brak sieci — jazda po zapisanej trasie</div>
 
 <!-- ekran JAZDA -->
 <div id="hud" class="hud hidden">
@@ -117,6 +118,7 @@
     <div class="row-h"><h1>Dodatkowe funkcje</h1><button type="button" class="x" data-back aria-label="Wróć">‹</button></div>
     <div class="qgrid">
       <button type="button" data-q="poi"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-6-5.3-6-10a6 6 0 0 1 12 0c0 4.7-6 10-6 10z"/><path d="M12 8v6M9 11h6"/></svg>POI przy trasie</button>
+      <button type="button" data-q="offline"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M4 20h16"/></svg>Zapisz offline</button>
       <button type="button" data-q="recenter"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z"/><path d="M9 4v14M15 6v14"/></svg>Wyśrodkuj</button>
       <button type="button" data-q="menu"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Ustawienia</button>
     </div>
@@ -170,6 +172,7 @@
     <div class="tsum hidden" id="tSum"></div>
     <div class="tdots" id="tDots"></div>
     <button class="primary go hidden" id="btnGo" type="button">Rozpocznij</button>
+    <button type="button" class="tlink hidden" id="tOffline">⤓ Zapisz trasę offline</button>
     <button class="primary hidden" id="btnRoute" type="button">Wyznacz trasę</button>
   </div>
   <div class="hidden" id="tiles"></div><div class="hidden" id="routeInfo"></div><div class="hidden" id="modes"></div><div class="hidden" id="ccTable"></div>
@@ -283,8 +286,9 @@
 
   <div class="sec">Aplikacja</div>
   <div class="box list">
-    <div class="it"><div><b>Mapy offline</b><small>pobieranie regionów — w przygotowaniu</small></div><span class="soon">wkrótce</span></div>
-    <div class="it"><div><b>O aplikacji</b><small id="about">Azimo · 0.7 · © OpenStreetMap, OpenFreeMap, TomTom, openrouteservice · kolejki: nakordoni.eu</small></div></div>
+    <div class="it"><div id="offInfo"><b>Brak zapisanej trasy</b><small>Wyznacz trasę i dotknij „Zapisz offline"</small></div></div>
+    <div class="it" style="gap:8px"><button type="button" class="mini" id="offSave">Zapisz offline</button><button type="button" class="mini" id="offLoad" hidden>Wczytaj</button><button type="button" class="mini" id="offClear" hidden>Usuń</button><small id="offStatus" style="flex:1;font-size:12px;color:#8b93a5"></small></div>
+    <div class="it"><div><b>O aplikacji</b><small id="about">Azimo · 0.8 · © OpenStreetMap, OpenFreeMap, TomTom, openrouteservice · kolejki: nakordoni.eu</small></div></div>
   </div>
 </div>
 
@@ -301,6 +305,6 @@
 
 <script src="../assets/config.js"></script>
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
-<script src="app.js?v=31"></script>
+<script src="app.js?v=32"></script>
 </body>
 </html>
