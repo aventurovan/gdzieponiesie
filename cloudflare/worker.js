@@ -231,6 +231,15 @@ export default {
         }
         return await handleGpsLimits(request, env, cors);
       }
+      // --- kafelki TomTom przez Worker (klucz zostaje po stronie serwera; cache na brzegu)
+      if (url.pathname.startsWith('/gps/tt/') && request.method === 'GET') {
+        if (!ALLOWED_ORIGINS.includes(origin) && !ALLOWED_ORIGINS.includes('https://' + (request.headers.get('Referer') || '').split('/')[2])) return json({ error: 'Ta strona nie ma dostępu do API.' }, 403, cors);
+        return await handleTtMap(request, url, env, cors);
+      }
+      if (url.pathname === '/gps/lanes' && request.method === 'POST') {
+        if (!ALLOWED_ORIGINS.includes(origin)) return json({ error: 'Ta strona nie ma dostępu do API.' }, 403, cors);
+        return await handleGpsLanes(request, env, cors);
+      }
       if (url.pathname === '/gps/revgeo' && request.method === 'GET') {
         if (!ALLOWED_ORIGINS.includes(origin)) return json({ error: 'Ta strona nie ma dostępu do API.' }, 403, cors);
         const lat = parseFloat(url.searchParams.get('lat')), lon = parseFloat(url.searchParams.get('lon'));
@@ -1902,5 +1911,60 @@ async function handleGpsLimits(request, env, cors) {
   }
   const out = { segs, calls, errors, lastErr: errors ? lastErr : undefined };
   if (env.NK && segs.length) await env.NK.put(kvKey, JSON.stringify(out), { expirationTtl: 7 * 24 * 3600 });
+  return json(out, 200, cors);
+}
+
+// ---- Mapa TomTom (Map Display API) przez Worker: styl, kafelki, sprite, glyphy ----
+const TT_STYLE_URL = 'https://api.tomtom.com/style/1/style/22.2.1-9?map=2/basic_street-light';
+async function handleTtMap(request, url, env, cors) {
+  const k = String(env.TOMTOM_KEY || '').trim(); if (!k) return json({ error: 'brak TOMTOM_KEY' }, 500, cors);
+  const cache = caches.default; const ck = new Request(url.toString(), { method: 'GET' });
+  const hit = await cache.match(ck); if (hit) return hit;
+  const self = url.origin + '/gps/tt/';
+  let target, ttl = 86400;
+  if (url.pathname === '/gps/tt/style.json') {
+    const r = await fetch(TT_STYLE_URL + '&key=' + encodeURIComponent(k));
+    if (!r.ok) return json({ error: 'TomTom style ' + r.status }, 502, cors);
+    let txt = await r.text();
+    // wszystkie adresy api.tomtom.com → nasz Worker, bez klucza
+    txt = txt.replace(/https:\/\/api\.tomtom\.com\//g, self).replace(/([?&])key=[^&"]*/g, '$1').replace(/\?"/g, '"').replace(/\?&/g, '?');
+    const res = new Response(txt, { status: 200, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=3600', ...cors } });
+    await cache.put(ck, res.clone()); return res;
+  }
+  // /gps/tt/<ścieżka api.tomtom.com>
+  const rest = url.pathname.slice('/gps/tt/'.length) + url.search;
+  target = 'https://api.tomtom.com/' + rest + (rest.includes('?') ? '&' : '?') + 'key=' + encodeURIComponent(k);
+  if (/\/tile\//.test(rest)) ttl = 7 * 86400;
+  const r = await fetch(target, { headers: { 'Accept': request.headers.get('Accept') || '*/*' } });
+  const h = new Headers(cors); h.set('Content-Type', r.headers.get('Content-Type') || 'application/octet-stream'); h.set('Cache-Control', 'public, max-age=' + ttl);
+  const res = new Response(await r.arrayBuffer(), { status: r.status, headers: h });
+  if (r.ok) await cache.put(ck, res.clone());
+  return res;
+}
+
+// ---- Pasy ruchu przy manewrach (OSM turn:lanes) ----
+async function handleGpsLanes(request, env, cors) {
+  let body; try { body = await request.json(); } catch { return json({ error: 'Niepoprawny JSON.' }, 400, cors); }
+  const pts = (Array.isArray(body.points) ? body.points : []).filter(isPoint).slice(0, 80);
+  if (!pts.length) return json({ lanes: [] }, 200, cors);
+  const kvKey = 'gps:lanes:' + (await sha256(JSON.stringify(pts))).slice(0, 32);
+  if (env.NK) { const hit = await env.NK.get(kvKey, 'json'); if (hit) return json({ ...hit, cached: true }, 200, cors); }
+  // jedno zapytanie: dla każdego punktu drogi z turn:lanes w promieniu 45 m, w osobnych zbiorach
+  const parts = pts.map(([lon, lat], i) => `way(around:45,${lat.toFixed(5)},${lon.toFixed(5)})["turn:lanes"]->.w${i}; .w${i} out tags center;`).join('\n');
+  const ql = `[out:json][timeout:25];\n${parts}`;
+  let data = null;
+  for (const ep of OVERPASS) {
+    try { const r = await fetch(ep, { method: 'POST', body: 'data=' + encodeURIComponent(ql), headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, signal: AbortSignal.timeout(25000) }); if (!r.ok) continue; data = await r.json(); break; } catch (e) {}
+  }
+  if (!data) return json({ lanes: [], error: 'Overpass' }, 200, cors);
+  // przypisz drogi do punktów po odległości środka (Overpass nie oznacza, z którego zbioru pochodzi element)
+  const ways = (data.elements || []).filter((e) => e.center && e.tags && e.tags['turn:lanes']);
+  const lanes = pts.map(([lon, lat]) => {
+    let best = null, bd = Infinity;
+    for (const w of ways) { const d = haversineKm([lon, lat], [w.center.lon, w.center.lat]) * 1000; if (d < bd) { bd = d; best = w; } }
+    return best && bd < 400 ? { l: best.tags['turn:lanes'], name: best.tags.name || best.tags.ref || '' } : null;
+  });
+  const out = { lanes };
+  if (env.NK) await env.NK.put(kvKey, JSON.stringify(out), { expirationTtl: 30 * 24 * 3600 });
   return json(out, 200, cors);
 }

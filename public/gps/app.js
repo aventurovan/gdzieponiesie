@@ -45,6 +45,7 @@ const S = {
   tab: 'trasa',
 };
 const STYLE = { light: 'https://tiles.openfreemap.org/styles/liberty', dark: 'https://tiles.openfreemap.org/styles/dark' };
+const styleUrl = () => S.opt.mapSrc === 'tomtom' ? API + '/gps/tt/style.json' : STYLE[S.opt.night ? 'dark' : 'light'];
 
 /* ---------- geometria ---------- */
 const R_EARTH = 6371000, rad = d => d * Math.PI / 180;
@@ -79,7 +80,7 @@ function snap(p, coords, cum, fromIdx) {
 let map, meMarker, mapReady = false;
 function initMap() {
   map = new maplibregl.Map({
-    container: 'map', style: STYLE[S.opt.night ? 'dark' : 'light'], center: [19.05, 49.82], zoom: 13,
+    container: 'map', style: styleUrl(), center: [19.05, 49.82], zoom: 13,
     pitch: 0, attributionControl: false, maxPitch: 70, fadeDuration: 0,
   });
   map.addControl(new maplibregl.AttributionControl({ compact: true }), 'top-right');
@@ -101,6 +102,8 @@ function initMap() {
 let BUD3D = null;   // id warstwy budynków 3D (ze stylu Liberty albo nasza)
 function tuneStyle() {
   BUD3D = null;
+  document.getElementById('map').style.filter = (S.opt.mapSrc === 'tomtom' && S.opt.night) ? 'invert(0.9) hue-rotate(180deg) saturate(0.7) brightness(0.9)' : '';
+  if (S.opt.mapSrc === 'tomtom') return;
   // paleta pod makietę: cieplejsze tło, zielone lasy i parki, łososiowe budynki
   const night = S.opt.night;
   for (const l of map.getStyle().layers) {
@@ -121,7 +124,7 @@ function addLayers() {
   tuneStyle();
   // budynki 3D z kafelków OpenMapTiles (warstwa building, render_height)
   if (BUD3D) { map.setLayoutProperty(BUD3D, 'visibility', S.opt.d3 ? 'visible' : 'none'); try { map.setLayerZoomRange(BUD3D, 15, 24); } catch (e) {} }
-  else if (!map.getLayer('bud3d')) {
+  else if (!map.getLayer('bud3d') && map.getSource('openmaptiles')) {
     BUD3D = 'bud3d';
     const labelId = (map.getStyle().layers.find(l => l.type === 'symbol') || {}).id;
     map.addLayer({
@@ -182,7 +185,7 @@ function setView3d(on) {
 }
 function setNight(on) {
   S.opt.night = on; store.set('opt', S.opt); document.body.classList.toggle('night', on); $('#optNight').checked = on;
-  map.setStyle(STYLE[on ? 'dark' : 'light'], { diff: false });
+  map.setStyle(styleUrl(), { diff: false });
 }
 
 /* ---------- wyszukiwanie (karta jak w Sygic) ---------- */
@@ -314,7 +317,7 @@ $('#btnVehSave').addEventListener('click', () => {
   if (![v.h, v.l, v.w, v.t].every(Number.isFinite)) return alert('Wpisz liczby, np. 3,10');
   const p = S.profiles.find(x => x.id === vehEdit); if (!p) return;
   Object.assign(p, v, { name: ($('#vName').value.trim() || 'Kamper') }); S.vehId = p.id; store.set('profiles', S.profiles); store.set('vehId', S.vehId);
-  vehInit(); vehLine(); S.route = null; $('#btnGo').classList.add('hidden'); showTab(S.nav ? 'jazda' : 'trasa'); if (S.to && !S.nav) computeRoute();
+  vehInit(); vehLine(); S.route = null; $('#btnGo').classList.add('hidden'); showTab(S.nav ? 'jazda' : (S.openedFrom === 'trasa' ? 'trasa' : 'jazda')); S.openedFrom = null; if (S.to && !S.nav) computeRoute();
 });
 $('#btnVehDel').addEventListener('click', () => {
   if (S.profiles.length < 2) return; const p = S.profiles.find(x => x.id === vehEdit); if (!p || !confirm('Usunąć profil „' + p.name + '"?')) return;
@@ -420,6 +423,29 @@ async function loadLimits() {
   r.limits = lim;
 }
 
+/* ---------- asystent pasów: OSM turn:lanes przy manewrach ---------- */
+async function loadLanes() {
+  const r = S.route; if (!r || !API) return; r.lanes = null;
+  const idx = []; for (let i = 1; i < r.steps.length; i++) { const t = r.steps[i].t; if (t !== 6 && t !== 10 && t !== 11) idx.push(i); }
+  const take = idx.slice(0, 80); if (!take.length) return;
+  try {
+    const j = await (await fetch(API + '/gps/lanes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ points: take.map(i => r.coords[r.steps[i].wp[0]]) }) })).json();
+    if (S.route !== r) return; r.lanes = {}; take.forEach((i, k) => { if (j.lanes && j.lanes[k]) r.lanes[i] = j.lanes[k].l; });
+  } catch (e) {}
+}
+const LANE_DIR = { 0: 'left', 1: 'right', 2: 'left', 3: 'right', 4: 'slight_left', 5: 'slight_right', 9: 'reverse', 12: 'slight_left', 13: 'slight_right', 7: 'through', 8: 'right' };
+const LANE_ARROW = { left: 'M12 20V10a4 4 0 0 1 4-4h0', right: 'M12 20V10a4 4 0 0 0-4-4h0', through: 'M12 20V5', slight_left: 'M12 20V12l-4-5', slight_right: 'M12 20V12l4-5', sharp_left: 'M12 20V13L5 9', sharp_right: 'M12 20V13l7-4', reverse: 'M12 20V9a3 3 0 0 1 6 0v3', merge_to_left: 'M12 20V12l-4-5', merge_to_right: 'M12 20V12l4-5', none: 'M12 20V5' };
+const LANE_HEAD = { left: 'M9 6l-3 0 0 3', right: 'M15 6l3 0 0 3', through: 'M8 9l4-4 4 4', slight_left: 'M8 11V7h4', slight_right: 'M16 11V7h-4', sharp_left: 'M9 12L5 9l3-3', sharp_right: 'M15 12l4-3-3-3', reverse: 'M15 12l3 3 3-3', merge_to_left: 'M8 11V7h4', merge_to_right: 'M16 11V7h-4', none: 'M8 9l4-4 4 4' };
+function renderLanes(stepI, distM) {
+  const box = $('#lanes'); const r = S.route;
+  const spec = r && r.lanes && r.lanes[stepI]; if (!spec || distM > 700) { box.classList.add('hidden'); return; }
+  const want = LANE_DIR[r.steps[stepI].t] || 'through';
+  const match = d => d === want || (want === 'left' && (d === 'slight_left' || d === 'sharp_left')) || (want === 'right' && (d === 'slight_right' || d === 'sharp_right')) || (want === 'slight_left' && d === 'left') || (want === 'slight_right' && d === 'right');
+  const lanes = spec.split('|').map(l => (l || 'none').split(';'));
+  box.innerHTML = lanes.map(ds => { const on = ds.some(match); return `<span class="ln${on ? ' on' : ''}">${ds.map(d => `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="${LANE_ARROW[d] || LANE_ARROW.none}"/><path d="${LANE_HEAD[d] || LANE_HEAD.none}"/></svg>`).join('')}</span>`; }).join('<i></i>');
+  box.classList.remove('hidden');
+}
+
 /* ---------- POI przy trasie ---------- */
 let PRICES = null;
 async function loadPrices() { if (PRICES) return PRICES; try { const r = await fetch(API + '/prices'); PRICES = (await r.json()).prices || {}; } catch (e) { PRICES = {}; } return PRICES; }
@@ -487,7 +513,7 @@ async function recalcKeepNav() {
   $('#manRoad').textContent = 'Przeliczam trasę…';
   const j = await computeRoute({ lon: S.pos.lon, lat: S.pos.lat }); if (!j) return;
   NAV.idx = 0; NAV.prog = 0; NAV.stepI = 0; NAV.said = {}; NAV.lastReroute = Date.now();
-  drawRoute(); drawProgressMarks(); loadPoi(); loadLimits(); updateHud(); speak('Trasa przeliczona.');
+  drawRoute(); drawProgressMarks(); loadPoi(); loadLimits(); loadLanes(); updateHud(); speak('Trasa przeliczona.');
 }
 
 function fillRouteOpts() {
@@ -497,14 +523,15 @@ function fillRouteOpts() {
   fillCountryTable($('#rCcTable'));
 }
 document.addEventListener('click', e => {
-  const cl = e.target.closest('#veh [data-close], #menu [data-close], #poi [data-close]'); if (cl) { showTab(S.nav ? 'jazda' : (S.prevTab && S.prevTab !== S.tab ? S.prevTab : 'jazda')); return; }
-  const go = e.target.closest('#menu [data-go]'); if (go) { e.preventDefault(); showTab(go.dataset.go); }
+  const cl = e.target.closest('#veh [data-close], #menu [data-close], #poi [data-close]');
+  if (cl) { const cur = S.tab; const back = cur === 'menu' ? 'jazda' : (S.openedFrom && S.openedFrom !== cur ? S.openedFrom : 'jazda'); S.openedFrom = null; showTab(back); return; }
+  const go = e.target.closest('#menu [data-go]'); if (go) { e.preventDefault(); S.openedFrom = 'menu'; showTab(go.dataset.go); }
 });
 $('#tBack').addEventListener('click', () => showTab('jazda'));
-$('#fMenu').addEventListener('click', () => showTab('menu'));
+$('#fMenu').addEventListener('click', () => { S.openedFrom = 'jazda'; showTab('menu'); });
 $('#tOpts').addEventListener('click', () => { fillRouteOpts(); $('#ropts').classList.remove('hidden'); });
 $('#roptsClose').addEventListener('click', () => $('#ropts').classList.add('hidden'));
-$('#tVeh').addEventListener('click', () => showTab('veh'));
+$('#tVeh').addEventListener('click', () => { S.openedFrom = 'trasa'; showTab('veh'); });
 $('#rModes').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; S.mode = b.dataset.mode; store.set('mode', S.mode); fillRouteOpts(); if (S.to) computeRoute().then(fillRouteOpts); });
 $('#rAvoidMoto').addEventListener('change', e => { S.avoid.highways = e.target.checked; store.set('avoid', S.avoid); if (S.to) computeRoute().then(fillRouteOpts); });
 $('#rAvoidToll').addEventListener('change', e => { S.avoid.tolls = e.target.checked; store.set('avoid', S.avoid); if (S.to) computeRoute().then(fillRouteOpts); });
@@ -643,8 +670,8 @@ function updateHud() {
     $('#manIcon').innerHTML = ICONS[s.t] || ICONS[6];
     if (next && next.t !== 10) { $('#nextChip').classList.remove('hidden'); $('#nextChip').innerHTML = `potem <svg viewBox="0 0 64 64" width="22" height="22">${ICONS[next.t] || ICONS[6]}</svg> ${fmtDist(r.cum[next.wp[0]] - r.cum[s.wp[0]])}${next.n ? ' · ' + esc(next.n) : ''}`; }
     else $('#nextChip').classList.add('hidden');
-    announce(s, d, cs.at);
-  }
+    announce(s, d, cs.at); renderLanes(NAV.stepI, d);
+  } else $('#lanes').classList.add('hidden');
   // aktualna droga = nazwa kroku, w którym jesteśmy
   const cur = r.steps[Math.max(0, NAV.stepI - 1)]; const rn = cur && cur.n ? cur.n : ''; $('#roadNow').textContent = rn; $('#roadNow').classList.toggle('hidden', !rn);
   const rem = Math.max(0, r.total - NAV.prog), frac = NAV.prog / r.total;
@@ -805,15 +832,16 @@ function showTab(t) {
 $('#btnView').addEventListener('click', () => setView3d(!S.opt.d3));
 $('#opt3d').addEventListener('change', e => setView3d(e.target.checked));
 $('#optNight').addEventListener('change', e => setNight(e.target.checked));
+$('#optMapSrc').addEventListener('change', e => { S.opt.mapSrc = e.target.value; store.set('opt', S.opt); map.setStyle(styleUrl(), { diff: false }); });
 $('#optVoice').addEventListener('change', e => { S.opt.voice = e.target.checked; store.set('opt', S.opt); });
 $('#optSim').addEventListener('change', e => { S.opt.sim = e.target.checked; store.set('opt', S.opt); if (S.nav) { if (S.opt.sim) startSim(); else stopSim(); } });
 $('#fSearch').addEventListener('click', () => { showTab('trasa'); if (!S.to) setTimeout(() => $('#to').focus(), 50); });
-$('#fVeh').addEventListener('click', () => showTab('veh'));
+$('#fVeh').addEventListener('click', () => { S.openedFrom = 'jazda'; showTab('veh'); });
 $('#fCompass').addEventListener('click', () => map.easeTo({ bearing: 0, pitch: S.opt.d3 ? 45 : 0, duration: 400 }));
 $('#fCenter').addEventListener('click', () => { if (S.pos) map.easeTo({ center: [S.pos.lon, S.pos.lat], zoom: 15, duration: 500 }); else startGps(); });
 $('#fView').addEventListener('click', () => { setView3d(!S.opt.d3); $('#fViewTxt').textContent = S.opt.d3 ? '3D' : '2D'; map.easeTo({ pitch: S.opt.d3 ? 45 : 0, duration: 500 }); });
 $('#btnRecenter').addEventListener('click', () => { S.follow = true; $('#btnRecenter').hidden = true; });
-$('#bbSearch').addEventListener('click', () => showTab('poi'));
+$('#bbSearch').addEventListener('click', () => { S.openedFrom = 'jazda'; showTab('poi'); });
 $('#bbMenu').addEventListener('click', openQuick);
 function qPanel(name) { $$('#quick .qp').forEach(p => p.classList.toggle('hidden', p.dataset.panel !== name)); $('#quick').scrollTop = 0; }
 $('#quick').addEventListener('click', e => {
@@ -828,9 +856,9 @@ $('#quick').addEventListener('click', e => {
   else if (q === 'share') shareRoute();
   else if (q === 'steps') { fillSteps(); qPanel('steps'); }
   else if (q === 'data') { fillData(); qPanel('data'); }
-  else if (q === 'poi') { $('#quick').classList.add('hidden'); showTab('poi'); }
+  else if (q === 'poi') { $('#quick').classList.add('hidden'); S.openedFrom = 'jazda'; showTab('poi'); }
   else if (q === 'recenter') { S.follow = true; $('#btnRecenter').hidden = true; $('#quick').classList.add('hidden'); }
-  else if (q === 'menu') { $('#quick').classList.add('hidden'); showTab('menu'); }
+  else if (q === 'menu') { $('#quick').classList.add('hidden'); S.openedFrom = 'jazda'; showTab('menu'); }
 });
 $('#qCancel').addEventListener('click', () => { $('#quick').classList.add('hidden'); stopNav(); });
 function fillQuick() {
@@ -953,7 +981,7 @@ function isDesktop() {
 function init() {
   if (isDesktop()) { $('#desk').classList.remove('hidden'); $('#sheet').classList.add('hidden'); return; }
   document.body.classList.toggle('night', !!S.opt.night);
-  $('#optVoice').checked = !!S.opt.voice; $('#opt3d').checked = !!S.opt.d3; $('#optRate').value = S.opt.rate || 1; $('#rateTxt').textContent = (S.opt.rate || 1).toFixed(2).replace('.', ',').replace(/0$/, '') + '×'; $('#optNight').checked = !!S.opt.night; $('#optSim').checked = !!S.opt.sim;
+  $('#optVoice').checked = !!S.opt.voice; $('#opt3d').checked = !!S.opt.d3; $('#optMapSrc').value = S.opt.mapSrc || 'osm'; $('#optRate').value = S.opt.rate || 1; $('#rateTxt').textContent = (S.opt.rate || 1).toFixed(2).replace('.', ',').replace(/0$/, '') + '×'; $('#optNight').checked = !!S.opt.night; $('#optSim').checked = !!S.opt.sim;
   $$('#modes button').forEach(x => x.setAttribute('aria-pressed', x.dataset.mode === S.mode));
   vehInit(); vehLine(); fillVeh(S.vehId); initMap(); $('#btnView').textContent = S.opt.d3 ? '3D' : '2D';
   startGps();
