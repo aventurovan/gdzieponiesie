@@ -199,3 +199,35 @@ body.night .poi-it{background:#1f2634;color:#fff}
 .qgrid button span{font-size:30px;line-height:1}.qgrid button em{font-style:normal}
 .qgrid button[aria-pressed=true]{outline:2px solid var(--blue)}
 .primary.danger{background:var(--red);margin-top:16px}
+
+/* szybkie działania – panele */
+.quick{max-height:88%}
+.qp .row-h{align-items:center;margin-bottom:6px}
+.qgrid button svg{width:30px;height:30px}
+.qgrid.two{grid-template-columns:repeat(2,1fr)}
+.qlist{background:#222A3A;border-radius:16px;padding:0 14px;margin-top:4px}
+.qlist .sw{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 0;border-bottom:1px solid #2E3647}
+.qlist .sw:last-child{border-bottom:0}
+.qlist .sw>span{display:flex;align-items:center;gap:10px;font-size:15px;font-weight:600;color:#fff}
+.qlist input[type=checkbox]{appearance:none;width:46px;height:26px;border-radius:13px;background:#3a4256;position:relative;flex:none;margin:0}
+.qlist input[type=checkbox]::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:left .15s}
+.qlist input[type=checkbox]:checked{background:#1E8A4C}.qlist input[type=checkbox]:checked::after{left:23px}
+.qmodes{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:4px}
+.qmodes button{height:42px;border:0;border-radius:12px;background:#222A3A;color:#fff;font-family:inherit;font-size:12px;font-weight:700}
+.qmodes button[aria-pressed=true]{background:var(--blue)}
+.qnote{font-size:12px;font-weight:600;color:#8b93a5;margin:10px 4px 0;min-height:1em}
+.sugg.dark{background:#222A3A;color:#fff}.sugg.dark li{border-color:#2E3647}
+.qlist .via{padding:12px 0;border-bottom:1px solid #2E3647;display:flex;align-items:center;gap:10px;color:#fff;font-size:15px;font-weight:600}
+.qlist .via:last-child{border-bottom:0}.qlist .via b{flex:1}.qlist .via button{border:0;background:#3a4256;color:#fff;border-radius:10px;height:34px;padding:0 10px;font-weight:700}
+.qlist.steps{max-height:50vh;overflow-y:auto}
+.qlist .st{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #2E3647;color:#fff}
+.qlist .st:last-child{border-bottom:0}.qlist .st svg{width:34px;height:34px;flex:none}
+.qlist .st b{display:block;font-size:14px;font-weight:700}.qlist .st small{display:block;font-size:12px;color:#8b93a5;font-weight:600}
+.qlist .st.cur{background:rgba(58,116,255,.15);margin:0 -14px;padding:10px 14px;border-radius:10px}
+.qlist .kv{display:flex;justify-content:space-between;padding:11px 0;border-bottom:1px solid #2E3647;color:#fff;font-size:14px;font-weight:600}
+.qlist .kv:last-child{border-bottom:0}.qlist .kv span{color:#8b93a5}
+.mini{height:32px;padding:0 12px;border:0;border-radius:10px;background:#fff;color:var(--ink);font-family:inherit;font-size:12px;font-weight:700}
+body.night .mini{background:#1f2634;color:#fff}
+#poiStatus{font-size:12px;font-weight:600;color:var(--ink2)}
+
+.off{display:none!important}

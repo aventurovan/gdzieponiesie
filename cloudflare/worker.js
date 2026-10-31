@@ -1668,6 +1668,8 @@ async function handleGpsRoute(request, env, cors) {
 
 // ---- TomTom Routing: trasa dla kampera (travelMode=truck z wymiarami), z korkami i sekcjami ----
 const TT_URL = 'https://api.tomtom.com/routing/1/calculateRoute/';
+const ISO3TO2 = { POL: 'PL', DEU: 'DE', CZE: 'CZ', SVK: 'SK', AUT: 'AT', HUN: 'HU', ITA: 'IT', SVN: 'SI', HRV: 'HR', FRA: 'FR', CHE: 'CH', NLD: 'NL', BEL: 'BE', LUX: 'LU', DNK: 'DK', SWE: 'SE', NOR: 'NO', FIN: 'FI', ESP: 'ES', PRT: 'PT', LTU: 'LT', LVA: 'LV', EST: 'EE', ROU: 'RO', BGR: 'BG', GRC: 'GR', SRB: 'RS', BIH: 'BA', MNE: 'ME', ALB: 'AL', MKD: 'MK', GBR: 'GB', IRL: 'IE', UKR: 'UA', BLR: 'BY', MDA: 'MD', TUR: 'TR', LIE: 'LI', AND: 'AD', MCO: 'MC', SMR: 'SM', VAT: 'VA', XKX: 'XK', KOS: 'XK', ISL: 'IS' };
+const iso2 = (c) => (c && c.length === 3 ? ISO3TO2[c.toUpperCase()] || c : c);
 const TT_MANEUVER = {
   TURN_LEFT: 0, TURN_RIGHT: 1, SHARP_LEFT: 2, SHARP_RIGHT: 3, BEAR_LEFT: 4, BEAR_RIGHT: 5, STRAIGHT: 6,
   ROUNDABOUT_LEFT: 7, ROUNDABOUT_RIGHT: 7, ROUNDABOUT_CROSS: 7, ROUNDABOUT_BACK: 7, ENTER_ROUNDABOUT: 7,
@@ -1718,7 +1720,7 @@ async function tomtomGpsRoute({ points, mode, dims, av, env }) {
   const pick = (type) => secs.filter((s) => s.sectionType === type);
   const path = []; const crossings = []; let prev = null;
   for (const s of pick('COUNTRY')) {
-    const cc = s.countryCode; const i = clampIdx(s.startPointIndex);
+    const cc = iso2(s.countryCode); const i = clampIdx(s.startPointIndex);
     if (cc && cc !== prev) { if (prev) crossings.push({ from: prev, to: cc, at: Math.round(cum[i]), idx: i }); path.push(cc); prev = cc; }
   }
   const tolls = [...pick('TOLL_ROAD'), ...pick('TOLL_VIGNETTE')].map((s) => [clampIdx(s.startPointIndex), clampIdx(s.endPointIndex)]);
@@ -1767,7 +1769,7 @@ async function handleGpsPoi(request, env, cors) {
   const radius = clampNum(body.radius, 500, 10000, 3000);
   const kvKey = 'gps:poi:' + (await sha256(line + '|' + radius)).slice(0, 32);
   if (env.NK) { const hit = await env.NK.get(kvKey, 'json'); if (hit) return json({ ...hit, cached: true }, 200, cors); }
-  const ql = `[out:json][timeout:40];(
+  const ql = `[out:json][timeout:25];(
     nwr["tourism"~"^(camp_site|caravan_site)$"](around:${radius},${line});
     nwr["amenity"="sanitary_dump_station"](around:${radius},${line});
     nwr["amenity"="fuel"](around:${Math.min(radius, 1500)},${line});
@@ -1777,12 +1779,12 @@ async function handleGpsPoi(request, env, cors) {
   let data = null, lastErr = '';
   for (const ep of OVERPASS) {
     try {
-      const res = await fetch(ep, { method: 'POST', body: 'data=' + encodeURIComponent(ql), headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, signal: AbortSignal.timeout(40000) });
-      if (!res.ok) { lastErr = 'Overpass ' + res.status; continue; }
+      const res = await fetch(ep, { method: 'POST', body: 'data=' + encodeURIComponent(ql), headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, signal: AbortSignal.timeout(28000) });
+      if (!res.ok) { lastErr = 'Overpass ' + res.status + ' (' + ep.split('/')[2] + ')'; continue; }
       data = await res.json(); break;
     } catch (e) { lastErr = 'Overpass: ' + (e.message || 'błąd'); }
   }
-  if (!data) return json({ error: lastErr || 'Overpass nie odpowiada' }, 502, cors);
+  if (!data) { await logEvent(env, { code: 'GP-POI', path: '/gps/poi', detail: lastErr }); return json({ error: lastErr || 'Overpass nie odpowiada' }, 502, cors); }
   const items = [];
   for (const el of data.elements || []) {
     const t = el.tags || {}; const lat = el.lat ?? el.center?.lat; const lon = el.lon ?? el.center?.lon;

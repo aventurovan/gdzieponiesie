@@ -13,7 +13,7 @@
 <link rel="icon" href="../icons/favicon-32.png">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800&display=swap">
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
-<link rel="stylesheet" href="style.css?v=11">
+<link rel="stylesheet" href="style.css?v=12">
 </head>
 <body>
 <div id="desk" class="desk hidden">
@@ -59,18 +59,84 @@
 <!-- szybkie działania w czasie jazdy -->
 <div id="quick" class="sheet quick hidden">
   <div class="grip"></div>
-  <div class="row-h"><h1>Szybkie działania</h1><button type="button" class="x" id="quickClose" aria-label="Zamknij">✕</button></div>
-  <div class="sec">Cel</div>
-  <div class="dest"><i></i><div><b id="qDest">—</b><small id="qDestSub"></small></div></div>
-  <div class="qgrid">
-    <button type="button" data-q="trasa"><span>🛣️</span>Opcje trasy</button>
-    <button type="button" data-q="voice"><span id="qVoiceIco">🔊</span><em id="qVoiceTxt">Dźwięk włączony</em></button>
-    <button type="button" data-q="poi"><span>📍</span>POI przy trasie</button>
-    <button type="button" data-q="view"><span>🗺️</span><em id="qViewTxt">Widok 3D</em></button>
-    <button type="button" data-q="night"><span>🌙</span><em id="qNightTxt">Tryb nocny</em></button>
-    <button type="button" data-q="menu"><span>⚙️</span>Ustawienia</button>
+  <div class="qp" data-panel="main">
+    <div class="row-h"><h1>Szybkie działania</h1><button type="button" class="x" data-close aria-label="Zamknij">✕</button></div>
+    <div class="sec">Cel</div>
+    <div class="dest"><i></i><div><b id="qDest">—</b><small id="qDestSub"></small></div></div>
+    <div class="qgrid">
+      <button type="button" data-q="route"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 L8 4 M16 4 L20 20"/><path d="M12 4v3M12 11v3M12 18v2"/></svg>Opcje trasy</button>
+      <button type="button" data-q="tools"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/></svg>Dodatkowe funkcje</button>
+      <button type="button" data-q="share"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>Udostępnij</button>
+      <button type="button" data-q="settings"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Szybkie ustawienia</button>
+      <button type="button" data-q="voice"><span id="qVoiceIco"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10v4h4l5 4V6L8 10z"/><path d="M16 9a4 4 0 0 1 0 6"/><path d="M18.5 6.5a7.5 7.5 0 0 1 0 11"/></svg></span><em id="qVoiceTxt">Dźwięk włączony</em></button>
+      <button type="button" data-q="via"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-6-5.3-6-10a6 6 0 0 1 12 0c0 4.7-6 10-6 10z"/><path d="M12 8v6M9 11h6"/></svg>Dodaj punkt pośredni</button>
+    </div>
+    <button type="button" class="primary danger" id="qCancel">Anuluj trasę</button>
   </div>
-  <button type="button" class="primary danger" id="qCancel">Anuluj trasę</button>
+
+  <div class="qp hidden" data-panel="route">
+    <div class="row-h"><h1>Opcje trasy</h1><button type="button" class="x" data-back aria-label="Wróć">‹</button></div>
+    <div class="sec">Typ trasy</div>
+    <div class="qmodes" id="qModes">
+      <button type="button" data-mode="fast">Szybka</button><button type="button" data-mode="main">Główne drogi</button><button type="button" data-mode="notoll">Bez myta</button><button type="button" data-mode="eco">Ekonomiczna</button>
+    </div>
+    <div class="sec">Unikaj</div>
+    <div class="qlist">
+      <label class="sw"><span><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20 L9 4 M19 20 L15 4"/><path d="M4 12h16"/></svg><b>Autostrady</b></span><input type="checkbox" id="qAvoidMoto"></label>
+      <label class="sw"><span><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15 9h-4a2 2 0 0 0 0 4h2a2 2 0 0 1 0 4h-4M9 11h7M9 15h6"/></svg><b>Drogi płatne</b></span><input type="checkbox" id="qAvoidToll"></label>
+    </div>
+    <div class="sec">Trasa</div>
+    <div class="qgrid two">
+      <button type="button" data-q="steps"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg>Instrukcje</button>
+      <button type="button" data-q="data"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>Dane trasy</button>
+    </div>
+    <p class="qnote" id="qRouteNote"></p>
+  </div>
+
+  <div class="qp hidden" data-panel="settings">
+    <div class="row-h"><h1>Szybkie ustawienia</h1><button type="button" class="x" data-back aria-label="Wróć">‹</button></div>
+    <div class="sec">Nawigacja</div>
+    <div class="qlist">
+      <label class="sw"><span><b>Bieżąca ulica</b></span><input type="checkbox" data-opt="roadNow"></label>
+      <label class="sw"><span><b>POI przy trasie (lewa kolumna)</b></span><input type="checkbox" data-opt="poiCol"></label>
+      <label class="sw"><span><b>Pasek trasy ze zdarzeniami</b></span><input type="checkbox" data-opt="rbar"></label>
+      <label class="sw"><span><b>Nadchodzące zdarzenia</b></span><input type="checkbox" data-opt="events"></label>
+      <label class="sw"><span><b>Drugi manewr („potem")</b></span><input type="checkbox" data-opt="nextChip"></label>
+    </div>
+    <div class="sec">Mapa</div>
+    <div class="qlist">
+      <label class="sw"><span><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z"/><path d="M9 4v14M15 6v14"/></svg><b>Mapa 3D</b></span><input type="checkbox" data-opt="d3"></label>
+      <label class="sw"><span><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 13A8 8 0 1 1 11 3a6 6 0 0 0 10 10z"/></svg><b>Tryb nocny</b></span><input type="checkbox" data-opt="night"></label>
+      <label class="sw"><span><b>Automatycznie po zmroku</b></span><input type="checkbox" data-opt="autoNight"></label>
+    </div>
+  </div>
+
+  <div class="qp hidden" data-panel="tools">
+    <div class="row-h"><h1>Dodatkowe funkcje</h1><button type="button" class="x" data-back aria-label="Wróć">‹</button></div>
+    <div class="qgrid">
+      <button type="button" data-q="poi"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-6-5.3-6-10a6 6 0 0 1 12 0c0 4.7-6 10-6 10z"/><path d="M12 8v6M9 11h6"/></svg>POI przy trasie</button>
+      <button type="button" data-q="recenter"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z"/><path d="M9 4v14M15 6v14"/></svg>Wyśrodkuj</button>
+      <button type="button" data-q="menu"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Ustawienia</button>
+    </div>
+  </div>
+
+  <div class="qp hidden" data-panel="via">
+    <div class="row-h"><h1>Punkt pośredni</h1><button type="button" class="x" data-back aria-label="Wróć">‹</button></div>
+    <div class="qlist"><label class="sw"><input type="text" id="viaInput" placeholder="Miejscowość" autocomplete="off" style="flex:1;background:transparent;border:0;color:#fff;font:inherit;font-size:17px;font-weight:700;outline:none"></label></div>
+    <ul id="viaSugg" class="sugg dark hidden"></ul>
+    <div class="sec">Na trasie</div>
+    <div class="qlist" id="viaList"></div>
+  </div>
+
+  <div class="qp hidden" data-panel="steps">
+    <div class="row-h"><h1>Instrukcje</h1><button type="button" class="x" data-back aria-label="Wróć">‹</button></div>
+    <div class="qlist steps" id="qSteps"></div>
+  </div>
+
+  <div class="qp hidden" data-panel="data">
+    <div class="row-h"><h1>Dane trasy</h1><button type="button" class="x" data-back aria-label="Wróć">‹</button></div>
+    <div class="qlist" id="qData"></div>
+  </div>
 </div>
 
 <!-- JAZDA bez trasy: pływające przyciski jak w nawigacjach -->
@@ -100,10 +166,10 @@
     <button type="button" data-mode="eco" aria-pressed="false">Ekonomiczna</button>
   </div>
   <div class="tiles" id="tiles"></div>
+  <button class="primary go hidden" id="btnGo" type="button">▶ Rozpocznij jazdę</button>
   <div class="info" id="routeInfo"></div>
   <div class="msg" id="msg"></div>
   <button class="primary" id="btnRoute" type="button">Wyznacz trasę</button>
-  <button class="primary go hidden" id="btnGo" type="button">▶ Rozpocznij jazdę</button>
 </div>
 
 <!-- ekran POJAZD -->
@@ -159,6 +225,7 @@
   <div class="chips" id="poiChips">
     <button type="button" data-f="all" aria-pressed="true">Wszystko</button><button type="button" data-f="camp">Kemping</button><button type="button" data-f="dump">Zrzut</button><button type="button" data-f="water">Woda</button><button type="button" data-f="lpg">LPG</button><button type="button" data-f="fuel">Paliwo</button><button type="button" data-f="park">Parking</button>
   </div>
+  <div class="row-h" style="margin-top:8px"><small id="poiStatus"></small><button type="button" class="mini" id="poiReload">Odśwież</button></div>
   <div id="poiList" class="poi-list"><p class="note">Wyznacz trasę — pokażę kempingi, zrzuty, wodę, LPG i stacje wzdłuż niej.</p></div>
 </div>
 
@@ -172,6 +239,6 @@
 
 <script src="../assets/config.js"></script>
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
-<script src="app.js?v=12"></script>
+<script src="app.js?v=13"></script>
 </body>
 </html>
