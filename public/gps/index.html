@@ -13,7 +13,7 @@
 <link rel="icon" href="../icons/favicon-32.png">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800&display=swap">
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
-<link rel="stylesheet" href="style.css?v=12">
+<link rel="stylesheet" href="style.css?v=13">
 </head>
 <body>
 <div id="desk" class="desk hidden">
@@ -85,6 +85,8 @@
       <label class="sw"><span><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20 L9 4 M19 20 L15 4"/><path d="M4 12h16"/></svg><b>Autostrady</b></span><input type="checkbox" id="qAvoidMoto"></label>
       <label class="sw"><span><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15 9h-4a2 2 0 0 0 0 4h2a2 2 0 0 1 0 4h-4M9 11h7M9 15h6"/></svg><b>Drogi płatne</b></span><input type="checkbox" id="qAvoidToll"></label>
     </div>
+    <div class="sec">Per kraj</div>
+    <div class="cc dark" id="qCcTable"></div>
     <div class="sec">Trasa</div>
     <div class="qgrid two">
       <button type="button" data-q="steps"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg>Instrukcje</button>
@@ -167,6 +169,7 @@
   </div>
   <div class="tiles" id="tiles"></div>
   <button class="primary go hidden" id="btnGo" type="button">▶ Rozpocznij jazdę</button>
+  <div class="cc hidden" id="ccTable"></div>
   <div class="info" id="routeInfo"></div>
   <div class="msg" id="msg"></div>
   <button class="primary" id="btnRoute" type="button">Wyznacz trasę</button>
@@ -223,7 +226,7 @@
   <div class="grip"></div>
   <div class="row-h"><h1>Przy trasie</h1><small>do 5 km od trasy</small></div>
   <div class="chips" id="poiChips">
-    <button type="button" data-f="all" aria-pressed="true">Wszystko</button><button type="button" data-f="camp">Kemping</button><button type="button" data-f="dump">Zrzut</button><button type="button" data-f="water">Woda</button><button type="button" data-f="lpg">LPG</button><button type="button" data-f="fuel">Paliwo</button><button type="button" data-f="park">Parking</button>
+    <button type="button" data-f="all" aria-pressed="true">Wszystko</button><button type="button" data-f="camp">Kemping</button><button type="button" data-f="dump">Zrzut</button><button type="button" data-f="water">Woda</button><button type="button" data-f="fuel">Paliwo</button><button type="button" data-f="park">Parking</button>
   </div>
   <div class="row-h" style="margin-top:8px"><small id="poiStatus"></small><button type="button" class="mini" id="poiReload">Odśwież</button></div>
   <div id="poiList" class="poi-list"><p class="note">Wyznacz trasę — pokażę kempingi, zrzuty, wodę, LPG i stacje wzdłuż niej.</p></div>
@@ -239,6 +242,6 @@
 
 <script src="../assets/config.js"></script>
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
-<script src="app.js?v=13"></script>
+<script src="app.js?v=14"></script>
 </body>
 </html>

@@ -231,3 +231,22 @@ body.night .mini{background:#1f2634;color:#fff}
 #poiStatus{font-size:12px;font-weight:600;color:var(--ink2)}
 
 .off{display:none!important}
+
+/* POI na HUD jak w Sygic */
+.pc{width:66px;padding:8px 4px 6px;gap:3px;border-radius:16px}
+.pc .ic{color:#fff;line-height:0}.pc .ic svg{width:28px;height:28px}
+.pc b{font-size:13px}
+.pc small{background:#e6e6e6;color:#1a1d24;border-radius:8px;padding:2px 6px;font-size:11px;font-weight:800}
+/* tabela per kraj */
+.cc{margin-top:10px;background:#fff;border-radius:16px;padding:6px 14px 2px}
+.cc-h,.cc-r{display:grid;grid-template-columns:1fr 64px 84px;align-items:center;gap:8px;padding:7px 0}
+.cc-h{font-size:11px;font-weight:700;color:var(--ink2);text-transform:uppercase;letter-spacing:.4px}
+.cc-h span:not(:first-child),.cc-r input{justify-self:center}
+.cc-r{border-top:1px solid var(--line);font-size:13px;font-weight:600;color:#3a3f4a}
+.cc-r b{font-size:14px;font-weight:800;color:var(--ink);margin-right:6px}
+.cc input[type=checkbox]{appearance:none;width:46px;height:26px;border-radius:13px;background:#c9c4b8;position:relative;margin:0}
+.cc input[type=checkbox]::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:left .15s}
+.cc input[type=checkbox]:checked{background:#1E8A4C}.cc input[type=checkbox]:checked::after{left:23px}
+.cc-n{display:block;font-size:11px;font-weight:600;color:var(--ink2);padding:6px 0 4px}
+.cc.dark{background:#222A3A}.cc.dark .cc-r{border-color:#2E3647;color:#cfd3dc}.cc.dark .cc-r b{color:#fff}.cc.dark .cc-h,.cc.dark .cc-n{color:#8b93a5}.cc.dark input[type=checkbox]{background:#3a4256}.cc.dark input[type=checkbox]:checked{background:#1E8A4C}
+body.night .cc{background:#1f2634}body.night .cc-r{border-color:#2E3647;color:#cfd3dc}body.night .cc-r b{color:#fff}

@@ -1580,7 +1580,7 @@ async function handleGpsRoute(request, env, cors) {
   // 1) TomTom – trasa z korkami, limitami prędkości, tunelami; 2) ORS jako zapas
   let ttError = null;
   if (env.TOMTOM_KEY && body.engine !== 'ors') {
-    const tt = await tomtomGpsRoute({ points, mode, dims, av, env });
+    const tt = await tomtomGpsRoute({ points, mode, dims, av, env, byCountry: body.avoidByCountry });
     if (tt.ok) return json(tt.out, 200, cors, { 'X-Cache': tt.cached ? 'HIT' : 'MISS' });
     ttError = tt.error;
     await logEvent(env, { code: 'GP-TT', path: '/gps/route', detail: tt.error });
@@ -1678,8 +1678,7 @@ const TT_MANEUVER = {
   ENTER_MOTORWAY: 6, ENTER_FREEWAY: 6, ENTER_HIGHWAY: 6, FOLLOW: 6, SWITCH_PARALLEL_ROAD: 13, SWITCH_MAIN_ROAD: 12,
   TAKE_FERRY: 6, WAYPOINT_LEFT: 6, WAYPOINT_RIGHT: 6, WAYPOINT_REACHED: 6,
 };
-async function tomtomGpsRoute({ points, mode, dims, av, env }) {
-  const locs = points.map(([lon, lat]) => `${lat},${lon}`).join(':');
+function ttQuery({ mode, dims, av, env }) {
   const q = new URLSearchParams({
     key: String(env.TOMTOM_KEY).trim(), travelMode: 'truck', traffic: 'true', computeTravelTimeFor: 'all',
     routeType: mode === 'eco' ? 'eco' : mode === 'short' ? 'shortest' : 'fastest',
@@ -1693,65 +1692,105 @@ async function tomtomGpsRoute({ points, mode, dims, av, env }) {
   if (av.tolls === true || mode === 'notoll') avoid.add('tollRoads');
   if (mode === 'main') avoid.add('unpavedRoads');
   for (const a of avoid) q.append('avoid', a);
+  return q;
+}
+// jedno wywołanie TomTom → znormalizowany odcinek (indeksy względne)
+async function ttCalc(points, q) {
+  const locs = points.map(([lon, lat]) => `${lat},${lon}`).join(':');
   const url = TT_URL + encodeURIComponent(locs) + '/json?' + q.toString();
-  const kvKey = 'gps:tt:' + (await sha256(url.replace(env.TOMTOM_KEY, '') + '|' + (av.countries || []).join(','))).slice(0, 32);
-  if (env.NK) { const hit = await env.NK.get(kvKey, 'json'); if (hit) return { ok: true, out: { ...hit, cached: true }, cached: true }; }
   let res, data;
-  try {
-    res = await fetch(url, { signal: AbortSignal.timeout(20000) });
-    data = await res.json();
-  } catch (e) { return { ok: false, error: 'TomTom: ' + (e.message || 'błąd sieci') }; }
-  if (!res.ok || !data.routes?.length) {
-    return { ok: false, error: 'TomTom ' + res.status + ': ' + (data?.detailedError?.message || data?.error?.description || 'brak trasy') };
-  }
+  try { res = await fetch(url, { signal: AbortSignal.timeout(20000) }); data = await res.json(); }
+  catch (e) { return { ok: false, error: 'TomTom: ' + (e.message || 'błąd sieci') }; }
+  if (!res.ok || !data.routes?.length) return { ok: false, error: 'TomTom ' + res.status + ': ' + (data?.detailedError?.message || data?.error?.description || 'brak trasy') };
   const r = data.routes[0];
-  // geometria: TomTom zwraca legs[].points (lat/lon); indeksy w sekcjach i manewrach odnoszą się do spłaszczonej listy
   const coords = [];
   for (const leg of r.legs) for (const p of leg.points) {
     const c = [Math.round(p.longitude * 1e5) / 1e5, Math.round(p.latitude * 1e5) / 1e5];
     if (!coords.length || coords[coords.length - 1][0] !== c[0] || coords[coords.length - 1][1] !== c[1]) coords.push(c);
   }
+  const n = coords.length - 1; const ci = (i) => Math.max(0, Math.min(n, i | 0));
+  const secs = r.sections || []; const pick = (t) => secs.filter((s) => s.sectionType === t);
+  const countryAt = new Array(coords.length).fill('');
+  for (const s of pick('COUNTRY')) { const cc = iso2(s.countryCode); for (let i = ci(s.startPointIndex); i <= ci(s.endPointIndex); i++) countryAt[i] = cc; }
+  // odcinki płatne: myto + winieta, scalone (bez podwójnego liczenia)
+  const tollAt = new Array(coords.length).fill(false);
+  for (const s of [...pick('TOLL_ROAD'), ...pick('TOLL_VIGNETTE')]) for (let i = ci(s.startPointIndex); i < ci(s.endPointIndex); i++) tollAt[i] = true;
+  const traffic = pick('TRAFFIC').filter((s) => (s.delayInSeconds || 0) > 30 || (s.magnitudeOfDelay || 0) >= 1).map((s) => ({ a: ci(s.startPointIndex), b: ci(s.endPointIndex), delay: s.delayInSeconds || 0, mag: s.magnitudeOfDelay || 0, kmh: s.effectiveSpeedInKmh || null }));
+  const tunnels = pick('TUNNEL').map((s) => ({ a: ci(s.startPointIndex), b: ci(s.endPointIndex), cat: s.tunnelCategory || null }));
+  const ferries = pick('FERRY').map((s) => ({ a: ci(s.startPointIndex), b: ci(s.endPointIndex) }));
+  const ins = r.guidance?.instructions || []; const steps = [];
+  for (let k = 0; k < ins.length; k++) {
+    const g = ins[k], next = ins[k + 1];
+    const i0 = ci(g.pointIndex ?? 0), i1 = next ? ci(next.pointIndex ?? n) : n;
+    const a = g.travelTimeInSeconds ?? 0, b = next ? (next.travelTimeInSeconds ?? a) : (r.summary.travelTimeInSeconds ?? a);
+    const name = [g.roadNumbers?.length ? g.roadNumbers.join(' / ') : '', g.street || ''].filter(Boolean).join(' · ') || (g.signpostText || '');
+    steps.push({ t: TT_MANEUVER[g.maneuver] ?? 6, i: g.message || '', n: name, d: 0, s: Math.max(0, Math.round(b - a)), wp: [i0, i1], ...(g.exitNumber ? { exit: g.exitNumber } : {}), ...(g.signpostText ? { sign: g.signpostText } : {}) });
+  }
+  const sum = r.summary;
+  return { ok: true, seg: { coords, countryAt, tollAt, traffic, tunnels, ferries, steps, sec: sum.travelTimeInSeconds, secNo: sum.noTrafficTravelTimeInSeconds ?? sum.travelTimeInSeconds, delay: sum.trafficDelayInSeconds ?? 0, len: sum.lengthInMeters } };
+}
+function ttMerge(segs, mode) {
+  const coords = [], countryAt = [], tollAt = [], traffic = [], tunnels = [], ferries = [], steps = [];
+  let sec = 0, secNo = 0, delay = 0, len = 0;
+  for (const s of segs) {
+    let off = coords.length, skip = 0;
+    if (off && s.coords.length && coords[off - 1][0] === s.coords[0][0] && coords[off - 1][1] === s.coords[0][1]) { skip = 1; off -= 1; }
+    for (let i = skip; i < s.coords.length; i++) { coords.push(s.coords[i]); countryAt.push(s.countryAt[i]); tollAt.push(s.tollAt[i]); }
+    const sh = (i) => Math.min(coords.length - 1, i + off);
+    for (const t of s.traffic) traffic.push({ ...t, a: sh(t.a), b: sh(t.b) });
+    for (const t of s.tunnels) tunnels.push({ ...t, a: sh(t.a), b: sh(t.b) });
+    for (const t of s.ferries) ferries.push({ ...t, a: sh(t.a), b: sh(t.b) });
+    for (const st of s.steps) { if (steps.length && st.t === 11) continue; if (steps.length && steps[steps.length - 1].t === 10 && s !== segs[segs.length - 1]) steps.pop(); steps.push({ ...st, wp: [sh(st.wp[0]), sh(st.wp[1])] }); }
+    sec += s.sec; secNo += s.secNo; delay += s.delay; len += s.len;
+  }
+  // usuń „cel” z końców odcinków pośrednich
+  for (let k = steps.length - 2; k >= 0; k--) if (steps[k].t === 10) steps.splice(k, 1);
   const n = coords.length - 1;
   const cum = new Array(coords.length).fill(0);
   for (let i = 0; i < n; i++) cum[i + 1] = cum[i] + haversineKm(coords[i], coords[i + 1]) * 1000;
-  const clampIdx = (i) => Math.max(0, Math.min(n, i | 0));
-  // uwaga: punkty legów są spłaszczone bez duplikatów; TomTom indeksuje po pełnej liście – różnica to co najwyżej liczba legów, tolerujemy
-  const secs = r.sections || [];
-  const pick = (type) => secs.filter((s) => s.sectionType === type);
-  const path = []; const crossings = []; let prev = null;
-  for (const s of pick('COUNTRY')) {
-    const cc = iso2(s.countryCode); const i = clampIdx(s.startPointIndex);
-    if (cc && cc !== prev) { if (prev) crossings.push({ from: prev, to: cc, at: Math.round(cum[i]), idx: i }); path.push(cc); prev = cc; }
-  }
-  const tolls = [...pick('TOLL_ROAD'), ...pick('TOLL_VIGNETTE')].map((s) => [clampIdx(s.startPointIndex), clampIdx(s.endPointIndex)]);
-  const traffic = pick('TRAFFIC').filter((s) => (s.delayInSeconds || 0) > 30 || (s.magnitudeOfDelay || 0) >= 1).map((s) => ({
-    a: clampIdx(s.startPointIndex), b: clampIdx(s.endPointIndex), delay: s.delayInSeconds || 0, mag: s.magnitudeOfDelay || 0, kmh: s.effectiveSpeedInKmh || null,
-  }));
-  const limits = [];
-  const tunnels = pick('TUNNEL').map((s) => ({ a: clampIdx(s.startPointIndex), b: clampIdx(s.endPointIndex), at: Math.round(cum[clampIdx(s.startPointIndex)]), len: Math.round(cum[clampIdx(s.endPointIndex)] - cum[clampIdx(s.startPointIndex)]), cat: s.tunnelCategory || null }));
-  const ferries = pick('FERRY').map((s) => ({ a: clampIdx(s.startPointIndex), b: clampIdx(s.endPointIndex), at: Math.round(cum[clampIdx(s.startPointIndex)]) }));
-  // manewry
-  const steps = [];
-  const ins = r.guidance?.instructions || [];
-  for (let k = 0; k < ins.length; k++) {
-    const g = ins[k]; const next = ins[k + 1];
-    const i0 = clampIdx(g.pointIndex ?? 0); const i1 = next ? clampIdx(next.pointIndex ?? n) : n;
-    const t = TT_MANEUVER[g.maneuver] ?? 6;
-    const name = [g.roadNumbers?.length ? g.roadNumbers.join(' / ') : '', g.street || ''].filter(Boolean).join(' · ') || (g.signpostText || '');
-    steps.push({ t, i: g.message || '', n: name, d: Math.round(cum[i1] - cum[i0]), s: Math.round(g.travelTimeInSeconds ?? 0), wp: [i0, i1],
-      ...(g.exitNumber ? { exit: g.exitNumber } : {}), ...(g.signpostText ? { sign: g.signpostText } : {}), ...(g.roundaboutExitNumber ? { rexit: g.roundaboutExitNumber } : {}) });
-  }
-  // czas kroku = różnica czasów do kolejnego manewru (travelTimeInSeconds to czas od startu)
-  for (let k = 0; k < steps.length; k++) { const a = ins[k].travelTimeInSeconds ?? 0; const b = ins[k + 1] ? (ins[k + 1].travelTimeInSeconds ?? a) : (r.summary.travelTimeInSeconds ?? a); steps[k].s = Math.max(0, Math.round(b - a)); }
-  const sum = r.summary;
-  const out = {
+  const path = [], crossings = []; let prev = '';
+  for (let i = 0; i <= n; i++) { const cc = countryAt[i]; if (cc && cc !== prev) { if (prev) crossings.push({ from: prev, to: cc, at: Math.round(cum[i]), idx: i }); path.push(cc); prev = cc; } }
+  const tolls = []; let ts = -1;
+  for (let i = 0; i <= n; i++) { const on = i < n && tollAt[i]; if (on && ts < 0) ts = i; if (!on && ts >= 0) { tolls.push([ts, i]); ts = -1; } }
+  for (const st of steps) st.d = Math.round(cum[st.wp[1]] - cum[st.wp[0]]);
+  for (const t of tunnels) { t.at = Math.round(cum[t.a]); t.len = Math.round(cum[t.b] - cum[t.a]); }
+  for (const t of ferries) t.at = Math.round(cum[t.a]);
+  const secDelay = traffic.reduce((s, t) => s + (t.delay || 0), 0);
+  return {
     engine: 'tomtom', profile: 'truck', mode,
-    km: Math.round(sum.lengthInMeters / 100) / 10,
-    sec: sum.travelTimeInSeconds, secNoTraffic: sum.noTrafficTravelTimeInSeconds ?? null, delay: sum.trafficDelayInSeconds ?? 0,
-    coords, cum: cum.map(Math.round), steps, path, crossings, tolls, traffic, limits, tunnels, ferries,
+    km: Math.round(len / 100) / 10, sec, secNoTraffic: secNo, delay: Math.max(delay, Math.min(secDelay, sec)),
+    coords, cum: cum.map(Math.round), steps, path, crossings, tolls, traffic, limits: [], tunnels, ferries,
     bbox: [Math.min(...coords.map((c) => c[0])), Math.min(...coords.map((c) => c[1])), Math.max(...coords.map((c) => c[0])), Math.max(...coords.map((c) => c[1]))],
   };
-  // korki żyją krótko – cache 10 min
+}
+// trasa: zwykła, albo – gdy są ustawienia per kraj – liczona odcinkami między granicami z różnymi „unikaj”
+async function tomtomGpsRoute({ points, mode, dims, av, env, byCountry }) {
+  const kvKey = 'gps:tt:' + (await sha256(JSON.stringify({ points, mode, dims, av, byCountry: byCountry || null }))).slice(0, 32);
+  if (env.NK) { const hit = await env.NK.get(kvKey, 'json'); if (hit) return { ok: true, out: { ...hit, cached: true }, cached: true }; }
+  const first = await ttCalc(points, ttQuery({ mode, dims, av, env }));
+  if (!first.ok) return first;
+  let out = ttMerge([first.seg], mode);
+  const bc = byCountry && typeof byCountry === 'object' ? byCountry : null;
+  const relevant = bc && out.path.some((cc) => bc[cc] && (bc[cc].tolls || bc[cc].highways));
+  if (relevant && out.crossings.length && out.crossings.length <= 8) {
+    // punkty podziału: start, granice, via, cel – każdy odcinek z własnym „unikaj”
+    const cuts = [0, ...out.crossings.map((c) => c.idx), out.coords.length - 1];
+    const viaIdx = points.slice(1, -1).map((p) => { let bi = 0, bd = Infinity; for (let i = 0; i < out.coords.length; i += 2) { const d = haversineKm(out.coords[i], p); if (d < bd) { bd = d; bi = i; } } return bi; });
+    const all = [...new Set([...cuts, ...viaIdx])].sort((a, b) => a - b);
+    const segs = []; let changed = false;
+    for (let k = 0; k < all.length - 1; k++) {
+      const a = all[k], b = all[k + 1]; if (b - a < 2) continue;
+      const country = (() => { const cr = out.crossings.find((c) => c.idx === a); if (cr) return cr.to; const before = out.crossings.filter((c) => c.idx < a); return before.length ? before[before.length - 1].to : out.path[0]; })();
+      const rule = bc[country] || {};
+      const av2 = { highways: av.highways === true || rule.highways === true, tolls: av.tolls === true || rule.tolls === true };
+      if (rule.tolls || rule.highways) changed = true;
+      const r = await ttCalc([out.coords[a], out.coords[b]], ttQuery({ mode, dims, av: av2, env }));
+      if (!r.ok) return r;
+      segs.push(r.seg);
+    }
+    if (changed && segs.length) out = ttMerge(segs, mode);
+    out.byCountry = bc;
+  }
   if (env.NK) await env.NK.put(kvKey, JSON.stringify(out), { expirationTtl: 600 });
   return { ok: true, out };
 }
@@ -1763,47 +1802,52 @@ async function handleGpsPoi(request, env, cors) {
   try { body = await request.json(); } catch { return json({ error: 'Niepoprawny JSON.' }, 400, cors); }
   const coords = Array.isArray(body.coords) ? body.coords.filter(isPoint) : [];
   if (coords.length < 2) return json({ error: 'Brak trasy.' }, 400, cors);
-  // próbkujemy trasę co ~2 km, maks. 250 punktów – Overpass „around” wzdłuż łamanej
-  const step = Math.max(1, Math.ceil(coords.length / 250));
-  const line = coords.filter((_, i) => i % step === 0 || i === coords.length - 1).map(([x, y]) => `${y.toFixed(4)},${x.toFixed(4)}`).join(',');
   const radius = clampNum(body.radius, 500, 10000, 3000);
-  const kvKey = 'gps:poi:' + (await sha256(line + '|' + radius)).slice(0, 32);
-  if (env.NK) { const hit = await env.NK.get(kvKey, 'json'); if (hit) return json({ ...hit, cached: true }, 200, cors); }
-  const ql = `[out:json][timeout:25];(
+  // korytarz dzielimy na kawałki po ~20 punktów (ok. 40–60 km) – małe zapytania Overpass są szybkie i można je puścić równolegle
+  const chunks = [];
+  for (let i = 0; i < coords.length - 1; i += 18) chunks.push(coords.slice(i, i + 20));
+  const kvAll = 'gps:poi:' + (await sha256(JSON.stringify(coords) + '|' + radius)).slice(0, 32);
+  if (env.NK) { const hit = await env.NK.get(kvAll, 'json'); if (hit) return json({ ...hit, cached: true }, 200, cors); }
+  const q = (line) => `[out:json][timeout:20];(
     nwr["tourism"~"^(camp_site|caravan_site)$"](around:${radius},${line});
     nwr["amenity"="sanitary_dump_station"](around:${radius},${line});
-    nwr["amenity"="fuel"](around:${Math.min(radius, 1500)},${line});
+    nwr["amenity"="fuel"](around:${Math.min(radius, 1200)},${line});
     nwr["highway"~"^(rest_area|services)$"](around:${Math.min(radius, 800)},${line});
     nwr["amenity"="parking"]["motorhome"="yes"](around:${radius},${line});
-  );out center tags 500;`;
-  let data = null, lastErr = '';
-  for (const ep of OVERPASS) {
-    try {
-      const res = await fetch(ep, { method: 'POST', body: 'data=' + encodeURIComponent(ql), headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, signal: AbortSignal.timeout(28000) });
-      if (!res.ok) { lastErr = 'Overpass ' + res.status + ' (' + ep.split('/')[2] + ')'; continue; }
-      data = await res.json(); break;
-    } catch (e) { lastErr = 'Overpass: ' + (e.message || 'błąd'); }
-  }
-  if (!data) { await logEvent(env, { code: 'GP-POI', path: '/gps/poi', detail: lastErr }); return json({ error: lastErr || 'Overpass nie odpowiada' }, 502, cors); }
-  const items = [];
-  for (const el of data.elements || []) {
-    const t = el.tags || {}; const lat = el.lat ?? el.center?.lat; const lon = el.lon ?? el.center?.lon;
-    if (lat == null) continue;
-    let kind = 'camp';
-    if (t.amenity === 'fuel') kind = 'fuel'; else if (t.amenity === 'sanitary_dump_station') kind = 'dump'; else if (t.tourism === 'caravan_site') kind = 'caravan';
-    else if (t.highway === 'services') kind = 'mop'; else if (t.highway === 'rest_area') kind = 'rest'; else if (t.amenity === 'parking') kind = 'parking';
-    items.push({
-      id: el.type[0] + el.id, kind, lon: Math.round(lon * 1e5) / 1e5, lat: Math.round(lat * 1e5) / 1e5,
-      name: t.name || t.brand || t.operator || '', brand: t.brand || '',
-      lpg: t['fuel:lpg'] === 'yes', diesel: t['fuel:diesel'] !== 'no', h24: t.opening_hours === '24/7',
-      water: t.drinking_water === 'yes' || t['sanitary_dump_station'] === 'yes' ? true : undefined,
-      dump: t['sanitary_dump_station'] === 'yes' || kind === 'dump' ? true : undefined,
-      hours: t.opening_hours || '', fee: t.fee || '', web: t.website || t['contact:website'] || '', phone: t.phone || t['contact:phone'] || '',
-      caravans: t.caravans === 'yes' ? true : undefined, motorhome: t.motorhome === 'yes' ? true : undefined,
-    });
-  }
-  const out = { items, count: items.length, radius, updated: new Date().toISOString() };
-  if (env.NK) await env.NK.put(kvKey, JSON.stringify(out), { expirationTtl: 24 * 3600 });
+  );out center tags 300;`;
+  const byId = new Map(); let errors = 0, lastErr = '';
+  const run = async (chunk, k) => {
+    const line = chunk.map(([x, y]) => `${y.toFixed(4)},${x.toFixed(4)}`).join(',');
+    const ck = 'gps:poic:' + (await sha256(line + '|' + radius)).slice(0, 32);
+    if (env.NK) { const hit = await env.NK.get(ck, 'json'); if (hit) { for (const it of hit) byId.set(it.id, it); return; } }
+    const eps = [...OVERPASS.slice(k % OVERPASS.length), ...OVERPASS.slice(0, k % OVERPASS.length)];
+    for (const ep of eps) {
+      try {
+        const res = await fetch(ep, { method: 'POST', body: 'data=' + encodeURIComponent(q(line)), headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, signal: AbortSignal.timeout(22000) });
+        if (!res.ok) { lastErr = 'Overpass ' + res.status; continue; }
+        const data = await res.json(); const items = [];
+        for (const el of data.elements || []) {
+          const t = el.tags || {}; const lat = el.lat ?? el.center?.lat; const lon = el.lon ?? el.center?.lon; if (lat == null) continue;
+          let kind = 'camp';
+          if (t.amenity === 'fuel') kind = 'fuel'; else if (t.amenity === 'sanitary_dump_station') kind = 'dump'; else if (t.tourism === 'caravan_site') kind = 'caravan';
+          else if (t.highway === 'services') kind = 'mop'; else if (t.highway === 'rest_area') kind = 'rest'; else if (t.amenity === 'parking') kind = 'parking';
+          items.push({ id: el.type[0] + el.id, kind, lon: Math.round(lon * 1e5) / 1e5, lat: Math.round(lat * 1e5) / 1e5, name: t.name || t.brand || t.operator || '', brand: t.brand || '',
+            h24: t.opening_hours === '24/7', hours: t.opening_hours || '', fee: t.fee || '', web: t.website || t['contact:website'] || '',
+            water: t.drinking_water === 'yes' ? true : undefined, dump: t['sanitary_dump_station'] === 'yes' || kind === 'dump' ? true : undefined, motorhome: t.motorhome === 'yes' ? true : undefined });
+        }
+        if (env.NK) await env.NK.put(ck, JSON.stringify(items), { expirationTtl: 3 * 24 * 3600 });
+        for (const it of items) byId.set(it.id, it);
+        return;
+      } catch (e) { lastErr = 'Overpass: ' + (e.message || 'błąd'); }
+    }
+    errors++;
+  };
+  // po 4 naraz
+  for (let i = 0; i < chunks.length; i += 4) await Promise.all(chunks.slice(i, i + 4).map((c, j) => run(c, i + j)));
+  const items = [...byId.values()];
+  if (!items.length && errors) { await logEvent(env, { code: 'GP-POI', path: '/gps/poi', detail: lastErr }); return json({ error: lastErr || 'Overpass nie odpowiada' }, 502, cors); }
+  const out = { items, count: items.length, radius, chunks: chunks.length, errors, updated: new Date().toISOString() };
+  if (env.NK && !errors) await env.NK.put(kvAll, JSON.stringify(out), { expirationTtl: 24 * 3600 });
   return json(out, 200, cors);
 }
 

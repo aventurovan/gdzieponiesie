@@ -11,7 +11,7 @@ const store = {
 const S = {
   veh: store.get('veh', { h: 3.1, l: 6.36, w: 2.05, t: 3.5 }),
   opt: Object.assign({ voice: true, d3: true, night: false, sim: false, roadNow: true, poiCol: true, rbar: true, events: true, nextChip: true, autoNight: false }, store.get('opt', {})),
-  via: [], avoid: store.get('avoid', { highways: false, tolls: false }),
+  via: [], avoid: store.get('avoid', { highways: false, tolls: false }), avoidCC: store.get('avoidCC', {}),
   mode: store.get('mode', 'fast'),
   from: null, to: null,          // {name, lon, lat} | null = bieżąca pozycja
   route: null,                   // odpowiedź /gps/route
@@ -201,7 +201,7 @@ async function computeRoute(fromPos) {
   if (!S.to) { msg.textContent = 'Wybierz cel z listy podpowiedzi.'; return null; }
   $('#btnRoute').disabled = true; msg.textContent = 'Liczę trasę…';
   const body = { from: [from.lon, from.lat], to: [S.to.lon, S.to.lat], via: S.via.map(v => [v.lon, v.lat]), mode: S.mode,
-    camper: { height: S.veh.h, width: S.veh.w, length: S.veh.l, weight: S.veh.t }, avoid: { highways: !!S.avoid.highways, tolls: !!S.avoid.tolls } };
+    camper: { height: S.veh.h, width: S.veh.w, length: S.veh.l, weight: S.veh.t }, avoid: { highways: !!S.avoid.highways, tolls: !!S.avoid.tolls }, avoidByCountry: S.avoidCC };
   let j;
   try {
     const r = await fetch(API + '/gps/route', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -220,12 +220,12 @@ function renderSummary() {
   const tollKm = (r.tolls || []).reduce((s, [a, b]) => s + (r.cum[b] - r.cum[a]), 0) / 1000;
   $('#routeInfo').innerHTML = `<b>Trasa przez: ${r.path.map(c => KRAJ[c] || c).join(', ')}</b>
     ${r.crossings.length ? '<span>Granice: ' + r.crossings.map(c => c.from + '→' + c.to + ' (' + Math.round(c.at / 1000) + ' km)').join(', ') + '</span>' : ''}
-    ${r.delay > 60 ? '<span style="color:#B7791F">Korki: +' + Math.round(r.delay / 60) + ' min na trasie</span>' : ''}
+    <span style="color:${r.delay > 60 ? '#B7791F' : '#1E8A4C'}">${r.engine === 'tomtom' ? (r.delay > 60 ? 'Korki: +' + Math.round(r.delay / 60) + ' min na trasie' : 'Korki: brak opóźnień') : ''}</span>
     ${(r.tunnels || []).length ? '<span>Tunele: ' + r.tunnels.length + (r.tunnels.some(t => t.cat) ? ' (kat. ' + [...new Set(r.tunnels.map(t => t.cat).filter(Boolean))].join(', ') + ')' : '') + '</span>' : ''}
     ${(r.ferries || []).length ? '<span>Promy: ' + r.ferries.length + '</span>' : ''}
     <span>Odcinki płatne: ${Math.round(tollKm)} km · ${r.engine === 'tomtom' ? 'TomTom, z korkami, wymiary kampera' : r.profile === 'hgv' ? 'ORS z ograniczeniami wysokości i masy' : 'ORS osobowy (HGV nie znalazł trasy)'}</span>
     ${r.ttError ? '<span style="color:#B42318">TomTom nie policzył: ' + esc(r.ttError) + '</span>' : ''}`;
-  drawProgressMarks();
+  drawProgressMarks(); fillCountryTable($('#ccTable'));
   loadPoi(); loadLimits();
 }
 const KRAJ = { PL: 'Polska', CZ: 'Czechy', SK: 'Słowacja', AT: 'Austria', DE: 'Niemcy', IT: 'Włochy', HU: 'Węgry', SI: 'Słowenia', HR: 'Chorwacja', FR: 'Francja', CH: 'Szwajcaria', NL: 'Holandia', BE: 'Belgia', DK: 'Dania', SE: 'Szwecja', NO: 'Norwegia', ES: 'Hiszpania', PT: 'Portugalia', LT: 'Litwa', LV: 'Łotwa', EE: 'Estonia', RO: 'Rumunia', BG: 'Bułgaria', GR: 'Grecja', RS: 'Serbia', BA: 'Bośnia', ME: 'Czarnogóra', AL: 'Albania', MK: 'Macedonia Płn.', LU: 'Luksemburg', GB: 'Wielka Brytania', IE: 'Irlandia', FI: 'Finlandia', UA: 'Ukraina' };
@@ -290,12 +290,12 @@ function renderPoi() {
   $('#poiStatus').textContent = st === 'loading' ? 'Szukam w OSM…' : st.startsWith('error:') ? 'Błąd: ' + st.slice(6) : st.startsWith('ok:') ? st.slice(3) + ' miejsc przy trasie' : '';
   if (!S.poi) { list.innerHTML = '<p class="note">' + (st === 'loading' ? 'Szukam kempingów, zrzutów, parkingów i stacji wzdłuż trasy…' : st.startsWith('error:') ? 'Nie udało się pobrać POI. Spróbuj „Odśwież".' : 'Wyznacz trasę — pokażę kempingi, zrzuty, wodę, LPG, parkingi i stacje wzdłuż niej.') + '</p>'; return; }
   const f = S.poiFilter, prog = S.nav ? NAV.prog : 0;
-  const items = S.poi.filter(p => p.at >= prog - 500 && (f === 'all' || (f === 'camp' && (p.kind === 'camp' || p.kind === 'caravan')) || (f === 'dump' && (p.kind === 'dump' || p.dump)) || (f === 'water' && (p.water || p.kind === 'dump')) || (f === 'lpg' && p.lpg) || (f === 'fuel' && p.kind === 'fuel') || (f === 'park' && ['mop', 'rest', 'parking'].includes(p.kind))));
+  const items = S.poi.filter(p => p.at >= prog - 500 && (f === 'all' || (f === 'camp' && (p.kind === 'camp' || p.kind === 'caravan')) || (f === 'dump' && (p.kind === 'dump' || p.dump)) || (f === 'water' && (p.water || p.kind === 'dump')) || (f === 'fuel' && p.kind === 'fuel') || (f === 'park' && ['mop', 'rest', 'parking'].includes(p.kind))));
   if (!items.length) { list.innerHTML = '<p class="note">Nic takiego przy trasie.</p>'; return; }
   list.innerHTML = items.slice(0, 80).map(p => {
     const [label, col] = POI_KIND[p.kind] || POI_KIND.camp; const pr = PRICES && PRICES[p.cc];
     let sub = '';
-    if (p.kind === 'fuel') sub = [pr && pr.diesel ? 'ON ~' + fmt1(pr.diesel) + ' zł' : '', p.lpg ? 'LPG' + (pr && pr.lpg ? ' ~' + fmt1(pr.lpg) + ' zł' : '') : '', p.h24 ? '24 h' : ''].filter(Boolean).join(' · ');
+    if (p.kind === 'fuel') sub = [pr && pr.diesel ? 'ON ~' + fmt1(pr.diesel) + ' zł' : '', p.h24 ? '24 h' : ''].filter(Boolean).join(' · ');
     else sub = [p.dump ? 'zrzut' : '', p.water ? 'woda' : '', p.motorhome ? 'kampery' : '', p.fee === 'no' ? 'bezpłatny' : '', p.hours].filter(Boolean).join(' · ');
     return `<div class="poi-it" data-id="${p.id}"><i style="background:${col}"></i><div><b>${esc(p.name || label)}</b><small>${esc(label + (sub ? ' · ' + sub : ''))}</small></div><div class="r"><b>${fmtDist(Math.max(0, p.at - prog))}</b><small>${p.off < 300 ? 'przy trasie' : '+' + fmtDist(p.off) + ' zjazd'}</small></div></div>`;
   }).join('');
@@ -455,7 +455,6 @@ function updateRouteBar() {
   for (const t of r.traffic || []) if (t.mag >= 2 && r.cum[t.b] > prog) ev.push({ at: Math.max(prog, r.cum[t.a]), cls: t.mag >= 3 ? 'tr3' : 'tr2', txt: '' });
   for (const t of r.tunnels || []) if (t.at > prog && t.len > 300) ev.push({ at: t.at, cls: 'tn', txt: '' });
   for (const t of r.ferries || []) if (t.at > prog) ev.push({ at: t.at, cls: 'fe', txt: '' });
-  for (const p of (S.poi || [])) if (p.kind === 'fuel' && p.lpg && p.at > prog && p.off < 500) { ev.push({ at: p.at, cls: 'lpg', txt: '' }); break; }
   ev.sort((x, y) => x.at - y.at);
   // pozycja na pasku: cel u góry (0 %), ja u dołu (100 %)
   let html = '<span class="flag">🏁</span>';
@@ -603,11 +602,28 @@ function openQuick() {
 function fillRoutePanel() {
   $$('#qModes button').forEach(x => x.setAttribute('aria-pressed', x.dataset.mode === S.mode));
   $('#qAvoidMoto').checked = !!S.avoid.highways; $('#qAvoidToll').checked = !!S.avoid.tolls || S.mode === 'notoll';
-  const r = S.route; $('#qRouteNote').textContent = r ? `${Math.round(r.km)} km · ${hm(r.sec)} · ${r.engine === 'tomtom' ? 'TomTom' : 'ORS'}${r.delay > 60 ? ' · korki +' + Math.round(r.delay / 60) + ' min' : ''}` : '';
+  const r = S.route; $('#qRouteNote').textContent = r ? `${Math.round(r.km)} km · ${hm(r.sec)} · ${r.engine === 'tomtom' ? 'TomTom' : 'ORS'}${r.delay > 60 ? ' · korki +' + Math.round(r.delay / 60) + ' min' : ' · brak opóźnień'}` : '';
+  fillCountryTable($('#qCcTable'));
 }
 $('#qModes').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; S.mode = b.dataset.mode; store.set('mode', S.mode); $$('#modes button').forEach(x => x.setAttribute('aria-pressed', x.dataset.mode === S.mode)); fillRoutePanel(); recalcKeepNav().then(fillRoutePanel); });
 $('#qAvoidMoto').addEventListener('change', e => { S.avoid.highways = e.target.checked; store.set('avoid', S.avoid); recalcKeepNav().then(fillRoutePanel); });
 $('#qAvoidToll').addEventListener('change', e => { S.avoid.tolls = e.target.checked; store.set('avoid', S.avoid); recalcKeepNav().then(fillRoutePanel); });
+// --- unikanie per kraj (tabela jak w planerze): płatne / autostrady
+function fillCountryTable(el) {
+  const r = S.route; if (!el) return;
+  if (!r || !r.path || !r.path.length) { el.innerHTML = ''; el.classList.add('hidden'); return; }
+  el.classList.remove('hidden');
+  el.innerHTML = '<div class="cc-h"><span>Kraj na trasie</span><span>Płatne</span><span>Autostrady</span></div>' + r.path.map(cc => {
+    const v = S.avoidCC[cc] || {};
+    return `<div class="cc-r"><span><b>${cc}</b> ${esc(KRAJ[cc] || '')}</span><input type="checkbox" data-cc="${cc}" data-k="tolls" ${v.tolls ? '' : 'checked'}><input type="checkbox" data-cc="${cc}" data-k="highways" ${v.highways ? '' : 'checked'}></div>`;
+  }).join('') + (r.byCountry ? '<small class="cc-n">Trasa liczona odcinkami między granicami wg tych ustawień.</small>' : '');
+}
+document.addEventListener('change', e => {
+  const i = e.target.closest('input[data-cc]'); if (!i) return;
+  const cc = i.dataset.cc, k = i.dataset.k; S.avoidCC[cc] = S.avoidCC[cc] || {}; S.avoidCC[cc][k] = !i.checked; store.set('avoidCC', S.avoidCC);
+  $$(`input[data-cc="${cc}"][data-k="${k}"]`).forEach(x => { x.checked = i.checked; });
+  recalcKeepNav().then(() => { fillCountryTable($('#ccTable')); fillCountryTable($('#qCcTable')); fillRoutePanel(); });
+});
 // --- szybkie ustawienia (przełączniki działają od razu)
 const OPT_EL = { roadNow: '#roadNow', poiCol: '#poiCol', rbar: '#rbar', events: '#events', nextChip: '#nextChip' };
 function applyOpts() { for (const k in OPT_EL) $(OPT_EL[k]).classList.toggle('off', !S.opt[k]); }
@@ -658,14 +674,22 @@ function autoNight(force) {
   if (night !== !!S.opt.night) setNight(night);
 }
 setInterval(() => autoNight(), 60000);
-const POI_ICON = { fuel: '⛽', mop: '🅿️', rest: '🅿️', parking: '🚐', camp: '⛺', caravan: '⛺', dump: '🚰' };
+const SVG = (p) => `<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+const POI_ICON = {
+  fuel: SVG('<path d="M5 21V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v16"/><path d="M3 21h14"/><path d="M15 9h3a2 2 0 0 1 2 2v5a2 2 0 0 1-4 0v-4"/><path d="M7 7h6"/>'),
+  mop: SVG('<rect x="3" y="3" width="18" height="18" rx="4"/><path d="M9 17V7h4a3 3 0 0 1 0 6H9"/>'),
+  rest: SVG('<rect x="3" y="3" width="18" height="18" rx="4"/><path d="M9 17V7h4a3 3 0 0 1 0 6H9"/>'),
+  parking: SVG('<path d="M3 16V8h11l3 3h4v5z"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/>'),
+  camp: SVG('<path d="M3 20L12 4l9 16z"/><path d="M9 20l3-6 3 6"/>'), caravan: SVG('<path d="M3 20L12 4l9 16z"/><path d="M9 20l3-6 3 6"/>'),
+  dump: SVG('<path d="M12 3S5 11 5 15a7 7 0 0 0 14 0c0-4-7-12-7-12z"/>'),
+};
 function updatePoiCol() {
   const r = S.route, el = $('#poiCol'); if (!el || !r || !S.poi) return;
   const prog = NAV.prog;
   const items = S.poi.filter(p => p.at >= prog - 100 && p.off < 1500 && ['fuel', 'mop', 'rest', 'parking'].includes(p.kind)).slice(0, 3);
   el.innerHTML = items.map(p => {
-    const pr = PRICES && PRICES[p.cc]; const price = p.kind === 'fuel' && pr && pr.diesel ? `<small>${fmt1(pr.diesel)}</small>` : (p.kind === 'fuel' && p.lpg ? '<small>LPG</small>' : '');
-    return `<div class="pc" data-id="${p.id}"><span class="ic">${POI_ICON[p.kind] || '📍'}</span><b>${fmtDist(Math.max(0, p.at - prog))}</b>${price}</div>`;
+    const pr = PRICES && PRICES[p.cc]; const price = p.kind === 'fuel' && pr && pr.diesel ? `<small>${fmt1(pr.diesel)} zł</small>` : '';
+    return `<div class="pc" data-id="${p.id}"><span class="ic">${POI_ICON[p.kind] || POI_ICON.camp}</span><b>${fmtDist(Math.max(0, p.at - prog))}</b>${price}</div>`;
   }).join('');
 }
 $('#poiCol').addEventListener('click', e => { const it = e.target.closest('.pc'); if (!it) return; const p = S.poi.find(x => x.id === it.dataset.id); if (p && confirm('Nawigować do: ' + (p.name || POI_KIND[p.kind]?.[0] || 'miejsce') + '?')) goTo(p); });
