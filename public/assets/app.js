@@ -1135,30 +1135,29 @@ function readSharedLink(){
 }
 function toast(t){ let el = $('#toast'); if(!el){ el = document.createElement('div'); el.id = 'toast'; el.setAttribute('role', 'status'); document.body.append(el); }
   el.textContent = t; el.classList.add('on'); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('on'), 2600); }
+// Azimo (nawigacja): otwórz aplikację ze schematem azimo://, a bez aplikacji – wersję w przeglądarce /gps/
+function azimoParams(){
+  const st = tripState(); const enc = x => Array.isArray(x) ? [x[1], x[2], x[0]].join(',') : null;
+  const p = new URLSearchParams(); const t = enc(st.t); if(!t) return null; p.set('to', t);
+  const f = enc(st.f); if(f) p.set('from', f);
+  const via = (st.p || []).map(enc).filter(Boolean); if(via.length) p.set('via', via.join('|'));
+  if(st.a) p.set('mode', ({fast: 'fast', main: 'main', notoll: 'notoll', eco: 'eco'})[st.a] || 'fast');
+  return p.toString();
+}
+function openAzimo(){
+  const q = azimoParams(); if(!q){ toast('Najpierw wybierz cel'); return; }
+  const web = location.origin + '/gps/?' + q, app = 'azimo://route?' + q;
+  if(isDesk()){ window.open(web, '_blank'); return; }
+  const t0 = Date.now(); const fallback = setTimeout(() => { if(document.visibilityState === 'visible' && Date.now() - t0 < 2500) location.href = web; }, 1300);
+  document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'hidden') clearTimeout(fallback); }, {once: true});
+  location.href = app;
+}
 async function shareTrip(){
   const url = location.origin + location.pathname + '?t=' + b64e(tripState()) + '#trasa';
   const title = `${R.fromName} – ${R.toName} kamperem`;
   if(navigator.share && !isDesk()){ try{ await navigator.share({title, text: title + ' – trasa, opłaty i paliwo', url}); return; }catch(e){ if(e.name === 'AbortError') return; } }
   try{ await navigator.clipboard.writeText(url); toast('Link do trasy skopiowany'); }
   catch(e){ prompt('Skopiuj link do trasy:', url); }
-}
-
-// Azimo – nasza nawigacja (gdzieponiesie.pl/gps): cel i przystanki w adresie (?to=dł,szer,Nazwa&via=…|…)
-function azimoUrl(){
-  const end = R.ptB || {lon: R.chain[R.chain.length - 1][1], lat: R.chain[R.chain.length - 1][2]};
-  const pt = (p, name) => `${(+p.lon).toFixed(5)},${(+p.lat).toFixed(5)},${String(name || '').replace(/[|]/g, ' ')}`;
-  const via = (R.via || []).map(v => pt(v, v.name));
-  return location.origin + '/gps/?to=' + encodeURIComponent(pt(end, R.toName)) + (via.length ? '&via=' + encodeURIComponent(via.join('|')) : '');
-}
-// Najpierw aplikacja (schemat azimo://), a gdy jej nie ma – wersja w przeglądarce.
-function openAzimo(){
-  const web = azimoUrl(), app = 'azimo://trasa' + web.slice(web.indexOf('?'));
-  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  if(!ios){ location.href = web; return; }
-  let left = false; const onHide = () => { if(document.hidden) left = true; };
-  document.addEventListener('visibilitychange', onHide);
-  setTimeout(() => { document.removeEventListener('visibilitychange', onHide); if(!left && !document.hidden) location.href = web; }, 1500);
-  location.href = app;
 }
 
 /* --- 1. noclegi: podział trasy na dni wg limitu km dziennie --- */
@@ -1340,10 +1339,8 @@ function renderSaved(){
       </tbody></table></div>` : ''}`;
 }
 document.addEventListener('click', e => {
-  if(e.target.closest('#shareBtn')){ const m = $('#shareMenu'); m.hidden = !m.hidden; }
-  else if(!e.target.closest('#shareMenu') && $('#shareMenu')) $('#shareMenu').hidden = true;
-  if(e.target.closest('#shareLink')){ $('#shareMenu').hidden = true; shareTrip(); }
-  if(e.target.closest('#shareAzimo')){ $('#shareMenu').hidden = true; openAzimo(); }
+  if(e.target.closest('#shareBtn')) shareTrip();
+  if(e.target.closest('#azimoBtn')) openAzimo();
   if(e.target.closest('#saveBtn')) saveTrip();
   if(e.target.closest('#printBtn2')) printPlan();
   if(e.target.closest('.sv-t')){ savedOpen = !savedOpen; renderSaved(); }
@@ -1356,11 +1353,8 @@ const nightsOpenNow = () => S.nightsOpen == null ? isDesk() : S.nightsOpen;
 
 function renderExtras(){
   // przyciski
-  $('#actions').innerHTML = `<button class="btn ghost" id="shareBtn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7M16 6l-4-4-4 4M12 2v13"/></svg>Udostępnij</button>
-    <div class="share-menu" id="shareMenu" hidden>
-      <button type="button" id="shareLink"><b>Wyślij link do trasy</b><small>WhatsApp, SMS, e-mail…</small></button>
-      <button type="button" id="shareAzimo"><b>Prowadź w Azimo</b><small>nawigacja z celem${(R.via || []).length ? ' i przystankami' : ''}</small></button>
-    </div>
+  $('#actions').innerHTML = `<button class="btn" id="azimoBtn" title="Otwórz trasę w nawigacji Azimo"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 L21 21 L12 16 L3 21 Z" fill="currentColor"/></svg>Nawiguj w Azimo</button>
+    <button class="btn ghost" id="shareBtn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7M16 6l-4-4-4 4M12 2v13"/></svg>Udostępnij</button>
     <button class="btn ghost" id="saveBtn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-6-4-6 4z"/></svg>Zapisz trasę</button>
     <button class="btn ghost" id="printBtn2" aria-label="Drukuj plan"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9V3h12v6M6 18H4v-7h16v7h-2M6 14h12v7H6z"/></svg><span class="pr-l">Drukuj</span></button>`;
   // noclegi – osobna zakładka

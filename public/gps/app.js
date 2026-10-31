@@ -1228,6 +1228,17 @@ function hookTiles() {
   if (src.tiles) wire(); else map.once('sourcedata', e => { if (e.sourceId === 'openmaptiles') wire(); });
 }
 
+function applyRouteParams(qs) {
+  const u = new URLSearchParams(qs.startsWith('?') ? qs : '?' + qs); const P = s => { const [lon, lat, ...n] = s.split(','); return Number.isFinite(+lon) && Number.isFinite(+lat) ? { lon: +lon, lat: +lat, name: n.join(',') || 'Punkt' } : null; };
+  let any = false;
+  if (u.get('to')) { const p = P(u.get('to')); if (p) { S.to = p; $('#to').textContent = p.name; $('#to').classList.remove('empty'); any = true; } }
+  if (u.get('from')) { const p = P(u.get('from')); if (p) { S.from = p; $('#from').textContent = p.name; $('#from').classList.remove('empty'); } }
+  if (u.get('via')) { S.via = u.get('via').split('|').map(P).filter(Boolean); renderViaChips(); }
+  if (u.get('mode') && ['fast', 'main', 'notoll', 'eco'].includes(u.get('mode'))) { S.mode = u.get('mode'); store.set('mode', S.mode); }
+  if (any) history.replaceState(null, '', location.pathname);
+  return any;
+}
+
 /* start */
 // komputer (mysz, brak dotyku, szeroki ekran) – tylko informacja z kodem QR; ?desk=1 wymusza pełną wersję do testów
 function isDesktop() {
@@ -1243,10 +1254,10 @@ function init() {
   $$('#modes button').forEach(x => x.setAttribute('aria-pressed', x.dataset.mode === S.mode));
   vehInit(); vehLine(); fillVeh(S.vehId); initMap(); $('#btnView').textContent = S.opt.d3 ? '3D' : '2D';
   startGps();
-  // ?to=lon,lat,Nazwa – wejście z planera
-  const u = new URLSearchParams(location.search);
-  if (u.get('to')) { const [lon, lat, ...n] = u.get('to').split(','); S.to = { lon: +lon, lat: +lat, name: n.join(',') || 'Cel' }; $('#to').textContent = S.to.name; $('#to').classList.remove('empty'); } else { $('#to').classList.add('empty'); }
-  $('#from').classList.add('empty'); $('#viaAdd').classList.add('empty');
+  // ?to=lon,lat,Nazwa&from=…&via=a|b&mode=… – wejście z planera (link albo azimo://route?…)
+  $('#from').classList.add('empty'); $('#to').classList.add('empty'); $('#viaAdd').classList.add('empty');
+  applyRouteParams(location.search);
+  if (NATIVE) { const AP = plugin('App'); if (AP) { AP.addListener('appUrlOpen', e => { if (e && e.url) { applyRouteParams(e.url.slice(e.url.indexOf('?'))); showTab('trasa'); if (S.to) computeRoute(); } }); AP.getLaunchUrl().then(l => { if (l && l.url && l.url.includes('?')) { applyRouteParams(l.url.slice(l.url.indexOf('?'))); } }).catch(() => {}); } }
   openPacks().catch(() => {});
   if (!navigator.onLine) { $('#netBadge').classList.remove('hidden'); if (loadOffline()) { showTab('trasa'); return; } }
   showTab(S.to ? 'trasa' : 'jazda');

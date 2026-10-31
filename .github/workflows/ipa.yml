@@ -64,6 +64,12 @@ jobs:
           /usr/libexec/PlistBuddy -c "Add :WKAppBoundDomains array" $PL || true
           /usr/libexec/PlistBuddy -c "Add :WKAppBoundDomains:0 string gdzieponiesie.pl" $PL || true
           /usr/libexec/PlistBuddy -c "Add :UILaunchStoryboardName string LaunchScreen" $PL || true
+          # schemat azimo:// (link „Nawiguj w Azimo” z planera)
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes array" $PL || true
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0 dict" $PL || true
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0:CFBundleURLName string pl.gdzieponiesie.azimo" $PL || true
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0:CFBundleURLSchemes array" $PL || true
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0:CFBundleURLSchemes:0 string azimo" $PL || true
           plutil -lint $PL
 
       - name: Live Activity – rozszerzenie widgetu i wtyczka
