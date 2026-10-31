@@ -699,12 +699,12 @@ function fillVoices() {
   const vs = speechSynthesis.getVoices().filter(v => /^pl/i.test(v.lang));
   sel.innerHTML = '<option value="">Automatycznie</option>' + vs.map(v => `<option value="${esc(v.name)}">${esc(v.name.replace(/\s*\(.*?\)/g, ''))}${/premium|enhanced|rozszerz/i.test(v.name) ? ' ★' : ''}</option>`).join('');
   sel.value = S.opt.voiceName || '';
-  $('#voiceHint').textContent = vs.length ? vs.length + ' polskie głosy · więcej: Ustawienia iOS → Dostępność → Zawartość mówiona → Głosy → Polski' : 'brak polskich głosów – dodaj w Ustawieniach iOS → Dostępność → Zawartość mówiona → Głosy';
+  $('#voiceHint').textContent = vs.length > 1 ? vs.length + ' polskie głosy z systemu' : 'Safari udostępnia tylko podstawowy głos iOS (Zosia); wersja rozszerzona będzie w aplikacji natywnej';
 }
 if ('speechSynthesis' in window) { speechSynthesis.onvoiceschanged = () => { voicePl = null; fillVoices(); }; setTimeout(fillVoices, 500); }
 $('#optVoiceName').addEventListener('change', e => { S.opt.voiceName = e.target.value; store.set('opt', S.opt); voicePl = null; });
 $('#optRate').addEventListener('input', e => { S.opt.rate = +e.target.value; store.set('opt', S.opt); $('#rateTxt').textContent = S.opt.rate.toFixed(2).replace('.', ',').replace(/0$/, '') + '×'; });
-$('#voiceTest').addEventListener('click', () => { const was = S.opt.voice; S.opt.voice = true; speak('Za 300 metrów skręć w prawo.', true); S.opt.voice = was; });
+$('#voiceTest').addEventListener('click', () => { const was = S.opt.voice; S.opt.voice = true; speak('Za 300 metrów skręć w prawo.', true); S.opt.voice = was; setTimeout(fillVoices, 1500); });
 
 /* wake lock – ekran nie gaśnie w czasie jazdy */
 let wake = null;
@@ -738,6 +738,7 @@ function showTab(t) {
   S.tab = t;
   $('#sheet').classList.toggle('hidden', t !== 'trasa'); $('#veh').classList.toggle('hidden', t !== 'veh'); $('#menu').classList.toggle('hidden', t !== 'menu'); $('#poi').classList.toggle('hidden', t !== 'poi'); $('#search').classList.toggle('hidden', t !== 'search'); $('#pick').classList.add('hidden');
   $('#hud').classList.toggle('hidden', !(t === 'jazda' && S.nav));
+  if (t === 'menu') fillVoices();
   if (t === 'menu') $('#menuVeh').textContent = `Kamper ${fmt1(S.veh.h)} m · ${fmt1(S.veh.l)} m · ${fmt1(S.veh.t)} t`;
   $('#idle').classList.toggle('hidden', !(t === 'jazda' && !S.nav));
   if (t === 'jazda' && !S.nav) { $('#fVehTxt').textContent = `🚐 Kamper ${fmt1(S.veh.h)} m · ${fmt1(S.veh.t)} t`; $('#fViewTxt').textContent = S.opt.d3 ? '3D' : '2D'; }
