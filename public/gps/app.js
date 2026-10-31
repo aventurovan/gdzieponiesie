@@ -34,7 +34,7 @@ async function laEnd() { if (!NLA) return; LA.on = false; try { await NLA.end();
 const S = {
   veh: store.get('veh', { h: 3.1, l: 6.36, w: 2.05, t: 3.5 }),
   profiles: store.get('profiles', null), vehId: store.get('vehId', null),
-  opt: Object.assign({ voice: true, d3: true, night: false, sim: false, roadNow: true, poiCol: true, events: true, nextChip: true, autoNight: false, cams: true, limits: true, lanes: true, forceOffline: false }, store.get('opt', {})),
+  opt: Object.assign({ voice: true, d3: true, night: false, sim: false, roadNow: true, poiCol: true, events: true, nextChip: true, autoNight: false, cams: true, limits: true, lanes: true, forceOffline: false, junction: true }, store.get('opt', {})),
   via: [], avoid: store.get('avoid', { highways: false, tolls: false }), avoidCC: store.get('avoidCC', {}),
   mode: store.get('mode', 'fast'),
   from: null, to: null,          // {name, lon, lat} | null = bieżąca pozycja
@@ -93,6 +93,11 @@ function initMap() {
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') setTimeout(kick, 200); });
   if (window.visualViewport) window.visualViewport.addEventListener('resize', () => setTimeout(kick, 50));
   map.on('resize', () => { if (S.tab === 'trasa' && S.route && document.activeElement && document.activeElement.tagName !== 'INPUT') fitRoute(); });
+  // długie przytrzymanie na mapie: dodaj punkt pośredni / nawiguj tutaj
+  let lpT = null, lpPt = null;
+  map.on('touchstart', e => { if (e.originalEvent.touches.length !== 1) return; lpPt = e.lngLat; clearTimeout(lpT); lpT = setTimeout(() => { if (lpPt) longPress(lpPt); }, 650); });
+  map.on('touchmove', () => { clearTimeout(lpT); lpPt = null; }); map.on('touchend', () => clearTimeout(lpT));
+  map.on('contextmenu', e => longPress(e.lngLat));
   map.on('rotate', () => { const el = $('#compassIco'); if (el) el.style.transform = `rotate(${-map.getBearing()}deg)`; });
   map.on('dragstart', () => { if (S.nav) { S.follow = false; $('#btnRecenter').hidden = false; clearTimeout(S.followT); S.followT = setTimeout(() => { S.follow = true; $('#btnRecenter').hidden = true; }, 30000); } });
   map.on('load', () => { mapReady = true; if (S.route) drawRoute(); const at = document.querySelector('.maplibregl-ctrl-attrib'); if (at) at.classList.remove('maplibregl-compact-show'); });
@@ -228,6 +233,8 @@ function renderSearchHome() {
   html += home ? rowHtml({ ic: ICO_HOME, name: 'Dom', sub: home.name, data: `data-pt="${esc(JSON.stringify(home))}"` }) : rowHtml({ ic: ICO_HOME, name: 'Ustaw Dom', sub: 'zapisz bieżącą pozycję jako Dom', data: 'data-act="sethome"' });
   const favs = FAV.get().filter(f => !f.home);
   if (favs.length) { html += '<div class="sh"><span>Ulubione</span></div>'; html += favs.map(f => rowHtml({ ic: ICO_STAR, name: f.name, sub: f.label, data: `data-pt="${esc(JSON.stringify(f))}"`, star: true })).join(''); }
+  const rts = RT.get();
+  if (rts.length && SF.field === 'to') { html += '<div class="sh"><span>Zapisane trasy</span></div>'; html += rts.map((x, i) => rowHtml({ ic: '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#5B8CFF" stroke-width="2" stroke-linecap="round"><circle cx="6" cy="18" r="3"/><circle cx="18" cy="6" r="3"/><path d="M9 18H14Q18 18 18 14V9"/></svg>', name: x.name, sub: (x.via && x.via.length ? 'przez ' + x.via.map(v => v.name).join(', ') + ' · ' : '') + ({ fast: 'szybka', main: 'główne drogi', notoll: 'bez opłat', eco: 'ekonomiczna' })[x.mode || 'fast'], data: `data-rt="${i}"` })).join(''); }
   const hist = HIST.get();
   if (hist.length) { html += '<div class="sh"><span>Ostatnie wyszukiwania</span><button type="button" data-act="clearhist">Wyczyść historię</button></div>'; html += hist.map(x => rowHtml({ ic: ICO_PIN, name: x.name, sub: (x.t ? new Date(x.t).toLocaleDateString('pl-PL', { day: 'numeric', month: 'short' }) + ' • ' : '') + (x.label || ''), data: `data-pt="${esc(JSON.stringify(x))}"`, star: FAV.has(x) })).join(''); }
   L.innerHTML = html;
@@ -246,6 +253,7 @@ $('#sugg').addEventListener('click', e => { const li = e.target.closest('li'); i
 $('#sList').addEventListener('click', async e => {
   const st = e.target.closest('[data-star]'); if (st) { const row = st.closest('[data-pt]'); if (row) { FAV.toggle(JSON.parse(row.dataset.pt)); SF.cat ? renderCat() : renderSearchHome(); } return; }
   const row = e.target.closest('.si, .sh button'); if (!row) return;
+  if (row.dataset.rt != null) { const rt = RT.get()[+row.dataset.rt]; if (rt) { $('#sInput').blur(); loadRouteNamed(rt); } return; }
   const act = row.dataset.act;
   if (act === 'map') { startPick(); return; }
   if (act === 'gps') { if (!S.pos) { startGps(); return; } pick({ name: 'Bieżąca pozycja', lon: S.pos.lon, lat: S.pos.lat }); return; }
@@ -519,6 +527,16 @@ function trafficAhead(idx) {
   return { sec: sum, min: Math.round(sum / 60), extra };
 }
 
+async function longPress(ll) {
+  const pt = { lon: ll.lng, lat: ll.lat, name: '…' };
+  const pop = new maplibregl.Popup({ offset: 8, closeButton: true, maxWidth: '240px' }).setLngLat(ll).setHTML('<b id="lpName">Sprawdzam adres…</b>').addTo(map);
+  try { const j = await (await fetch(API + `/gps/revgeo?lat=${ll.lat}&lon=${ll.lng}`)).json(); pt.name = j.name || 'Punkt z mapy'; } catch (e) { pt.name = 'Punkt z mapy'; }
+  pop.setHTML(`<b>${esc(pt.name)}</b><div style="display:flex;gap:6px;margin-top:8px"><button type="button" data-lp="via" style="flex:1;height:36px;border:0;border-radius:10px;background:#3A74FF;color:#fff;font-weight:700">+ Punkt pośredni</button><button type="button" data-lp="go" style="flex:1;height:36px;border:0;border-radius:10px;background:#1a1d24;color:#fff;font-weight:700">Nawiguj</button></div>`);
+  pop.getElement().addEventListener('click', e => { const b = e.target.closest('[data-lp]'); if (!b) return; pop.remove();
+    if (b.dataset.lp === 'via') { S.via.push(pt); renderViaChips(); HIST.add(pt); if (S.nav) recalcKeepNav(); else if (S.to) computeRoute(); else setField('to', pt); }
+    else goTo({ ...pt, kind: 'camp' }); });
+}
+
 /* ---------- POI przy trasie ---------- */
 let PRICES = null;
 async function loadPrices() { if (PRICES) return PRICES; try { const r = await fetch(API + '/prices'); PRICES = (await r.json()).prices || {}; } catch (e) { PRICES = {}; } return PRICES; }
@@ -610,6 +628,8 @@ document.addEventListener('click', e => {
 });
 $('#tBack').addEventListener('click', () => showTab('jazda'));
 $('#fMenu').addEventListener('click', () => { S.openedFrom = 'jazda'; showTab('menu'); });
+$('#rGpx').addEventListener('click', exportGpx);
+$('#rSave').addEventListener('click', saveRouteNamed);
 $('#tOpts').addEventListener('click', () => { $('#sheet .top').classList.add('hidden'); $('#tBottom').classList.add('hidden'); $('#ropts').classList.remove('hidden'); fillRouteOpts(); altMarkers.forEach(m => m.remove()); altMarkers = []; });
 $('#roptsClose').addEventListener('click', () => { $('#ropts').classList.add('hidden'); $('#sheet .top').classList.remove('hidden'); $('#tBottom').classList.remove('hidden'); fitRoute(); drawAlts(); });
 $('#tVeh').addEventListener('click', () => { S.openedFrom = 'trasa'; showTab('veh'); });
@@ -664,7 +684,8 @@ function tickMarker(now) {
   meMarker.setLngLat(p).setRotation(MK.curH);
   if (S.nav && S.follow && S.tab === 'jazda') {
     MK.zoom += (NAV.zoomT - MK.zoom) * 0.05;
-    map.jumpTo({ center: p, bearing: MK.curH, zoom: MK.zoom, pitch: S.opt.d3 ? 60 : 0, padding: { top: window.innerHeight * 0.38, bottom: 0 } });
+    MK.pitch = MK.pitch == null ? (S.opt.d3 ? 60 : 0) : MK.pitch + (((S.opt.d3 && !NAV.junction) ? 60 : 0) - MK.pitch) * 0.08;
+    map.jumpTo({ center: p, bearing: MK.curH, zoom: MK.zoom, pitch: MK.pitch, padding: { top: window.innerHeight * (NAV.junction ? 0.2 : 0.38), bottom: 0 } });
   }
 }
 
@@ -714,6 +735,8 @@ function navStep(f) {
     const kmh = NAV.speed * 3.6; let zoom = kmh > 90 ? 15.6 : kmh > 50 ? 16.3 : 17;
     const cs = currentStep(); if (cs && cs.dist < 600 && cs.s.t !== 10) zoom = Math.max(zoom, cs.dist < 250 ? 17.8 : 17.2);
     NAV.zoomT = zoom;
+    // widok skrzyżowania: tuż przed skrętem kamera z góry (2D), potem wraca do 3D
+    NAV.junction = !!(S.opt.junction && cs && cs.dist < 160 && [0, 1, 2, 3, 7, 8, 9].includes(cs.s.t));
   }
   if (!S.follow) { /* mapa odsunięta ręcznie – pętla rAF nie rusza kamery */ }
   updateHud();
@@ -938,6 +961,8 @@ $('#quick').addEventListener('click', e => {
   else if (q === 'via') { fillVia(); qPanel('via'); setTimeout(() => $('#viaInput').focus(), 50); }
   else if (q === 'share') shareRoute();
   else if (q === 'steps') { fillSteps(); qPanel('steps'); }
+  else if (q === 'gpx') exportGpx();
+  else if (q === 'saveroute') { saveRouteNamed(); }
   else if (q === 'data') { fillData(); qPanel('data'); }
   else if (q === 'poi') { $('#quick').classList.add('hidden'); S.openedFrom = 'jazda'; showTab('poi'); }
   else if (q === 'offline') { $('#quick').classList.add('hidden'); S.openedFrom = 'jazda'; showTab('menu'); setTimeout(saveOffline, 300); }
@@ -1014,6 +1039,28 @@ function fillData() {
   const tollKm = (r.tolls || []).reduce((s, [a, b]) => s + (r.cum[b] - r.cum[a]), 0) / 1000;
   const rows = [['Dystans', Math.round(r.km) + ' km'], ['Czas jazdy', hm(r.sec)], ['Korki', r.delay > 60 ? '+' + Math.round(r.delay / 60) + ' min' : 'brak'], ['Kraje', (r.path || []).map(c => KRAJ[c] || c).join(', ')], ['Granice', (r.crossings || []).map(c => c.from + '→' + c.to).join(', ') || '—'], ['Odcinki płatne', Math.round(tollKm) + ' km'], ['Tunele', (r.tunnels || []).length], ['Promy', (r.ferries || []).length], ['Silnik', r.engine === 'tomtom' ? 'TomTom (profil kampera)' : 'openrouteservice'], ['Profil', `${fmt1(S.veh.h)} m · ${fmt1(S.veh.l)} m · ${fmt1(S.veh.t)} t`]];
   $('#qData').innerHTML = rows.map(([k, v]) => `<div class="kv"><span>${k}</span><b>${esc(String(v))}</b></div>`).join('');
+}
+function exportGpx() {
+  const r = S.route; if (!r) return;
+  const wpts = [...(S.from ? [S.from] : []), ...S.via, ...(S.to ? [S.to] : [])];
+  const gpx = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Azimo" xmlns="http://www.topografix.com/GPX/1/1">\n<metadata><name>${esc(S.to ? 'Trasa do ' + S.to.name : 'Trasa')}</name><time>${new Date().toISOString()}</time></metadata>\n` +
+    wpts.map(w => `<wpt lat="${w.lat}" lon="${w.lon}"><name>${esc(w.name)}</name></wpt>`).join('\n') +
+    `\n<rte><name>${esc(S.to ? S.to.name : 'Trasa')}</name>` + r.steps.map(s => { const c = r.coords[s.wp[0]]; return `<rtept lat="${c[1]}" lon="${c[0]}"><name>${esc(s.i || s.n || '')}</name></rtept>`; }).join('') + `</rte>\n` +
+    `<trk><name>${esc(S.to ? S.to.name : 'Trasa')}</name><trkseg>` + r.coords.map(c => `<trkpt lat="${c[1]}" lon="${c[0]}"/>`).join('') + `</trkseg></trk>\n</gpx>`;
+  const blob = new Blob([gpx], { type: 'application/gpx+xml' }); const file = new File([blob], 'azimo-' + (S.to ? S.to.name.replace(/[^\w\-]+/g, '_') : 'trasa') + '.gpx', { type: 'application/gpx+xml' });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) navigator.share({ files: [file], title: file.name }).catch(() => {});
+  else { const u = URL.createObjectURL(blob); const l = document.createElement('a'); l.href = u; l.download = file.name; document.body.appendChild(l); l.click(); l.remove(); setTimeout(() => URL.revokeObjectURL(u), 5000); }
+}
+// --- zapisane trasy (lista)
+const RT = { get: () => store.get('routes', []), set: (v) => store.set('routes', v) };
+function saveRouteNamed() {
+  if (!S.to) return; const name = prompt('Nazwa trasy', (S.from ? S.from.name : 'Bieżąca pozycja') + ' → ' + S.to.name); if (!name) return;
+  const list = RT.get().filter(x => x.name !== name); list.unshift({ name, from: S.from, to: S.to, via: S.via, mode: S.mode, avoid: S.avoid, avoidCC: S.avoidCC, t: Date.now() }); RT.set(list.slice(0, 30));
+}
+function loadRouteNamed(rt) {
+  S.from = rt.from || null; S.to = rt.to; S.via = rt.via || []; S.mode = rt.mode || S.mode; S.avoid = rt.avoid || S.avoid; S.avoidCC = rt.avoidCC || S.avoidCC;
+  $('#from').textContent = S.from ? S.from.name : 'Bieżąca pozycja'; $('#from').classList.toggle('empty', !S.from); $('#to').textContent = S.to.name; $('#to').classList.remove('empty'); renderViaChips();
+  showTab('trasa'); computeRoute();
 }
 async function shareRoute() {
   if (!S.to) return;

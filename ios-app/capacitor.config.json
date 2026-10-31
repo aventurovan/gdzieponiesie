@@ -12,7 +12,8 @@
       "unpkg.com",
       "fonts.googleapis.com",
       "fonts.gstatic.com"
-    ]
+    ],
+    "errorPath": "error.html"
   },
   "ios": {
     "contentInset": "never",
@@ -21,6 +22,14 @@
     "scrollEnabled": false
   },
   "plugins": {
-    "BackgroundGeolocation": {}
+    "BackgroundGeolocation": {},
+    "SplashScreen": {
+      "launchShowDuration": 1200,
+      "launchAutoHide": true,
+      "backgroundColor": "#16181D",
+      "showSpinner": false,
+      "splashFullScreen": true,
+      "splashImmersive": true
+    }
   }
 }

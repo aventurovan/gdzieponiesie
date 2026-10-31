@@ -1,6 +1,6 @@
 {
   "name": "azimo",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "private": true,
   "scripts": {
     "sync": "cap sync ios",
@@ -13,7 +13,8 @@
     "@capacitor/app": "8.1.2",
     "@capacitor-community/keep-awake": "8.0.1",
     "@capacitor-community/text-to-speech": "8.0.2",
-    "@capacitor-community/background-geolocation": "1.2.26"
+    "@capacitor-community/background-geolocation": "1.2.26",
+    "@capacitor/splash-screen": "8.0.2"
   },
   "devDependencies": {
     "@capacitor/cli": "8.5.3",
