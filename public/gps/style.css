@@ -20,24 +20,24 @@ button{font-family:inherit}
 .chip{background:rgba(26,29,36,.85);color:var(--txt);border-radius:18px;padding:0 12px;height:36px;display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700}
 .chip.next{left:14px;top:calc(var(--sat) + 130px)}
 .pill{background:var(--panel);color:var(--txt);border-radius:30px;padding:9px 18px;font-size:18px;font-weight:800;left:50%;transform:translateX(-50%)}
-.road-now{bottom:calc(var(--sab) + 196px);max-width:80vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.road-now{bottom:calc(var(--sab) + 132px);max-width:80vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .road-now:empty{display:none}
 .round{width:60px;height:60px;border-radius:50%;border:0;background:var(--panel);color:var(--txt);font-size:16px;font-weight:800;right:14px}
-#btnPoi{bottom:calc(var(--sab) + 318px)}
-#btnView{bottom:calc(var(--sab) + 388px)}
-#btnRecenter{left:14px;right:auto;bottom:calc(var(--sab) + 196px);font-size:28px}
-.limit{right:14px;bottom:calc(var(--sab) + 240px);width:66px;height:66px;border-radius:50%;background:#fff;border:8px solid var(--red);display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:800;color:var(--ink)}
-.speed{right:14px;bottom:calc(var(--sab) + 140px);width:84px;height:88px;display:flex;flex-direction:column;align-items:center;justify-content:center}
+#btnPoi{bottom:calc(var(--sab) + 214px)}
+#btnView{bottom:calc(var(--sab) + 284px)}
+#btnRecenter{left:14px;right:auto;bottom:calc(var(--sab) + 132px);font-size:28px}
+.limit{right:22px;bottom:calc(var(--sab) + 136px);width:66px;height:66px;border-radius:50%;background:#fff;border:8px solid var(--red);display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:800;color:var(--ink)}
+.speed{right:14px;bottom:calc(var(--sab) + 14px);width:84px;height:88px;display:flex;flex-direction:column;align-items:center;justify-content:center}
 .speed b{font-size:42px;font-weight:800;line-height:1}
 .speed.over b{color:var(--amber)}
 .speed small{font-size:12px;font-weight:600}
-.eta{left:14px;right:112px;bottom:calc(var(--sab) + 140px);height:88px;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:4px}
+.eta{left:14px;right:112px;bottom:calc(var(--sab) + 14px);height:88px;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:4px}
 .eta .row1{display:flex;align-items:baseline;gap:10px}
 .eta .row1 b{font-size:30px;font-weight:800;color:var(--green);line-height:1.1}
 .eta .row1 small{font-size:11px;color:var(--sub);font-weight:600}
 .eta .row2{display:flex;gap:12px;font-size:15px;font-weight:700}
 .eta .warn{font-size:12px;color:var(--amber);font-weight:600}
-.progress{left:14px;right:14px;bottom:calc(var(--sab) + 124px);height:8px;border-radius:4px;background:rgba(26,29,36,.25);overflow:hidden}
+.progress{left:14px;right:14px;bottom:calc(var(--sab) + 112px);height:8px;border-radius:4px;background:rgba(26,29,36,.25);overflow:hidden}
 .progress i{display:block;height:100%;width:0;background:var(--blue);border-radius:4px;transition:width .5s}
 
 /* arkusze */
