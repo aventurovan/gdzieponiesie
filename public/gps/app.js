@@ -686,14 +686,25 @@ function vNext() {
   const t = VQ.shift(); if (!t) { vBusy = false; return; }
   vBusy = true;
   try {
-    if (!voicePl) voicePl = speechSynthesis.getVoices().find(v => /^pl/i.test(v.lang)) || null;
-    const u = new SpeechSynthesisUtterance(t); u.lang = 'pl-PL'; if (voicePl) u.voice = voicePl; u.rate = 1.0;
+    const vs = speechSynthesis.getVoices();
+    voicePl = (S.opt.voiceName && vs.find(v => v.name === S.opt.voiceName)) || vs.find(v => /^pl/i.test(v.lang) && /premium|enhanced|rozszerz/i.test(v.name)) || vs.find(v => /^pl/i.test(v.lang)) || null;
+    const u = new SpeechSynthesisUtterance(t); u.lang = 'pl-PL'; if (voicePl) u.voice = voicePl; u.rate = S.opt.rate || 1.0;
     u.onend = u.onerror = () => { window._utt = null; setTimeout(vNext, 150); };
     window._utt = u; speechSynthesis.resume(); speechSynthesis.speak(u);
     setTimeout(() => { if (window._utt === u) { window._utt = null; vBusy = false; vNext(); } }, 12000);
   } catch (e) { vBusy = false; }
 }
-if ('speechSynthesis' in window) speechSynthesis.onvoiceschanged = () => { voicePl = null; };
+function fillVoices() {
+  const sel = $('#optVoiceName'); if (!sel || !('speechSynthesis' in window)) return;
+  const vs = speechSynthesis.getVoices().filter(v => /^pl/i.test(v.lang));
+  sel.innerHTML = '<option value="">Automatycznie</option>' + vs.map(v => `<option value="${esc(v.name)}">${esc(v.name.replace(/\s*\(.*?\)/g, ''))}${/premium|enhanced|rozszerz/i.test(v.name) ? ' ★' : ''}</option>`).join('');
+  sel.value = S.opt.voiceName || '';
+  $('#voiceHint').textContent = vs.length ? vs.length + ' polskie głosy · więcej: Ustawienia iOS → Dostępność → Zawartość mówiona → Głosy → Polski' : 'brak polskich głosów – dodaj w Ustawieniach iOS → Dostępność → Zawartość mówiona → Głosy';
+}
+if ('speechSynthesis' in window) { speechSynthesis.onvoiceschanged = () => { voicePl = null; fillVoices(); }; setTimeout(fillVoices, 500); }
+$('#optVoiceName').addEventListener('change', e => { S.opt.voiceName = e.target.value; store.set('opt', S.opt); voicePl = null; });
+$('#optRate').addEventListener('input', e => { S.opt.rate = +e.target.value; store.set('opt', S.opt); $('#rateTxt').textContent = S.opt.rate.toFixed(2).replace('.', ',').replace(/0$/, '') + '×'; });
+$('#voiceTest').addEventListener('click', () => { const was = S.opt.voice; S.opt.voice = true; speak('Za 300 metrów skręć w prawo.', true); S.opt.voice = was; });
 
 /* wake lock – ekran nie gaśnie w czasie jazdy */
 let wake = null;
@@ -888,7 +899,7 @@ function isDesktop() {
 function init() {
   if (isDesktop()) { $('#desk').classList.remove('hidden'); $('#sheet').classList.add('hidden'); return; }
   document.body.classList.toggle('night', !!S.opt.night);
-  $('#optVoice').checked = !!S.opt.voice; $('#opt3d').checked = !!S.opt.d3; $('#optNight').checked = !!S.opt.night; $('#optSim').checked = !!S.opt.sim;
+  $('#optVoice').checked = !!S.opt.voice; $('#opt3d').checked = !!S.opt.d3; $('#optRate').value = S.opt.rate || 1; $('#rateTxt').textContent = (S.opt.rate || 1).toFixed(2).replace('.', ',').replace(/0$/, '') + '×'; $('#optNight').checked = !!S.opt.night; $('#optSim').checked = !!S.opt.sim;
   $$('#modes button').forEach(x => x.setAttribute('aria-pressed', x.dataset.mode === S.mode));
   vehLine(); fillVeh(); initMap(); $('#btnView').textContent = S.opt.d3 ? '3D' : '2D';
   startGps();

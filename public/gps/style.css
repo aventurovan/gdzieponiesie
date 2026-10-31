@@ -339,3 +339,8 @@ button.trow{width:100%;text-align:left;border:0;color:#fff;font-family:inherit;c
 
 #map{background:#E9E4D8}
 body.night #map{background:#1C2029}
+
+.hud .progress{position:fixed}
+
+.sel{max-width:46%;border:0;border-radius:10px;background:#2E3647;color:#fff;font:inherit;font-size:13px;font-weight:700;padding:8px 10px}
+.list input[type=range]{width:46%;accent-color:#3A74FF}
