@@ -364,3 +364,16 @@ body.night #map{background:#1C2029}
 
 .netbadge{position:fixed;left:50%;transform:translateX(-50%);top:calc(var(--sat) + 8px);z-index:20;background:#D92D20;color:#fff;font-size:12px;font-weight:800;padding:6px 12px;border-radius:12px}
 .tlink{display:block;margin:10px auto 0;border:0;background:none;color:#5B8CFF;font-family:inherit;font-size:14px;font-weight:700}
+
+/* opcje trasy: pół ekranu, mapa widoczna, duże podsumowanie */
+.quick.half{top:50%;max-height:50%;overflow-y:auto}
+.rsum{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;font-size:22px;font-weight:800;color:#fff}
+.rsum b{font-size:30px;color:var(--green)}.rsum i{font-style:normal;color:#8b93a5}.rsum em{font-style:normal;font-size:14px;color:var(--amber)}
+.quick.half .sec{margin-top:10px}
+/* odcinkowy pomiar */
+.sec-box{right:14px;top:calc(var(--sat) + 130px);background:rgba(26,29,36,.92);color:#fff;border-radius:16px;padding:8px 12px;display:flex;align-items:center;gap:10px;z-index:6}
+.sec-box .sa{display:flex;flex-direction:column;align-items:center}.sec-box .sa small{font-size:10px;font-weight:700;color:var(--sub)}.sec-box .sa b{font-size:26px;font-weight:800;line-height:1}
+.sec-box .sl{width:44px;height:44px;border-radius:50%;background:#fff;border:5px solid var(--red);box-sizing:border-box;display:flex;align-items:center;justify-content:center;color:#1a1d24;font-size:15px;font-weight:800}
+.sec-box .ss{font-size:11px;font-weight:700;color:var(--sub);max-width:90px}
+.sec-box.over .sa b{color:var(--amber)}
+.sec-box:not(.hidden) ~ #camBox{top:calc(var(--sat) + 200px)}

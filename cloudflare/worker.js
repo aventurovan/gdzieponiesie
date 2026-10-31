@@ -1978,26 +1978,38 @@ async function handleGpsCams(request, env, cors) {
   let body; try { body = await request.json(); } catch { return json({ error: 'Niepoprawny JSON.' }, 400, cors); }
   const coords = Array.isArray(body.coords) ? body.coords.filter(isPoint) : [];
   if (coords.length < 2) return json({ cams: [] }, 200, cors);
-  const kvKey = 'gps:cams:' + (await sha256(JSON.stringify(coords))).slice(0, 32);
+  const kvKey = 'gps:cams2:' + (await sha256(JSON.stringify(coords))).slice(0, 32);
   if (env.NK) { const hit = await env.NK.get(kvKey, 'json'); if (hit) return json({ ...hit, cached: true }, 200, cors); }
   const chunks = []; for (let i = 0; i < coords.length - 1; i += 24) chunks.push(coords.slice(i, i + 26));
-  const cams = new Map(); let errors = 0;
+  const cams = new Map(), sections = new Map(); let errors = 0;
   const run = async (chunk, k) => {
     const line = chunk.map(([x, y]) => `${y.toFixed(4)},${x.toFixed(4)}`).join(',');
-    const ql = `[out:json][timeout:20];(node["highway"="speed_camera"](around:60,${line});node["enforcement"="maxspeed"](around:60,${line}););out tags 300;`;
+    const ql = `[out:json][timeout:20];(node["highway"="speed_camera"](around:60,${line});node["enforcement"="maxspeed"](around:60,${line});relation["type"="enforcement"]["enforcement"~"average_speed|maxspeed"](around:80,${line}););out tags 300;>;out skel 600;`;
     const eps = [...OVERPASS.slice(k % OVERPASS.length), ...OVERPASS.slice(0, k % OVERPASS.length)];
     for (const ep of eps) {
       try {
         const r = await fetch(ep, { method: 'POST', body: 'data=' + encodeURIComponent(ql), headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, signal: AbortSignal.timeout(22000) });
         if (!r.ok) continue; const d = await r.json();
-        for (const el of d.elements || []) { if (el.lat == null) continue; const t = el.tags || {}; cams.set('n' + el.id, { id: 'n' + el.id, lon: Math.round(el.lon * 1e5) / 1e5, lat: Math.round(el.lat * 1e5) / 1e5, max: parseInt(t.maxspeed) || 0, dir: t.direction || '', avg: /average|section/i.test((t.enforcement || '') + ' ' + (t.speed_camera || '') + ' ' + (t.camera_type || '')) }); }
+        const nodes = new Map(); for (const el of d.elements || []) if (el.type === 'node' && el.lat != null) nodes.set(el.id, el);
+        for (const el of d.elements || []) {
+          if (el.type === 'relation') {
+            const t = el.tags || {}; const from = (el.members || []).filter((m) => m.role === 'from' && nodes.has(m.ref)).map((m) => nodes.get(m.ref));
+            const to = (el.members || []).filter((m) => m.role === 'to' && nodes.has(m.ref)).map((m) => nodes.get(m.ref));
+            const isAvg = /average/.test(t.enforcement || '') || t.average_speed === 'yes' || /section|odcink/i.test(t.name || '');
+            if (isAvg && from.length && to.length) sections.set('r' + el.id, { id: 'r' + el.id, from: [Math.round(from[0].lon * 1e5) / 1e5, Math.round(from[0].lat * 1e5) / 1e5], to: [Math.round(to[0].lon * 1e5) / 1e5, Math.round(to[0].lat * 1e5) / 1e5], max: parseInt(t.maxspeed) || 0, name: t.name || '' });
+            else if (!isAvg) { for (const n of [...from, ...to]) { const nt = n.tags || {}; if (!cams.has('n' + n.id)) cams.set('n' + n.id, { id: 'n' + n.id, lon: Math.round(n.lon * 1e5) / 1e5, lat: Math.round(n.lat * 1e5) / 1e5, max: parseInt(t.maxspeed) || parseInt(nt.maxspeed) || 0, dir: '', avg: false }); } }
+            continue;
+          }
+          if (el.type !== 'node' || el.lat == null) continue; const t = el.tags || {}; if (!t.highway && !t.enforcement) continue;
+          cams.set('n' + el.id, { id: 'n' + el.id, lon: Math.round(el.lon * 1e5) / 1e5, lat: Math.round(el.lat * 1e5) / 1e5, max: parseInt(t.maxspeed) || 0, dir: t.direction || '', avg: /average|section/i.test((t.enforcement || '') + ' ' + (t.speed_camera || '') + ' ' + (t.camera_type || '')) });
+        }
         return;
       } catch (e) {}
     }
     errors++;
   };
   for (let i = 0; i < chunks.length; i += 4) await Promise.all(chunks.slice(i, i + 4).map((c, j) => run(c, i + j)));
-  const out = { cams: [...cams.values()], errors };
+  const out = { cams: [...cams.values()], sections: [...sections.values()], errors };
   if (env.NK && !errors) await env.NK.put(kvKey, JSON.stringify(out), { expirationTtl: 14 * 24 * 3600 });
   return json(out, 200, cors);
 }
