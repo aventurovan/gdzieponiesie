@@ -7,6 +7,9 @@ on:
 
 concurrency: ipa
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: macos-15
@@ -68,8 +71,16 @@ jobs:
             -archivePath "$PWD/build/App.xcarchive" archive \
             -skipPackagePluginValidation -skipMacroValidation \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" DEVELOPMENT_TEAM="" \
-            2>&1 | tail -n 150
+            2>&1 | tee build.log | tail -n 60
           test -d "$PWD/build/App.xcarchive/Products/Applications/App.app"
+
+      - name: Log błędów do gałęzi ci-logs (gdy build padnie)
+        if: failure()
+        run: |
+          mkdir -p /tmp/logs
+          { echo "# Build $(date -u +%FT%TZ)"; grep -nE "error:|fatal|FAILED|\*\* " ios-app/ios/App/build.log | head -n 120; echo; echo "## ostatnie 80 linii"; tail -n 80 ios-app/ios/App/build.log; } > /tmp/logs/ipa-build.md 2>/dev/null || true
+          cd /tmp/logs && git init -q && git checkout -q -b ci-logs && git add . && git -c user.name=ci -c user.email=ci@local commit -qm "ipa build log" \
+            && git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" ci-logs
 
       - name: Pakowanie .ipa
         working-directory: ios-app/ios/App/build
