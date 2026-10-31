@@ -10,7 +10,25 @@ const store = {
 /* ---------- most do aplikacji natywnej (Capacitor, wersja IPA) ---------- */
 const NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
 function plugin(name) { try { const C = window.Capacitor; if (!C) return null; if (C.Plugins && C.Plugins[name]) return C.Plugins[name]; if (C.registerPlugin) return C.registerPlugin(name); } catch (e) {} return null; }
-const NTTS = NATIVE ? plugin('TextToSpeech') : null, NBG = NATIVE ? plugin('BackgroundGeolocation') : null, NKA = NATIVE ? plugin('KeepAwake') : null;
+const NTTS = NATIVE ? plugin('TextToSpeech') : null, NBG = NATIVE ? plugin('BackgroundGeolocation') : null, NKA = NATIVE ? plugin('KeepAwake') : null, NLA = NATIVE ? plugin('LiveActivity') : null;
+// Live Activity (ekran blokady / Dynamic Island) – tylko w aplikacji natywnej
+const LA = { on: false, last: 0, key: '' };
+function laPayload() {
+  const r = S.route, cs = currentStep(); const rem = Math.max(0, r.total - NAV.prog), remSec = r.sec * (1 - NAV.prog / r.total);
+  const lim = (r.limits || []).find(l => NAV.idx >= l.a && NAV.idx < l.b);
+  const ahead = (r.traffic || []).filter(t => t.b > NAV.idx).reduce((s, t) => s + t.delay, 0);
+  return { dest: S.to ? S.to.name : 'Cel', dist: cs ? fmtDist(cs.dist) : '', instr: cs ? (cs.s.n || cleanInstr(cs.s.i)) : '', maneuver: cs ? cs.s.t : 6,
+    eta: hhmm(new Date(Date.now() + remSec * 1000)), remKm: (rem >= 10000 ? Math.round(rem / 1000) : Math.round(rem / 100) / 10) + ' km', remTime: hm(remSec),
+    limit: lim ? lim.kmh : 0, progress: Math.min(1, NAV.prog / r.total), delay: ahead > 60 ? '+' + Math.round(ahead / 60) + ' min' : '' };
+}
+async function laStart() { if (!NLA || !S.route) return; try { const j = await NLA.start(laPayload()); LA.on = !!(j && j.ok); } catch (e) { LA.on = false; } }
+function laUpdate() {
+  if (!NLA || !LA.on || !S.route) return;
+  const p = laPayload(); const key = p.dist + '|' + p.instr + '|' + p.limit + '|' + p.eta; const now = Date.now();
+  if (key === LA.key && now - LA.last < 15000) return; if (now - LA.last < 2000) return;
+  LA.key = key; LA.last = now; NLA.update(p).catch(() => {});
+}
+async function laEnd() { if (!NLA) return; LA.on = false; try { await NLA.end(); } catch (e) {} }
 
 /* ---------- stan ---------- */
 const S = {
@@ -477,7 +495,7 @@ function startNav() {
   if (!S.route) return;
   S.nav = true; S.follow = true; NAV.idx = 0; NAV.prog = 0; NAV.offCount = 0; NAV.stepI = 0; NAV.said = {};
   showTab('jazda'); $('#hud').classList.remove('hidden'); altMarkers.forEach(m => m.remove()); altMarkers = []; if (map.getSource('alts')) map.getSource('alts').setData({ type: 'FeatureCollection', features: [] });
-  speak('Rozpoczynam nawigację.'); keepAwake(); if (NBG) startBgGps();
+  speak('Rozpoczynam nawigację.'); keepAwake(); if (NBG) startBgGps(); setTimeout(laStart, 800);
   MK.zoom = 16; NAV.zoomT = 16.5; map.jumpTo({ pitch: S.opt.d3 ? 60 : 0, zoom: 16 });
   if (S.opt.sim) startSim(); else startGps();
   updateHud(); updatePoiCol(); applyOpts(); autoNight();
@@ -486,7 +504,7 @@ function stopNav() {
   S.nav = false; $('#rbar').innerHTML = ''; $('#poiCol').innerHTML = ''; $('#quick').classList.add('hidden'); $('#hud').classList.add('hidden'); stopSim(); $('#btnRecenter').hidden = true;
   map.easeTo({ pitch: 0, bearing: 0, zoom: 14.5, duration: 600 }); showTab('jazda');
   if (wake) { wake.release().catch(() => {}); wake = null; }
-  stopBgGps(); if (NKA) NKA.allowSleep().catch(() => {});
+  stopBgGps(); laEnd(); if (NKA) NKA.allowSleep().catch(() => {});
 }
 
 /* płynna strzałka + kamera: jedna pętla rAF; między pozycjami GPS pozycja jest przewidywana wzdłuż trasy */
@@ -631,6 +649,7 @@ function updateHud() {
   const box = $('#events'); box.classList.toggle('hidden', !ev.length);
   box.innerHTML = ev.slice(0, 3).map(e => `<div><b>${e.txt}</b><small>za ${fmtDist(Math.max(0, e.at - NAV.prog))}${e.sub ? ' · ' + e.sub : ''}</small></div>`).join('');
   if (!updateHud._rb || Date.now() - updateHud._rb > 3000) { updateHud._rb = Date.now(); updateRouteBar(); updatePoiCol(); }
+  laUpdate();
 }
 function updateRouteBar() {
   const r = S.route, el = $('#rbar'); if (!el || !r) return;

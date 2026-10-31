@@ -45,7 +45,18 @@ jobs:
           /usr/libexec/PlistBuddy -c "Add :CFBundleDevelopmentRegion string pl" $PL || /usr/libexec/PlistBuddy -c "Set :CFBundleDevelopmentRegion pl" $PL
           /usr/libexec/PlistBuddy -c "Add :UIViewControllerBasedStatusBarAppearance bool true" $PL || true
           /usr/libexec/PlistBuddy -c "Add :ITSAppUsesNonExemptEncryption bool false" $PL || true
+          /usr/libexec/PlistBuddy -c "Add :NSSupportsLiveActivities bool true" $PL || true
           plutil -lint $PL
+
+      - name: Live Activity – rozszerzenie widgetu i wtyczka
+        working-directory: ios-app
+        run: |
+          gem list xcodeproj -i || sudo gem install xcodeproj -N
+          ruby native/add_widget.rb ios/App/App.xcodeproj native
+          # storyboard: nasz kontroler zamiast CAPBridgeViewController (rejestruje wtyczkę)
+          SB=ios/App/App/Base.lproj/Main.storyboard
+          sed -i '' 's/customClass="CAPBridgeViewController" customModule="Capacitor"/customClass="MyViewController" customModule="App" customModuleProvider="target"/' $SB
+          grep -c MyViewController $SB
 
       - name: Archiwum Xcode (bez podpisu)
         working-directory: ios-app/ios/App
