@@ -231,6 +231,18 @@ export default {
         }
         return await handleGpsLimits(request, env, cors);
       }
+      if (url.pathname === '/gps/revgeo' && request.method === 'GET') {
+        if (!ALLOWED_ORIGINS.includes(origin)) return json({ error: 'Ta strona nie ma dostępu do API.' }, 403, cors);
+        const lat = parseFloat(url.searchParams.get('lat')), lon = parseFloat(url.searchParams.get('lon'));
+        if (!isPoint([lon, lat])) return json({ error: 'Złe współrzędne.' }, 400, cors);
+        const k = String(env.TOMTOM_KEY || '').trim(); if (!k) return json({ name: lat.toFixed(4) + ', ' + lon.toFixed(4) }, 200, cors);
+        try {
+          const r = await fetch(`https://api.tomtom.com/search/2/reverseGeocode/${lat.toFixed(5)},${lon.toFixed(5)}.json?key=${encodeURIComponent(k)}&language=pl-PL&radius=200`, { signal: AbortSignal.timeout(8000) });
+          const j = await r.json(); const ad = j?.addresses?.[0]?.address || {};
+          const name = [ad.streetName && ad.streetNumber ? ad.streetName + ' ' + ad.streetNumber : ad.streetName, ad.municipality || ad.countrySecondarySubdivision].filter(Boolean).join(', ') || ad.freeformAddress || (lat.toFixed(4) + ', ' + lon.toFixed(4));
+          return json({ name, country: iso2(ad.countryCode || '') }, 200, cors);
+        } catch (e) { return json({ name: lat.toFixed(4) + ', ' + lon.toFixed(4) }, 200, cors); }
+      }
       if (url.pathname === '/gps/poi' && request.method === 'POST') {
         if (!ALLOWED_ORIGINS.includes(origin)) {
           return json({ error: 'Ta strona nie ma dostępu do API.' }, 403, cors);

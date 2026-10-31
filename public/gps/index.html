@@ -13,7 +13,7 @@
 <link rel="icon" href="../icons/favicon-32.png">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800&display=swap">
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
-<link rel="stylesheet" href="style.css?v=16">
+<link rel="stylesheet" href="style.css?v=17">
 </head>
 <body>
 <div id="desk" class="desk hidden">
@@ -155,11 +155,10 @@
 <div id="sheet" class="trasa hidden">
   <div class="tcard top">
     <div class="trow-wrap"><button type="button" class="tback" id="tBack" aria-label="Wróć">‹</button><div class="trows">
-    <label class="trow"><i class="dot a">A</i><input id="from" placeholder="Bieżąca pozycja" autocomplete="off"></label>
-    <label class="trow"><i class="dot b">B</i><input id="to" placeholder="Dokąd jedziemy?" autocomplete="off"></label>
-    <label class="trow"><i class="dot v">+</i><input id="viaAdd" placeholder="Dodaj punkt pośredni" autocomplete="off"></label>
+    <button type="button" class="trow" data-field="from"><i class="dot a">A</i><span id="from" class="ph">Bieżąca pozycja</span></button>
+    <button type="button" class="trow" data-field="to"><i class="dot b">B</i><span id="to" class="ph">Dokąd jedziemy?</span></button>
+    <button type="button" class="trow" data-field="via"><i class="dot v">+</i><span id="viaAdd" class="ph">Dodaj punkt pośredni</span></button>
     </div></div>
-    <ul id="sugg" class="sugg dark hidden"></ul>
     <div id="viaChips" class="vchips"></div>
     <div class="tlinks">
       <button type="button" id="tVeh"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 16V8h11l3 3h4v5z"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg><span id="tVehTxt">Kamper</span></button>
@@ -174,6 +173,26 @@
     <button class="primary hidden" id="btnRoute" type="button">Wyznacz trasę</button>
   </div>
   <div class="hidden" id="tiles"></div><div class="hidden" id="routeInfo"></div><div class="hidden" id="modes"></div><div class="hidden" id="ccTable"></div>
+</div>
+
+<!-- wyszukiwanie (jak w Sygic) -->
+<div id="search" class="sheet quick full hidden">
+  <div class="sbar"><button type="button" id="sBack" aria-label="Wróć">‹</button><input id="sInput" placeholder="Dokąd?" autocomplete="off"><button type="button" id="sClear" aria-label="Wyczyść" hidden>✕</button></div>
+  <ul id="sugg" class="sugg dark hidden"></ul>
+  <div class="scats">
+    <button type="button" data-cat="fav" aria-label="Ulubione"><svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M12 21s-7-4.6-9.3-9A5.2 5.2 0 0 1 12 6a5.2 5.2 0 0 1 9.3 6c-2.3 4.4-9.3 9-9.3 9z"/></svg></button>
+    <button type="button" data-cat="parking" aria-label="Parking"><svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="#5B8CFF" stroke-width="2.2"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M9 17V7h4a3 3 0 0 1 0 6H9"/></svg></button>
+    <button type="button" data-cat="fuel" aria-label="Stacja"><svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v16"/><path d="M3 21h14"/><path d="M15 9h3a2 2 0 0 1 2 2v5a2 2 0 0 1-4 0v-4"/><path d="M7 7h6"/></svg></button>
+    <button type="button" data-cat="camp" aria-label="Kemping"><svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="#7CE38B" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20L12 4l9 16z"/><path d="M9 20l3-6 3 6"/></svg></button>
+    <button type="button" data-cat="dump" aria-label="Zrzut / woda"><svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="#5BC0EB" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3S5 11 5 15a7 7 0 0 0 14 0c0-4-7-12-7-12z"/></svg></button>
+  </div>
+  <div class="slist" id="sList"></div>
+</div>
+
+<!-- wybór punktu z mapy -->
+<div id="pick" class="pick hidden">
+  <div class="cross"><svg viewBox="0 0 48 48" width="48" height="48"><circle cx="24" cy="24" r="6" fill="none" stroke="#D92D20" stroke-width="3"/><path d="M24 2v12M24 34v12M2 24h12M34 24h12" stroke="#D92D20" stroke-width="3" stroke-linecap="round"/></svg></div>
+  <div class="pick-bar"><div><b>Wybierz punkt na mapie</b><small id="pickName">przesuń mapę, cel pod celownikiem</small></div><button type="button" id="pickCancel">Anuluj</button><button type="button" class="ok" id="pickOk">Wybierz</button></div>
 </div>
 
 <!-- opcje trasy (ekran Trasa) -->
@@ -255,6 +274,6 @@
 
 <script src="../assets/config.js"></script>
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
-<script src="app.js?v=17"></script>
+<script src="app.js?v=18"></script>
 </body>
 </html>

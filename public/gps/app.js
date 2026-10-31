@@ -155,29 +155,108 @@ function setNight(on) {
   map.setStyle(STYLE[on ? 'dark' : 'light'], { diff: false });
 }
 
-/* ---------- geokoder (Worker /geocode: miasta GeoNames + ORS) ---------- */
-let suggT, suggFor;
-async function suggest(inp) {
-  const q = inp.value.trim(); const ul = $('#sugg');
-  if (q.length < 2) { ul.classList.add('hidden'); return; }
-  let j; try { const r = await fetch(API + '/geocode?q=' + encodeURIComponent(q)); j = await r.json(); } catch (e) { return; }
-  if (inp.value.trim() !== q) return;
-  suggFor = inp; ul.innerHTML = (j.results || []).slice(0, 6).map((x, i) => `<li data-i="${i}">${esc(x.label || x.name)}</li>`).join('');
-  ul._res = j.results || []; ul.classList.toggle('hidden', !ul.innerHTML);
-}
+/* ---------- wyszukiwanie (karta jak w Sygic) ---------- */
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-$('#sugg').addEventListener('click', e => {
-  const li = e.target.closest('li'); if (!li) return;
-  const x = $('#sugg')._res[+li.dataset.i]; const pt = { name: x.name, lon: x.lon, lat: x.lat };
-  if (suggFor.id === 'viaAdd') { S.via.push(pt); suggFor.value = ''; renderViaChips(); }
-  else { suggFor.value = x.name; if (suggFor.id === 'from') S.from = pt; else S.to = pt; }
-  $('#sugg').classList.add('hidden'); suggFor.blur();
-  if (S.to) computeRoute();
+const HIST = { get: () => store.get('hist', []), add: (p) => { const h = HIST.get().filter(x => !(Math.abs(x.lon - p.lon) < 1e-4 && Math.abs(x.lat - p.lat) < 1e-4)); h.unshift({ name: p.name, label: p.label || '', lon: p.lon, lat: p.lat, t: Date.now() }); store.set('hist', h.slice(0, 15)); }, clear: () => store.set('hist', []) };
+const FAV = { get: () => store.get('fav', []), set: (f) => store.set('fav', f),
+  has: (p) => FAV.get().some(x => Math.abs(x.lon - p.lon) < 1e-4 && Math.abs(x.lat - p.lat) < 1e-4),
+  toggle: (p) => { const f = FAV.get(); const i = f.findIndex(x => Math.abs(x.lon - p.lon) < 1e-4 && Math.abs(x.lat - p.lat) < 1e-4); if (i >= 0) f.splice(i, 1); else f.push({ name: p.name, label: p.label || '', lon: p.lon, lat: p.lat }); FAV.set(f); } };
+let SF = { field: 'to', cat: null, results: [] };
+function setField(field, pt) {
+  if (field === 'from') { S.from = pt; $('#from').textContent = pt ? pt.name : 'Bieżąca pozycja'; $('#from').classList.toggle('empty', !pt); }
+  else if (field === 'to') { S.to = pt; $('#to').textContent = pt ? pt.name : 'Dokąd jedziemy?'; $('#to').classList.toggle('empty', !pt); }
+  else if (field === 'via' && pt) { S.via.push(pt); renderViaChips(); }
+  if (pt && field !== 'from') HIST.add(pt);
+  if (S.to) computeRoute(); else { S.route = null; S.routes = null; $('#btnGo').classList.add('hidden'); $('#tSum').classList.add('hidden'); $('#tDots').innerHTML = ''; altMarkers.forEach(m => m.remove()); altMarkers = []; if (map.getSource('route')) map.getSource('route').setData({ type: 'FeatureCollection', features: [] }); if (map.getSource('alts')) map.getSource('alts').setData({ type: 'FeatureCollection', features: [] }); }
+}
+function openSearch(field) {
+  SF = { field, cat: null, results: [] };
+  $('#sInput').value = ''; $('#sInput').placeholder = field === 'from' ? 'Skąd?' : field === 'via' ? 'Punkt pośredni' : 'Dokąd?';
+  $('#sugg').classList.add('hidden'); $('#sClear').hidden = true;
+  $$('#search .scats button').forEach(b => b.removeAttribute('aria-pressed'));
+  renderSearchHome(); showTab('search'); setTimeout(() => $('#sInput').focus(), 80);
+}
+function closeSearch() { $('#sInput').blur(); showTab('trasa'); }
+function pick(pt) { setField(SF.field, pt); closeSearch(); }
+const ICO_PIN = '<svg viewBox="0 0 24 24" width="24" height="24" fill="#D92D20"><path d="M12 22s-7-6.6-7-12a7 7 0 0 1 14 0c0 5.4-7 12-7 12z"/><circle cx="12" cy="10" r="2.5" fill="#fff"/></svg>';
+const ICO_NAV = '<svg viewBox="0 0 24 24" width="24" height="24" fill="#5B8CFF"><path d="M12 2 L21 21 L12 16 L3 21 Z"/></svg>';
+const ICO_HOME = '<svg viewBox="0 0 24 24" width="24" height="24" fill="#fff"><path d="M3 11 L12 3 L21 11 V21 H14 V15 H10 V21 H3 Z"/></svg>';
+const ICO_MAP = '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#5B8CFF" stroke-width="2"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z"/><path d="M9 4v14M15 6v14"/></svg>';
+const ICO_STAR = '<svg viewBox="0 0 24 24" width="24" height="24" fill="#F2C230"><path d="M12 2l3 7 7 .6-5.3 4.6 1.7 7L12 17.5 5.6 21.2l1.7-7L2 9.6 9 9z"/></svg>';
+function rowHtml({ ic, name, sub, subCls = '', data = '', star = null }) {
+  return `<div class="si" ${data}><span class="ic">${ic}</span><div><b>${esc(name)}</b>${sub ? `<small class="${subCls}">${esc(sub)}</small>` : ''}</div>${star !== null ? `<button type="button" class="star${star ? ' on' : ''}" data-star aria-label="Ulubione">★</button>` : ''}</div>`;
+}
+function renderSearchHome() {
+  const L = $('#sList'); let html = '';
+  html += rowHtml({ ic: ICO_MAP, name: 'Wybierz z mapy', data: 'data-act="map"' });
+  if (SF.field === 'from') html += rowHtml({ ic: ICO_NAV, name: 'Bieżąca pozycja', sub: S.pos ? 'GPS' : 'czekam na GPS…', data: 'data-act="gps"' });
+  const home = FAV.get().find(f => f.home);
+  html += home ? rowHtml({ ic: ICO_HOME, name: 'Dom', sub: home.name, data: `data-pt="${esc(JSON.stringify(home))}"` }) : rowHtml({ ic: ICO_HOME, name: 'Ustaw Dom', sub: 'zapisz bieżącą pozycję jako Dom', data: 'data-act="sethome"' });
+  const favs = FAV.get().filter(f => !f.home);
+  if (favs.length) { html += '<div class="sh"><span>Ulubione</span></div>'; html += favs.map(f => rowHtml({ ic: ICO_STAR, name: f.name, sub: f.label, data: `data-pt="${esc(JSON.stringify(f))}"`, star: true })).join(''); }
+  const hist = HIST.get();
+  if (hist.length) { html += '<div class="sh"><span>Ostatnie wyszukiwania</span><button type="button" data-act="clearhist">Wyczyść historię</button></div>'; html += hist.map(x => rowHtml({ ic: ICO_PIN, name: x.name, sub: (x.t ? new Date(x.t).toLocaleDateString('pl-PL', { day: 'numeric', month: 'short' }) + ' • ' : '') + (x.label || ''), data: `data-pt="${esc(JSON.stringify(x))}"`, star: FAV.has(x) })).join(''); }
+  L.innerHTML = html;
+}
+let suggT;
+async function suggest(q) {
+  const ul = $('#sugg'); if (q.length < 2) { ul.classList.add('hidden'); return; }
+  let j; try { j = await (await fetch(API + '/geocode?q=' + encodeURIComponent(q))).json(); } catch (e) { return; }
+  if ($('#sInput').value.trim() !== q) return;
+  ul._res = j.results || []; ul.innerHTML = ul._res.slice(0, 8).map((x, i) => `<li data-i="${i}">${esc(x.label || x.name)}</li>`).join(''); ul.classList.toggle('hidden', !ul.innerHTML);
+}
+$('#sInput').addEventListener('input', () => { const q = $('#sInput').value.trim(); $('#sClear').hidden = !q; clearTimeout(suggT); suggT = setTimeout(() => suggest(q), 250); });
+$('#sClear').addEventListener('click', () => { $('#sInput').value = ''; $('#sClear').hidden = true; $('#sugg').classList.add('hidden'); $('#sInput').focus(); });
+$('#sBack').addEventListener('click', closeSearch);
+$('#sugg').addEventListener('click', e => { const li = e.target.closest('li'); if (!li) return; const x = $('#sugg')._res[+li.dataset.i]; pick({ name: x.name, label: x.label || '', lon: x.lon, lat: x.lat }); });
+$('#sList').addEventListener('click', async e => {
+  const st = e.target.closest('[data-star]'); if (st) { const row = st.closest('[data-pt]'); if (row) { FAV.toggle(JSON.parse(row.dataset.pt)); SF.cat ? renderCat() : renderSearchHome(); } return; }
+  const row = e.target.closest('.si, .sh button'); if (!row) return;
+  const act = row.dataset.act;
+  if (act === 'map') { startPick(); return; }
+  if (act === 'gps') { if (!S.pos) { startGps(); return; } pick({ name: 'Bieżąca pozycja', lon: S.pos.lon, lat: S.pos.lat }); return; }
+  if (act === 'sethome') { if (!S.pos) { alert('Czekam na pozycję GPS.'); return; } let name = 'Dom'; try { const j = await (await fetch(API + `/gps/revgeo?lat=${S.pos.lat}&lon=${S.pos.lon}`)).json(); name = j.name || name; } catch (e) {} const f = FAV.get().filter(x => !x.home); f.unshift({ name, lon: S.pos.lon, lat: S.pos.lat, home: true }); FAV.set(f); renderSearchHome(); return; }
+  if (act === 'clearhist') { HIST.clear(); renderSearchHome(); return; }
+  if (row.dataset.pt) { const p = JSON.parse(row.dataset.pt); pick({ name: p.home ? 'Dom' : p.name, label: p.label || '', lon: p.lon, lat: p.lat }); }
 });
-['from', 'to', 'viaAdd'].forEach(id => {
-  const inp = $('#' + id);
-  inp.addEventListener('input', () => { if (id === 'from') S.from = null; else if (id === 'to') S.to = null; clearTimeout(suggT); suggT = setTimeout(() => suggest(inp), 250); });
+// kategorie w pobliżu (OSM przez Worker, promień 15 km wokół pozycji)
+$('#search .scats').addEventListener('click', async e => {
+  const b = e.target.closest('button'); if (!b) return; const cat = b.dataset.cat;
+  if (SF.cat === cat) { SF.cat = null; b.removeAttribute('aria-pressed'); renderSearchHome(); return; }
+  $$('#search .scats button').forEach(x => x.removeAttribute('aria-pressed')); b.setAttribute('aria-pressed', 'true'); SF.cat = cat;
+  if (cat === 'fav') { const favs = FAV.get(); $('#sList').innerHTML = favs.length ? favs.map(f => rowHtml({ ic: f.home ? ICO_HOME : ICO_STAR, name: f.home ? 'Dom' : f.name, sub: f.label || f.name, data: `data-pt="${esc(JSON.stringify(f))}"`, star: !f.home })).join('') : '<p class="note">Brak ulubionych. Dodaj ★ przy wyniku lub w historii.</p>'; return; }
+  if (!S.pos) { $('#sList').innerHTML = '<p class="note">Czekam na pozycję GPS…</p>'; return; }
+  $('#sList').innerHTML = '<p class="note">Szukam w pobliżu…</p>';
+  const c = [S.pos.lon, S.pos.lat], d = 0.02;
+  try {
+    const j = await (await fetch(API + '/gps/poi', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ coords: [[c[0] - d, c[1]], [c[0] + d, c[1]]], radius: 10000 }) })).json();
+    const kinds = { parking: ['mop', 'rest', 'parking'], fuel: ['fuel'], camp: ['camp', 'caravan'], dump: ['dump'] }[cat] || [];
+    SF.results = (j.items || []).filter(p => kinds.includes(p.kind) || (cat === 'dump' && p.dump)).map(p => ({ ...p, dist: dist(c, [p.lon, p.lat]) })).sort((x, y) => x.dist - y.dist).slice(0, 30);
+    renderCat();
+  } catch (e) { $('#sList').innerHTML = '<p class="note">Nie udało się pobrać miejsc.</p>'; }
 });
+function renderCat() {
+  const L = $('#sList'); if (!SF.results.length) { L.innerHTML = '<p class="note">Nic w pobliżu (15 km).</p>'; return; }
+  L.innerHTML = SF.results.map(p => { const [label] = POI_KIND[p.kind] || POI_KIND.camp; const pt = { name: p.name || label, label, lon: p.lon, lat: p.lat }; return rowHtml({ ic: ICO_PIN, name: pt.name, sub: label + ' · ' + fmtDist(p.dist), subCls: 'g', data: `data-pt="${esc(JSON.stringify(pt))}"`, star: FAV.has(pt) }); }).join('');
+}
+// wybór z mapy: celownik na środku, nazwa z reverse geocodingu
+let pickT;
+function startPick() {
+  $('#search').classList.add('hidden'); $('#sheet').classList.add('hidden'); $('#pick').classList.remove('hidden');
+  map.easeTo({ pitch: 0, duration: 300 }); updatePickName();
+  map.on('moveend', updatePickName);
+}
+async function updatePickName() {
+  clearTimeout(pickT); pickT = setTimeout(async () => { const c = map.getCenter(); $('#pickName').textContent = '…'; try { const j = await (await fetch(API + `/gps/revgeo?lat=${c.lat}&lon=${c.lng}`)).json(); $('#pickName').textContent = j.name || ''; $('#pickName').dataset.name = j.name || ''; } catch (e) { $('#pickName').textContent = c.lat.toFixed(4) + ', ' + c.lng.toFixed(4); } }, 300);
+}
+function endPick(ok) {
+  map.off('moveend', updatePickName); $('#pick').classList.add('hidden');
+  if (ok) { const c = map.getCenter(); pick({ name: $('#pickName').dataset.name || $('#pickName').textContent || 'Punkt z mapy', lon: c.lng, lat: c.lat }); }
+  else showTab('search');
+}
+$('#pickOk').addEventListener('click', () => endPick(true));
+$('#pickCancel').addEventListener('click', () => endPick(false));
+$('#sheet').addEventListener('click', e => { const b = e.target.closest('button[data-field]'); if (!b) return; openSearch(b.dataset.field); });
 function renderViaChips() { $('#viaChips').innerHTML = S.via.map((v, i) => `<span>${esc(v.name)}<button type="button" data-vrm="${i}" aria-label="Usuń">✕</button></span>`).join(''); }
 $('#viaChips').addEventListener('click', e => { const b = e.target.closest('[data-vrm]'); if (!b) return; S.via.splice(+b.dataset.vrm, 1); renderViaChips(); if (S.to) computeRoute(); });
 
@@ -344,7 +423,7 @@ function openPoi(id) {
   pop.getElement().querySelector('[data-go]').addEventListener('click', () => { pop.remove(); goTo(p); });
 }
 function goTo(p) {
-  S.to = { name: p.name || (POI_KIND[p.kind] || POI_KIND.camp)[0], lon: p.lon, lat: p.lat }; $('#to').value = S.to.name;
+  S.to = { name: p.name || (POI_KIND[p.kind] || POI_KIND.camp)[0], lon: p.lon, lat: p.lat }; $('#to').textContent = S.to.name; $('#to').classList.remove('empty'); HIST.add(S.to);
   const wasNav = S.nav; if (wasNav) stopNav();
   showTab('trasa'); computeRoute().then(j => { if (j && wasNav) startNav(); });
 }
@@ -421,7 +500,7 @@ function onFix(f) {
   S.pos = f;
   meMarker.setLngLat([f.lon, f.lat]).setRotation(f.heading || 0);
   if (!meMarker._added) { meMarker.addTo(map); meMarker._added = true; setTimeout(() => autoNight(), 500); if (!S.nav && !S.route) map.jumpTo({ center: [f.lon, f.lat], zoom: 14.5, pitch: 0, bearing: 0 }); }
-  if (!S.nav) { if (S.from === null && !$('#from').value) $('#from').placeholder = 'Bieżąca pozycja (GPS)'; if (S.to && !S.route && !onFix._auto) { onFix._auto = true; computeRoute(); } return; }
+  if (!S.nav) { if (S.from === null) $('#from').textContent = 'Bieżąca pozycja (GPS)'; if (S.to && !S.route && !onFix._auto) { onFix._auto = true; computeRoute(); } return; }
   navStep(f);
 }
 function navStep(f) {
@@ -599,7 +678,7 @@ function stopSim() { if (simT) { clearInterval(simT); simT = null; } }
 function showTab(t) {
   if (t !== S.tab) S.prevTab = S.tab;
   S.tab = t;
-  $('#sheet').classList.toggle('hidden', t !== 'trasa'); $('#veh').classList.toggle('hidden', t !== 'veh'); $('#menu').classList.toggle('hidden', t !== 'menu'); $('#poi').classList.toggle('hidden', t !== 'poi');
+  $('#sheet').classList.toggle('hidden', t !== 'trasa'); $('#veh').classList.toggle('hidden', t !== 'veh'); $('#menu').classList.toggle('hidden', t !== 'menu'); $('#poi').classList.toggle('hidden', t !== 'poi'); $('#search').classList.toggle('hidden', t !== 'search'); $('#pick').classList.add('hidden');
   $('#hud').classList.toggle('hidden', !(t === 'jazda' && S.nav));
   if (t === 'menu') $('#menuVeh').textContent = `Kamper ${fmt1(S.veh.h)} m · ${fmt1(S.veh.l)} m · ${fmt1(S.veh.t)} t`;
   $('#idle').classList.toggle('hidden', !(t === 'jazda' && !S.nav));
@@ -768,7 +847,8 @@ function init() {
   startGps();
   // ?to=lon,lat,Nazwa – wejście z planera
   const u = new URLSearchParams(location.search);
-  if (u.get('to')) { const [lon, lat, ...n] = u.get('to').split(','); S.to = { lon: +lon, lat: +lat, name: n.join(',') || 'Cel' }; $('#to').value = S.to.name; }
+  if (u.get('to')) { const [lon, lat, ...n] = u.get('to').split(','); S.to = { lon: +lon, lat: +lat, name: n.join(',') || 'Cel' }; $('#to').textContent = S.to.name; $('#to').classList.remove('empty'); } else { $('#to').classList.add('empty'); }
+  $('#from').classList.add('empty'); $('#viaAdd').classList.add('empty');
   showTab(S.to ? 'trasa' : 'jazda');
 }
 init();

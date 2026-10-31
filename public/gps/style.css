@@ -304,3 +304,35 @@ body.night .cc{background:#1f2634}body.night .cc-r{border-color:#2E3647;color:#c
 .tback{width:44px;height:52px;border:0;background:none;color:#fff;font-size:30px;font-weight:700;line-height:1;flex:none;padding:0}
 
 .quick .primary.danger,#quick .primary.danger{background:var(--red)!important;color:#fff}
+
+/* pola trasy jako przyciski */
+button.trow{width:100%;text-align:left;border:0;color:#fff;font-family:inherit;cursor:pointer}
+.trow .ph{flex:1;font-size:17px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.trow .ph.empty{color:#8b93a5;font-weight:600}
+/* karta wyszukiwania */
+.sbar{display:flex;align-items:center;gap:8px;background:#222A3A;border-radius:16px;padding:0 10px;height:56px}
+.sbar input{flex:1;border:0;background:transparent;color:#fff;font:inherit;font-size:19px;font-weight:600;outline:none;min-width:0}
+.sbar input::placeholder{color:#8b93a5}
+.sbar button{border:0;background:none;color:#fff;font-size:30px;line-height:1;padding:0 6px;font-weight:700}
+#sClear{font-size:18px;color:#8b93a5}
+.scats{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin:14px 0}
+.scats button{height:64px;border:0;border-radius:16px;background:#222A3A;color:#fff;display:flex;align-items:center;justify-content:center}
+.scats button[aria-pressed=true]{outline:2px solid var(--blue)}
+.slist .sh{display:flex;justify-content:space-between;align-items:center;margin:14px 4px 4px;font-size:14px;font-weight:700;color:#8b93a5}
+.slist .sh button{border:0;background:none;color:#5B8CFF;font-family:inherit;font-size:14px;font-weight:700}
+.slist .si{display:flex;align-items:center;gap:14px;padding:14px 4px;border-bottom:1px solid #2E3647;cursor:pointer}
+.slist .si .ic{width:34px;flex:none;display:flex;justify-content:center;color:#5B8CFF}
+.slist .si>div{flex:1;min-width:0}
+.slist .si b{display:block;font-size:17px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.slist .si small{display:block;font-size:13px;font-weight:600;color:#8b93a5;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.slist .si small.g{color:var(--green)}
+.slist .si .star{border:0;background:none;color:#8b93a5;font-size:22px;padding:4px 6px}
+.slist .si .star.on{color:#F2C230}
+.sugg.dark{margin-top:8px}
+/* wybór z mapy */
+.pick>*{position:fixed;z-index:7}
+.pick .cross{left:50%;top:45%;transform:translate(-50%,-50%);pointer-events:none}
+.pick-bar{left:14px;right:14px;bottom:calc(var(--sab) + 20px);background:#161C2B;color:#fff;border-radius:18px;padding:12px 14px;display:flex;align-items:center;gap:10px}
+.pick-bar>div{flex:1;min-width:0}.pick-bar b{display:block;font-size:15px;font-weight:800}.pick-bar small{display:block;font-size:12px;color:#8b93a5;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pick-bar button{border:0;border-radius:12px;height:42px;padding:0 14px;background:#2E3647;color:#fff;font-family:inherit;font-weight:800}
+.pick-bar button.ok{background:var(--blue)}
