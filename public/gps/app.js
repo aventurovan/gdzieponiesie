@@ -926,7 +926,7 @@ function showTab(t) {
   S.tab = t;
   $('#sheet').classList.toggle('hidden', t !== 'trasa'); $('#veh').classList.toggle('hidden', t !== 'veh'); $('#menu').classList.toggle('hidden', t !== 'menu'); $('#poi').classList.toggle('hidden', t !== 'poi'); $('#search').classList.toggle('hidden', t !== 'search'); $('#pick').classList.add('hidden');
   $('#hud').classList.toggle('hidden', !(t === 'jazda' && S.nav));
-  if (t === 'menu') { fillVoices(); fillSettings(); renderOffline(); renderPacks(); if (NATIVE) { const AP = plugin('App'); (AP ? AP.getInfo() : Promise.resolve(null)).then(i => { $('#about').textContent = $('#about').textContent.replace(/\s*·\s*aplikacja natywna.*$/, '') + ' · aplikacja natywna' + (i ? ' v' + i.version + ' (build ' + i.build + ')' : ''); }).catch(() => {}); } }
+  if (t === 'menu') { fillVoices(); fillSettings(); renderOffline(); renderPacks(); diagBridge(); if (NATIVE) { const AP = plugin('App'); (AP ? AP.getInfo() : Promise.resolve(null)).then(i => { $('#about').textContent = $('#about').textContent.replace(/\s*·\s*aplikacja natywna.*$/, '') + ' · aplikacja natywna' + (i ? ' v' + i.version + ' (build ' + i.build + ')' : ''); }).catch(() => {}); } }
   if (t === 'menu') { const p = S.profiles.find(x => x.id === S.vehId) || {}; $('#menuVeh').textContent = `${p.name || 'Kamper'} · ${fmt1(S.veh.h)} m · ${fmt1(S.veh.l)} m · ${fmt1(S.veh.t)} t`; }
   $('#idle').classList.toggle('hidden', !(t === 'jazda' && !S.nav));
   if (t === 'jazda' && !S.nav) { const p = S.profiles.find(x => x.id === S.vehId) || {}; $('#fVehTxt').textContent = `🚐 ${p.name || 'Kamper'} · ${fmt1(S.veh.h)} m · ${fmt1(S.veh.t)} t`; $('#fViewTxt').textContent = S.opt.d3 ? '3D' : '2D'; }
@@ -1241,7 +1241,12 @@ function applyRouteParams(qs) {
   return any;
 }
 
-/* start */
+function diagBridge() {
+  const C = window.Capacitor; const el = $('#diag'); if (!el) return;
+  let plat = '-'; try { plat = C && C.getPlatform ? C.getPlatform() : (C ? 'brak getPlatform' : '-'); } catch (e) {}
+  let heads = []; try { heads = (C && C.PluginHeaders ? C.PluginHeaders : []).map(h => h.name); } catch (e) {}
+  el.textContent = `most: ${C ? 'jest' : 'brak'} · platforma: ${plat} · natywna: ${NATIVE ? 'tak' : 'nie'} · wtyczki: ${heads.length ? heads.join(', ') : '—'} · TTS:${NTTS ? '✓' : '✗'} GPS-tło:${NBG ? '✓' : '✗'} LA:${NLA ? '✓' : '✗'} · UA: ${navigator.userAgent.slice(0, 60)}`;
+}
 // komputer (mysz, brak dotyku, szeroki ekran) – tylko informacja z kodem QR; ?desk=1 wymusza pełną wersję do testów
 function isDesktop() {
   if (NATIVE || new URLSearchParams(location.search).get('desk') === '1') return false;
