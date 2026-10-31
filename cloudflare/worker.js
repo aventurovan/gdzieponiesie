@@ -1556,11 +1556,13 @@ async function handleGpsRoute(request, env, cors) {
   const avoidCountries = Array.isArray(av.countries) ? [...new Set(av.countries)].filter((k) => ISO_TO_ID[k]).sort().slice(0, 10) : [];
 
   // 1) TomTom – trasa z korkami, limitami prędkości, tunelami; 2) ORS jako zapas
+  let ttError = null;
   if (env.TOMTOM_KEY && body.engine !== 'ors') {
     const tt = await tomtomGpsRoute({ points, mode, dims, av, env });
     if (tt.ok) return json(tt.out, 200, cors, { 'X-Cache': tt.cached ? 'HIT' : 'MISS' });
+    ttError = tt.error;
     await logEvent(env, { code: 'GP-TT', path: '/gps/route', detail: tt.error });
-  }
+  } else if (!env.TOMTOM_KEY) ttError = 'brak TOMTOM_KEY w Workerze';
   if (!env.ORS_API_KEY) return json({ error: 'Worker nie ma sekretu ORS_API_KEY.' }, 500, cors);
   const options = { vehicle_type: 'hgv', profile_params: { restrictions: dims } };
   const features = [];
@@ -1635,7 +1637,7 @@ async function handleGpsRoute(request, env, cors) {
   const out = {
     km: Math.round((p.summary?.distance ?? 0) / 100) / 10,
     sec: Math.round((p.summary?.duration ?? 0) * tf),
-    coords, cum: cum.map(Math.round), steps, path, crossings, tolls, profile, mode,
+    coords, cum: cum.map(Math.round), steps, path, crossings, tolls, profile, mode, engine: 'ors', ttError,
     bbox: f.bbox || null,
   };
   if (env.NK) await env.NK.put(kvKey, JSON.stringify(out), { expirationTtl: GPS_KV_SECONDS });
@@ -1659,9 +1661,9 @@ async function tomtomGpsRoute({ points, mode, dims, av, env }) {
     routeType: mode === 'eco' ? 'eco' : mode === 'short' ? 'shortest' : 'fastest',
     instructionsType: 'text', language: 'pl-PL', maxAlternatives: '0',
     vehicleHeight: String(dims.height), vehicleWidth: String(dims.width), vehicleLength: String(dims.length),
-    vehicleWeight: String(Math.round(dims.weight * 1000)), vehicleCommercial: 'false',
+    vehicleWeight: String(Math.round(dims.weight * 1000)), vehicleCommercial: 'false', vehicleMaxSpeed: '110',
   });
-  for (const s of ['traffic', 'tollRoad', 'tollVignette', 'country', 'tunnel', 'speedLimit', 'motorway', 'ferry']) q.append('sectionType', s);
+  for (const s of ['traffic', 'tollRoad', 'tollVignette', 'country', 'tunnel', 'motorway', 'ferry']) q.append('sectionType', s);
   const avoid = new Set();
   if (av.highways === true) avoid.add('motorways');
   if (av.tolls === true || mode === 'notoll') avoid.add('tollRoads');
@@ -1701,7 +1703,7 @@ async function tomtomGpsRoute({ points, mode, dims, av, env }) {
   const traffic = pick('TRAFFIC').filter((s) => (s.delayInSeconds || 0) > 30 || (s.magnitudeOfDelay || 0) >= 1).map((s) => ({
     a: clampIdx(s.startPointIndex), b: clampIdx(s.endPointIndex), delay: s.delayInSeconds || 0, mag: s.magnitudeOfDelay || 0, kmh: s.effectiveSpeedInKmh || null,
   }));
-  const limits = pick('SPEED_LIMIT').map((s) => ({ a: clampIdx(s.startPointIndex), b: clampIdx(s.endPointIndex), kmh: s.maxSpeedLimitInKmh || null })).filter((s) => s.kmh);
+  const limits = [];
   const tunnels = pick('TUNNEL').map((s) => ({ a: clampIdx(s.startPointIndex), b: clampIdx(s.endPointIndex), at: Math.round(cum[clampIdx(s.startPointIndex)]), len: Math.round(cum[clampIdx(s.endPointIndex)] - cum[clampIdx(s.startPointIndex)]), cat: s.tunnelCategory || null }));
   const ferries = pick('FERRY').map((s) => ({ a: clampIdx(s.startPointIndex), b: clampIdx(s.endPointIndex), at: Math.round(cum[clampIdx(s.startPointIndex)]) }));
   // manewry

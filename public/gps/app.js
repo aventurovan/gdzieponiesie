@@ -222,7 +222,8 @@ function renderSummary() {
     ${r.delay > 60 ? '<span style="color:#B7791F">Korki: +' + Math.round(r.delay / 60) + ' min na trasie</span>' : ''}
     ${(r.tunnels || []).length ? '<span>Tunele: ' + r.tunnels.length + (r.tunnels.some(t => t.cat) ? ' (kat. ' + [...new Set(r.tunnels.map(t => t.cat).filter(Boolean))].join(', ') + ')' : '') + '</span>' : ''}
     ${(r.ferries || []).length ? '<span>Promy: ' + r.ferries.length + '</span>' : ''}
-    <span>Odcinki płatne: ${Math.round(tollKm)} km · ${r.engine === 'tomtom' ? 'TomTom, z korkami, wymiary kampera' : r.profile === 'hgv' ? 'ORS z ograniczeniami wysokości i masy' : 'ORS osobowy (HGV nie znalazł trasy)'}</span>`;
+    <span>Odcinki płatne: ${Math.round(tollKm)} km · ${r.engine === 'tomtom' ? 'TomTom, z korkami, wymiary kampera' : r.profile === 'hgv' ? 'ORS z ograniczeniami wysokości i masy' : 'ORS osobowy (HGV nie znalazł trasy)'}</span>
+    ${r.ttError ? '<span style="color:#B42318">TomTom nie policzył: ' + esc(r.ttError) + '</span>' : ''}`;
   drawProgressMarks();
   loadPoi();
 }
@@ -340,8 +341,11 @@ function navStep(f) {
   if (NAV.offCount >= 5 && (f.speed || 0) > 2.2 && Date.now() - NAV.lastReroute > 20000) reroute(f);
   // kamera
   if (S.follow) {
-    const kmh = (f.speed || 0) * 3.6, zoom = kmh > 90 ? 15 : kmh > 50 ? 15.8 : 16.6;
-    map.easeTo({ center: p, bearing: f.heading || 0, zoom, pitch: S.opt.d3 ? 58 : 0, duration: 900, easing: t => t, padding: { bottom: window.innerHeight * 0.35 } });
+    const kmh = (f.speed || 0) * 3.6;
+    let zoom = kmh > 90 ? 15.6 : kmh > 50 ? 16.3 : 17;
+    const cs = currentStep(); if (cs && cs.dist < 600 && cs.s.t !== 10) zoom = Math.max(zoom, cs.dist < 250 ? 17.8 : 17.2);
+    const dt = NAV.lastFix ? Math.min(1500, Math.max(150, f.t - NAV.lastFix)) : 900; NAV.lastFix = f.t;
+    map.easeTo({ center: p, bearing: f.heading || 0, zoom, pitch: S.opt.d3 ? 60 : 0, duration: dt, easing: t => t, padding: { top: window.innerHeight * 0.38, bottom: 0 } });
   }
   updateHud();
   // cel
@@ -376,7 +380,7 @@ function updateHud() {
     announce(s, d, cs.at);
   }
   // aktualna droga = nazwa kroku, w którym jesteśmy
-  const cur = r.steps[Math.max(0, NAV.stepI - 1)]; $('#roadNow').textContent = cur && cur.n ? cur.n : '';
+  const cur = r.steps[Math.max(0, NAV.stepI - 1)]; const rn = cur && cur.n ? cur.n : ''; $('#roadNow').textContent = rn; $('#roadNow').classList.toggle('hidden', !rn);
   const rem = Math.max(0, r.total - NAV.prog), frac = NAV.prog / r.total;
   const remSec = r.sec * (1 - frac);
   $('#etaTime').textContent = hhmm(new Date(Date.now() + remSec * 1000));
@@ -464,11 +468,14 @@ function startSim() {
     return { p: [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t], h: bearing(a, b) };
   };
   simT = setInterval(() => {
-    const now = Date.now(), v = 70 / 3.6; prog += v * (now - last) / 1000; last = now;
+    const now = Date.now();
+    // zwalniamy przed manewrem jak kierowca: 70 km/h, przed skrętem 30
+    const cs = currentStep(); const v = (cs && cs.dist < 150 && cs.s.t !== 6) ? 30 / 3.6 : 70 / 3.6;
+    prog += v * (now - last) / 1000; last = now;
     if (prog >= r.total) { prog = r.total; }
     const q = at(prog); onFix({ lon: q.p[0], lat: q.p[1], speed: v, heading: q.h, t: now });
     if (prog >= r.total) stopSim();
-  }, 1000);
+  }, 200);
 }
 function stopSim() { if (simT) { clearInterval(simT); simT = null; } }
 

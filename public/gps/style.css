@@ -128,7 +128,7 @@ body.night .veh{color:#cfd3dc}
 /* po wyznaczeniu trasy arkusz zjeżdża w dół, u góry widać mapę z trasą */
 .sheet.half{top:52%;padding-top:6px;transition:top .3s}
 .sheet.half h1{display:none}
-.sheet.half .box,.sheet.half .veh,.sheet.half .modes,.sheet.half .sugg{display:none}
+.sheet.half .box,.sheet.half .veh,.sheet.half .sugg,.sheet.half #btnRoute{display:none}
 .sheet .grip{cursor:pointer}
 .sheet.half .edit-link{display:block}
 .edit-link{display:none;margin:0 4px 8px;font-size:13px;font-weight:700;color:var(--blue2)}
