@@ -34,10 +34,21 @@ jobs:
           npx capacitor-assets generate --ios --iconBackgroundColor '#F2A900' --iconBackgroundColorDark '#F2A900' --splashBackgroundColor '#F2A900' --splashBackgroundColorDark '#F2A900'
           npx cap sync ios
 
+      - name: Wersja (z ios-app/package.json + numer builda)
+        id: ver
+        working-directory: ios-app
+        run: |
+          V=$(node -p "require('./package.json').version")
+          echo "version=$V" >> $GITHUB_OUTPUT
+          echo "build=${{ github.run_number }}" >> $GITHUB_OUTPUT
+          echo "IPA v$V (build ${{ github.run_number }})"
+
       - name: Info.plist – lokalizacja w tle, głos, orientacja
         working-directory: ios-app/ios/App/App
         run: |
           PL=Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${{ steps.ver.outputs.version }}" $PL || /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string ${{ steps.ver.outputs.version }}" $PL
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${{ steps.ver.outputs.build }}" $PL || /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string ${{ steps.ver.outputs.build }}" $PL
           /usr/libexec/PlistBuddy -c "Add :NSLocationWhenInUseUsageDescription string 'Nawigacja prowadzi kamper po trasie.'" $PL || true
           /usr/libexec/PlistBuddy -c "Add :NSLocationAlwaysAndWhenInUseUsageDescription string 'Nawigacja działa także przy zgaszonym ekranie.'" $PL || true
           /usr/libexec/PlistBuddy -c "Add :NSLocationAlwaysUsageDescription string 'Nawigacja działa także przy zgaszonym ekranie.'" $PL || true
@@ -55,7 +66,9 @@ jobs:
         working-directory: ios-app
         run: |
           gem list xcodeproj -i || sudo gem install xcodeproj -N
-          ruby native/add_widget.rb ios/App/App.xcodeproj native
+          APP_VERSION=${{ steps.ver.outputs.version }} APP_BUILD=${{ steps.ver.outputs.build }} ruby native/add_widget.rb ios/App/App.xcodeproj native
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${{ steps.ver.outputs.version }}" native/widget/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${{ steps.ver.outputs.build }}" native/widget/Info.plist
           # storyboard: nasz kontroler zamiast CAPBridgeViewController (rejestruje wtyczkę)
           SB=ios/App/App/Base.lproj/Main.storyboard
           sed -i '' 's/customClass="CAPBridgeViewController" customModule="Capacitor"/customClass="MyViewController" customModule="App" customModuleProvider="target"/' $SB
@@ -87,12 +100,15 @@ jobs:
         run: |
           mkdir -p Payload
           cp -R App.xcarchive/Products/Applications/App.app Payload/
-          zip -qry GdziePoniesie-GPS-unsigned.ipa Payload
-          ls -la GdziePoniesie-GPS-unsigned.ipa
+          NAME="GdziePoniesie-GPS-v${{ steps.ver.outputs.version }}-build${{ steps.ver.outputs.build }}-unsigned.ipa"
+          zip -qry "$NAME" Payload
+          ls -la "$NAME"
+          echo "## IPA v${{ steps.ver.outputs.version }} (build ${{ steps.ver.outputs.build }})" >> $GITHUB_STEP_SUMMARY
+          echo "Plik: $NAME" >> $GITHUB_STEP_SUMMARY
 
       - name: Artefakt
         uses: actions/upload-artifact@v4
         with:
-          name: GdziePoniesie-GPS-unsigned
-          path: ios-app/ios/App/build/GdziePoniesie-GPS-unsigned.ipa
+          name: GdziePoniesie-GPS-v${{ steps.ver.outputs.version }}-build${{ steps.ver.outputs.build }}-unsigned
+          path: ios-app/ios/App/build/*.ipa
           retention-days: 14
