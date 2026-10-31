@@ -1,12 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1F2A3C"/><stop offset="1" stop-color="#0F1420"/></linearGradient></defs>
-  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
-  <path d="M112 436 C120 350 230 340 262 290 C300 230 180 210 200 150 C214 108 290 96 356 112" fill="none" stroke="#1F3F9E" stroke-width="86" stroke-linecap="round"/>
-  <path d="M112 436 C120 350 230 340 262 290 C300 230 180 210 200 150 C214 108 290 96 356 112" fill="none" stroke="#3A74FF" stroke-width="62" stroke-linecap="round"/>
-  <path d="M112 436 C120 350 230 340 262 290 C300 230 180 210 200 150 C214 108 290 96 356 112" fill="none" stroke="#FFFFFF" stroke-width="7" stroke-dasharray="22 20" stroke-linecap="round"/>
-  <g transform="translate(118 356)">
-    <path d="M0 96 C-44 50 -60 30 -60 -2 A60 60 0 0 1 60 -2 C60 30 44 50 0 96 Z" fill="#D92D20" stroke="#fff" stroke-width="12" stroke-linejoin="round"/>
-    <circle cx="0" cy="-4" r="22" fill="#fff"/>
-  </g>
-  <g transform="translate(356 112)"><circle r="26" fill="#fff"/><circle r="12" fill="#3A74FF"/></g>
+  <rect width="512" height="512" rx="112" fill="#F2A900"/>
+  <!-- kręta droga -->
+  <path d="M170 444 C170 384 320 376 324 326 C328 284 196 288 196 252 C196 240 214 236 236 236" fill="none" stroke="#16181D" stroke-width="74" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M170 444 C170 384 320 376 324 326 C328 284 196 288 196 252 C196 240 214 236 236 236" fill="none" stroke="#F2A900" stroke-width="12" stroke-dasharray="26 24" stroke-linecap="round"/>
+  <!-- znak marki: daszek -->
+  <path d="M150 196 L256 84 L362 196" fill="none" stroke="#16181D" stroke-width="40" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

@@ -31,7 +31,7 @@ jobs:
         working-directory: ios-app
         run: |
           npx cap add ios
-          npx capacitor-assets generate --ios --iconBackgroundColor '#161C2B' --iconBackgroundColorDark '#161C2B' --splashBackgroundColor '#161C2B' --splashBackgroundColorDark '#161C2B'
+          npx capacitor-assets generate --ios --iconBackgroundColor '#F2A900' --iconBackgroundColorDark '#F2A900' --splashBackgroundColor '#F2A900' --splashBackgroundColorDark '#F2A900'
           npx cap sync ios
 
       - name: Info.plist – lokalizacja w tle, głos, orientacja
