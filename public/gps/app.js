@@ -60,6 +60,12 @@ function initMap() {
   });
   map.addControl(new maplibregl.AttributionControl({ compact: true }), 'top-right');
   map.on('style.load', addLayers);
+  // PWA na iOS: po starcie i po powrocie z tła kontener zmienia rozmiar bez zdarzenia resize
+  const kick = () => { try { map.resize(); } catch (e) {} };
+  [100, 400, 1000, 2500].forEach(t => setTimeout(kick, t));
+  window.addEventListener('orientationchange', () => setTimeout(kick, 300));
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') setTimeout(kick, 200); });
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', () => setTimeout(kick, 50));
   map.on('resize', () => { if (S.tab === 'trasa' && S.route && document.activeElement && document.activeElement.tagName !== 'INPUT') fitRoute(); });
   map.on('rotate', () => { const el = $('#compassIco'); if (el) el.style.transform = `rotate(${-map.getBearing()}deg)`; });
   map.on('dragstart', () => { if (S.nav) { S.follow = false; $('#btnRecenter').hidden = false; clearTimeout(S.followT); S.followT = setTimeout(() => { S.follow = true; $('#btnRecenter').hidden = true; }, 30000); } });
