@@ -1678,14 +1678,15 @@ const TT_MANEUVER = {
   ENTER_MOTORWAY: 6, ENTER_FREEWAY: 6, ENTER_HIGHWAY: 6, FOLLOW: 6, SWITCH_PARALLEL_ROAD: 13, SWITCH_MAIN_ROAD: 12,
   TAKE_FERRY: 6, WAYPOINT_LEFT: 6, WAYPOINT_RIGHT: 6, WAYPOINT_REACHED: 6,
 };
-function ttQuery({ mode, dims, av, env }) {
+function ttQuery({ mode, dims, av, env, alts = 0 }) {
+  // „bez opłat”: opłaty jak dla pojazdu do 3,5 t zna tylko tryb osobowy (truck widzi e-TOLL dla ciężarówek)
+  const noToll = av.tolls === true || mode === 'notoll';
   const q = new URLSearchParams({
-    key: String(env.TOMTOM_KEY).trim(), travelMode: 'truck', traffic: 'true', computeTravelTimeFor: 'all',
+    key: String(env.TOMTOM_KEY).trim(), travelMode: noToll ? 'car' : 'truck', traffic: 'true', computeTravelTimeFor: 'all',
     routeType: mode === 'eco' ? 'eco' : mode === 'short' ? 'shortest' : 'fastest',
-    instructionsType: 'text', language: 'pl-PL', maxAlternatives: '0',
-    vehicleHeight: String(dims.height), vehicleWidth: String(dims.width), vehicleLength: String(dims.length),
-    vehicleWeight: String(Math.round(dims.weight * 1000)), vehicleCommercial: 'false', vehicleMaxSpeed: '110',
+    instructionsType: 'text', language: 'pl-PL', maxAlternatives: String(alts),
   });
+  if (!noToll) { q.set('vehicleHeight', String(dims.height)); q.set('vehicleWidth', String(dims.width)); q.set('vehicleLength', String(dims.length)); q.set('vehicleWeight', String(Math.round(dims.weight * 1000))); q.set('vehicleCommercial', 'false'); q.set('vehicleMaxSpeed', '110'); }
   for (const s of ['traffic', 'tollRoad', 'tollVignette', 'country', 'tunnel', 'motorway', 'ferry']) q.append('sectionType', s);
   const avoid = new Set();
   if (av.highways === true) avoid.add('motorways');
@@ -1702,7 +1703,10 @@ async function ttCalc(points, q) {
   try { res = await fetch(url, { signal: AbortSignal.timeout(20000) }); data = await res.json(); }
   catch (e) { return { ok: false, error: 'TomTom: ' + (e.message || 'błąd sieci') }; }
   if (!res.ok || !data.routes?.length) return { ok: false, error: 'TomTom ' + res.status + ': ' + (data?.detailedError?.message || data?.error?.description || 'brak trasy') };
-  const r = data.routes[0];
+  const segs = data.routes.map(ttParse);
+  return { ok: true, seg: segs[0], alts: segs.slice(1) };
+}
+function ttParse(r) {
   const coords = [];
   for (const leg of r.legs) for (const p of leg.points) {
     const c = [Math.round(p.longitude * 1e5) / 1e5, Math.round(p.latitude * 1e5) / 1e5];
@@ -1727,7 +1731,7 @@ async function ttCalc(points, q) {
     steps.push({ t: TT_MANEUVER[g.maneuver] ?? 6, i: g.message || '', n: name, d: 0, s: Math.max(0, Math.round(b - a)), wp: [i0, i1], ...(g.exitNumber ? { exit: g.exitNumber } : {}), ...(g.signpostText ? { sign: g.signpostText } : {}) });
   }
   const sum = r.summary;
-  return { ok: true, seg: { coords, countryAt, tollAt, traffic, tunnels, ferries, steps, sec: sum.travelTimeInSeconds, secNo: sum.noTrafficTravelTimeInSeconds ?? sum.travelTimeInSeconds, delay: sum.trafficDelayInSeconds ?? 0, len: sum.lengthInMeters } };
+  return { coords, countryAt, tollAt, traffic, tunnels, ferries, steps, sec: sum.travelTimeInSeconds, secNo: sum.noTrafficTravelTimeInSeconds ?? sum.travelTimeInSeconds, delay: sum.trafficDelayInSeconds ?? 0, len: sum.lengthInMeters };
 }
 function ttMerge(segs, mode) {
   const coords = [], countryAt = [], tollAt = [], traffic = [], tunnels = [], ferries = [], steps = [];
@@ -1767,9 +1771,10 @@ function ttMerge(segs, mode) {
 async function tomtomGpsRoute({ points, mode, dims, av, env, byCountry }) {
   const kvKey = 'gps:tt:' + (await sha256(JSON.stringify({ points, mode, dims, av, byCountry: byCountry || null }))).slice(0, 32);
   if (env.NK) { const hit = await env.NK.get(kvKey, 'json'); if (hit) return { ok: true, out: { ...hit, cached: true }, cached: true }; }
-  const first = await ttCalc(points, ttQuery({ mode, dims, av, env }));
+  const first = await ttCalc(points, ttQuery({ mode, dims, av, env, alts: 2 }));
   if (!first.ok) return first;
   let out = ttMerge([first.seg], mode);
+  out.alts = (first.alts || []).map((s) => { const o = ttMerge([s], mode); return { km: o.km, sec: o.sec, delay: o.delay, coords: o.coords, cum: o.cum, steps: o.steps, path: o.path, crossings: o.crossings, traffic: o.traffic, tunnels: o.tunnels, ferries: o.ferries, tolls: o.tolls, bbox: o.bbox }; });
   const bc = byCountry && typeof byCountry === 'object' ? byCountry : null;
   const relevant = bc && out.path.some((cc) => bc[cc] && (bc[cc].tolls || bc[cc].highways));
   if (relevant && out.crossings.length && out.crossings.length <= 8) {
@@ -1788,7 +1793,7 @@ async function tomtomGpsRoute({ points, mode, dims, av, env, byCountry }) {
       if (!r.ok) return r;
       segs.push(r.seg);
     }
-    if (changed && segs.length) out = ttMerge(segs, mode);
+    if (changed && segs.length) { out = ttMerge(segs, mode); out.alts = []; }
     out.byCountry = bc;
   }
   if (env.NK) await env.NK.put(kvKey, JSON.stringify(out), { expirationTtl: 600 });

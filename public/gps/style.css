@@ -250,3 +250,32 @@ body.night .mini{background:#1f2634;color:#fff}
 .cc-n{display:block;font-size:11px;font-weight:600;color:var(--ink2);padding:6px 0 4px}
 .cc.dark{background:#222A3A}.cc.dark .cc-r{border-color:#2E3647;color:#cfd3dc}.cc.dark .cc-r b{color:#fff}.cc.dark .cc-h,.cc.dark .cc-n{color:#8b93a5}.cc.dark input[type=checkbox]{background:#3a4256}.cc.dark input[type=checkbox]:checked{background:#1E8A4C}
 body.night .cc{background:#1f2634}body.night .cc-r{border-color:#2E3647;color:#cfd3dc}body.night .cc-r b{color:#fff}
+
+/* ekran Trasa jak w Sygic */
+.trasa .tcard{position:fixed;left:0;right:0;z-index:8;background:#161C2B;color:#fff;padding:12px 16px}
+.trasa .top{top:0;padding-top:calc(var(--sat) + 12px);border-radius:0 0 26px 26px;box-shadow:0 6px 18px rgba(0,0,0,.25)}
+.trasa .bottom{bottom:calc(var(--sab) + 76px);border-radius:26px 26px 0 0;padding-bottom:12px;box-shadow:0 -6px 18px rgba(0,0,0,.25)}
+.trow{display:flex;align-items:center;gap:12px;background:#222A3A;border-radius:14px;padding:0 14px;height:52px;margin-bottom:8px}
+.trow input{flex:1;border:0;background:transparent;color:#fff;font:inherit;font-size:17px;font-weight:700;outline:none;min-width:0}
+.trow input::placeholder{color:#8b93a5;font-weight:600}
+.trow .dot{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#fff;flex:none}
+.trow .dot.a{background:#1E8A4C}.trow .dot.b{background:var(--red)}.trow .dot.v{background:var(--blue);font-size:16px}
+.vchips{display:flex;flex-wrap:wrap;gap:6px}.vchips:empty{display:none}
+.vchips span{background:#2E3647;border-radius:12px;padding:6px 10px;font-size:13px;font-weight:700;display:flex;align-items:center;gap:6px}
+.vchips button{border:0;background:none;color:#8b93a5;font-size:16px;padding:0}
+.tlinks{display:flex;justify-content:space-between;margin-top:6px}
+.tlinks button{border:0;background:none;color:#5B8CFF;font-family:inherit;font-size:15px;font-weight:700;display:flex;align-items:center;gap:8px;padding:6px 0}
+.tsum{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}
+.tsum .l1{font-size:26px;font-weight:800;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.tsum .l1 b{color:var(--green)}.tsum .l1 i{font-style:normal;color:#8b93a5}
+.tsum .l2{font-size:14px;font-weight:600;color:#cfd3dc;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.tsum .l2 .ok{color:var(--green)}.tsum .l2 .bad{color:var(--amber)}
+.tsum .l2 span.tag{background:#222A3A;border-radius:8px;padding:3px 8px;font-size:12px}
+.tdots{display:flex;justify-content:center;gap:10px;margin:2px 0 10px}.tdots:empty{display:none}
+.tdots i{width:12px;height:12px;border-radius:50%;background:#3a4256}.tdots i.on{background:#fff}
+.trasa .msg{color:#F2A33A;margin:0 0 8px}
+.trasa .msg:empty{display:none}
+.trasa .primary{margin-top:0}
+/* dymki wariantów na mapie */
+.bub{background:#1a1d24;color:#fff;border-radius:12px;padding:6px 12px;font-size:14px;font-weight:800;white-space:nowrap;box-shadow:0 3px 10px rgba(0,0,0,.3);cursor:pointer}
+.bub.on{background:var(--blue)}

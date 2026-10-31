@@ -61,7 +61,7 @@ function initMap() {
   map.addControl(new maplibregl.AttributionControl({ compact: true }), 'top-right');
   map.on('style.load', addLayers);
   map.on('rotate', () => { const el = $('#compassIco'); if (el) el.style.transform = `rotate(${-map.getBearing()}deg)`; });
-  map.on('dragstart', () => { if (S.nav) { S.follow = false; $('#btnRecenter').hidden = false; } });
+  map.on('dragstart', () => { if (S.nav) { S.follow = false; $('#btnRecenter').hidden = false; clearTimeout(S.followT); S.followT = setTimeout(() => { S.follow = true; $('#btnRecenter').hidden = true; }, 30000); } });
   map.on('load', () => { mapReady = true; if (S.route) drawRoute(); const at = document.querySelector('.maplibregl-ctrl-attrib'); if (at) at.classList.remove('maplibregl-compact-show'); });
   const el = document.createElement('div'); el.className = 'me';
   el.innerHTML = '<svg viewBox="0 0 36 36"><path d="M18 3 L31 31 L18 24 L5 31 Z" fill="#3A74FF" stroke="#fff" stroke-width="3" stroke-linejoin="round"/></svg>';
@@ -125,6 +125,7 @@ function addLayers() {
     map.on('click', 'poi-pts', e => { const f = e.features[0]; if (f) openPoi(f.properties.id); });
   }
   if (S.route) drawRoute();
+  if (S.routes && !S.nav) drawAlts();
   if (S.poi) drawPoi();
 }
 const TRAFFIC_COLOR = m => m >= 3 ? '#D92D20' : m === 2 ? '#F2A33A' : '#F2C230';
@@ -132,12 +133,12 @@ function drawRoute() {
   if (!map.getSource('route')) return;
   const r = S.route, f = [];
   f.push({ type: 'Feature', properties: { k: 'main' }, geometry: { type: 'LineString', coordinates: r.coords } });
-  for (const [a, b] of r.tolls || []) if (b > a) f.push({ type: 'Feature', properties: { k: 'toll' }, geometry: { type: 'LineString', coordinates: r.coords.slice(a, b + 1) } });
   for (const t of r.traffic || []) if (t.b > t.a) f.push({ type: 'Feature', properties: { k: 'tr', c: TRAFFIC_COLOR(t.mag) }, geometry: { type: 'LineString', coordinates: r.coords.slice(t.a, t.b + 1) } });
   f.push({ type: 'Feature', properties: { k: 'pt', c: '#3A74FF' }, geometry: { type: 'Point', coordinates: r.coords[0] } });
   f.push({ type: 'Feature', properties: { k: 'pt', c: '#1a1d24' }, geometry: { type: 'Point', coordinates: r.coords[r.coords.length - 1] } });
   map.getSource('route').setData({ type: 'FeatureCollection', features: f });
-  if (!S.nav && r.bbox) map.fitBounds([[r.bbox[0], r.bbox[1]], [r.bbox[2], r.bbox[3]]], { padding: { top: 70 + 30, bottom: window.innerHeight * 0.5 + 20, left: 40, right: 40 }, pitch: 0, bearing: 0, duration: 600 });
+  if (!S.nav && r.bbox) { const bb = (S.routes || [r]).reduce((b, x) => [Math.min(b[0], x.bbox[0]), Math.min(b[1], x.bbox[1]), Math.max(b[2], x.bbox[2]), Math.max(b[3], x.bbox[3])], r.bbox.slice());
+    map.fitBounds([[bb[0], bb[1]], [bb[2], bb[3]]], { padding: { top: ($('#sheet .top')?.offsetHeight || 230) + 40, bottom: ($('#tBottom')?.offsetHeight || 180) + 110, left: 40, right: 40 }, pitch: 0, bearing: 0, duration: 600 }); }
 }
 function setView3d(on) {
   S.opt.d3 = on; store.set('opt', S.opt); $('#opt3d').checked = on; $('#btnView').textContent = on ? '3D' : '2D';
@@ -163,16 +164,20 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;',
 $('#sugg').addEventListener('click', e => {
   const li = e.target.closest('li'); if (!li) return;
   const x = $('#sugg')._res[+li.dataset.i]; const pt = { name: x.name, lon: x.lon, lat: x.lat };
-  suggFor.value = x.name; if (suggFor.id === 'from') S.from = pt; else S.to = pt;
-  $('#sugg').classList.add('hidden'); $('#btnGo').classList.add('hidden'); S.route = null; setSheetHalf(false);
+  if (suggFor.id === 'viaAdd') { S.via.push(pt); suggFor.value = ''; renderViaChips(); }
+  else { suggFor.value = x.name; if (suggFor.id === 'from') S.from = pt; else S.to = pt; }
+  $('#sugg').classList.add('hidden'); suggFor.blur();
+  if (S.to) computeRoute();
 });
-['from', 'to'].forEach(id => {
+['from', 'to', 'viaAdd'].forEach(id => {
   const inp = $('#' + id);
-  inp.addEventListener('input', () => { if (id === 'from') S.from = null; else S.to = null; clearTimeout(suggT); suggT = setTimeout(() => suggest(inp), 250); });
+  inp.addEventListener('input', () => { if (id === 'from') S.from = null; else if (id === 'to') S.to = null; clearTimeout(suggT); suggT = setTimeout(() => suggest(inp), 250); });
 });
+function renderViaChips() { $('#viaChips').innerHTML = S.via.map((v, i) => `<span>${esc(v.name)}<button type="button" data-vrm="${i}" aria-label="Usuń">✕</button></span>`).join(''); }
+$('#viaChips').addEventListener('click', e => { const b = e.target.closest('[data-vrm]'); if (!b) return; S.via.splice(+b.dataset.vrm, 1); renderViaChips(); if (S.to) computeRoute(); });
 
 /* ---------- pojazd ---------- */
-function vehLine() { const v = S.veh; $('#vehLine').innerHTML = `🚐 Kamper ${fmt1(v.h)} m · ${fmt1(v.l)} m · ${fmt1(v.t)} t <a href="#veh">Zmień</a>`; }
+function vehLine() { const v = S.veh; $('#tVehTxt').textContent = `Kamper ${fmt1(v.h)} m · ${fmt1(v.t)} t`; }
 const fmt1 = n => String(Math.round(n * 100) / 100).replace('.', ',');
 const num = s => parseFloat(String(s).replace(',', '.'));
 function fillVeh() { $('#vH').value = fmt1(S.veh.h); $('#vL').value = fmt1(S.veh.l); $('#vW').value = fmt1(S.veh.w); $('#vT').value = fmt1(S.veh.t); }
@@ -190,9 +195,7 @@ $('#modes').addEventListener('click', e => {
   if (S.route) computeRoute();
 });
 $('#btnRoute').addEventListener('click', () => computeRoute());
-function setSheetHalf(on) { $('#sheet').classList.toggle('half', on); if (on) $('#sheet').scrollTop = 0; }
-$('#sheetGrip').addEventListener('click', () => { if (S.route) setSheetHalf(!$('#sheet').classList.contains('half')); });
-$('#editRoute').addEventListener('click', e => { e.preventDefault(); setSheetHalf(false); });
+function setSheetHalf() {}
 async function computeRoute(fromPos) {
   const msg = $('#msg'); msg.textContent = '';
   if (!API) { msg.textContent = 'Brak adresu API w assets/config.js.'; return; }
@@ -208,24 +211,45 @@ async function computeRoute(fromPos) {
     j = await r.json(); if (!r.ok) throw new Error(j.error || ('Błąd ' + r.status));
   } catch (e) { msg.textContent = e.message; $('#btnRoute').disabled = false; return null; }
   $('#btnRoute').disabled = false; msg.textContent = '';
-  S.route = j; S.route.total = j.cum[j.cum.length - 1];
-  if (!fromPos) { renderSummary(); setSheetHalf(true); drawRoute(); $('#btnGo').classList.remove('hidden'); }
+  j.total = j.cum[j.cum.length - 1];
+  // warianty z TomTom: główna + alternatywy, każda jako pełna trasa
+  S.routes = fromPos ? [j] : [j, ...(j.alts || []).map(alt => ({ ...j, ...alt, alts: undefined, total: alt.cum[alt.cum.length - 1] }))];
+  delete j.alts; S.altIdx = 0; S.route = j;
+  if (!fromPos) { renderSummary(); drawRoute(); drawAlts(); $('#btnGo').classList.remove('hidden'); }
   return j;
+}
+function selectAlt(i) {
+  if (!S.routes || !S.routes[i]) return;
+  S.altIdx = i; S.route = S.routes[i]; renderSummary(); drawRoute(); drawAlts();
+}
+let altMarkers = [];
+function drawAlts() {
+  altMarkers.forEach(m => m.remove()); altMarkers = [];
+  if (!mapReady || !map.getLayer('route-case')) return;
+  if (!map.getSource('alts')) { map.addSource('alts', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+    map.addLayer({ id: 'alts-line', type: 'line', source: 'alts', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#8E95A3', 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 4, 14, 9], 'line-opacity': 0.9 } }, 'route-case');
+    map.on('click', 'alts-line', e => { const f = e.features[0]; if (f) selectAlt(f.properties.i); }); }
+  const rs = S.routes || []; const feats = [];
+  rs.forEach((r, i) => {
+    if (i !== S.altIdx) feats.push({ type: 'Feature', properties: { i }, geometry: { type: 'LineString', coordinates: r.coords } });
+    if (rs.length > 1 && !S.nav) {
+      const mid = r.coords[Math.floor(r.coords.length * (0.4 + i * 0.1))];
+      const el = document.createElement('div'); el.className = 'bub' + (i === S.altIdx ? ' on' : ''); el.textContent = hm(r.sec); el.addEventListener('click', () => selectAlt(i));
+      altMarkers.push(new maplibregl.Marker({ element: el, anchor: 'bottom' }).setLngLat(mid).addTo(map));
+    }
+  });
+  map.getSource('alts').setData({ type: 'FeatureCollection', features: feats });
+  $('#tDots').innerHTML = rs.length > 1 ? rs.map((_, i) => `<i class="${i === S.altIdx ? 'on' : ''}"></i>`).join('') : '';
 }
 function renderSummary() {
   const r = S.route, eta = new Date(Date.now() + r.sec * 1000);
-  $('#tiles').innerHTML = `<div class="tile"><b>${Math.round(r.km)} km</b><small>dystans</small></div>
-    <div class="tile"><b>${hm(r.sec)}</b><small>czas jazdy</small></div>
-    <div class="tile"><b>${hhmm(eta)}</b><small>${eta.getDate() !== new Date().getDate() ? 'jutro' : 'dziś'} na miejscu</small></div>`;
-  const tollKm = (r.tolls || []).reduce((s, [a, b]) => s + (r.cum[b] - r.cum[a]), 0) / 1000;
-  $('#routeInfo').innerHTML = `<b>Trasa przez: ${r.path.map(c => KRAJ[c] || c).join(', ')}</b>
-    ${r.crossings.length ? '<span>Granice: ' + r.crossings.map(c => c.from + '→' + c.to + ' (' + Math.round(c.at / 1000) + ' km)').join(', ') + '</span>' : ''}
-    <span style="color:${r.delay > 60 ? '#B7791F' : '#1E8A4C'}">${r.engine === 'tomtom' ? (r.delay > 60 ? 'Korki: +' + Math.round(r.delay / 60) + ' min na trasie' : 'Korki: brak opóźnień') : ''}</span>
-    ${(r.tunnels || []).length ? '<span>Tunele: ' + r.tunnels.length + (r.tunnels.some(t => t.cat) ? ' (kat. ' + [...new Set(r.tunnels.map(t => t.cat).filter(Boolean))].join(', ') + ')' : '') + '</span>' : ''}
-    ${(r.ferries || []).length ? '<span>Promy: ' + r.ferries.length + '</span>' : ''}
-    <span>Odcinki płatne: ${Math.round(tollKm)} km · ${r.engine === 'tomtom' ? 'TomTom, z korkami, wymiary kampera' : r.profile === 'hgv' ? 'ORS z ograniczeniami wysokości i masy' : 'ORS osobowy (HGV nie znalazł trasy)'}</span>
-    ${r.ttError ? '<span style="color:#B42318">TomTom nie policzył: ' + esc(r.ttError) + '</span>' : ''}`;
-  drawProgressMarks(); fillCountryTable($('#ccTable'));
+  const tunnelsTxt = (r.tunnels || []).length ? `<span class="tag">tunele ${r.tunnels.length}</span>` : '';
+  $('#tSum').classList.remove('hidden');
+  $('#tSum').innerHTML = `<div class="l1"><b>${hm(r.sec)}</b><i>•</i><span>${hhmm(eta)}${eta.getDate() !== new Date().getDate() ? ' jutro' : ''}</span><i>•</i><span>${Math.round(r.km)} km</span></div>
+    <div class="l2">${r.engine === 'tomtom' ? (r.delay > 60 ? '<span class="bad">🚗 +' + Math.round(r.delay / 60) + ' min przez ruch</span>' : '<span class="ok">🚗 Brak opóźnień</span>') : '<span>ORS</span>'}
+    <span class="tag">${(r.path || []).join(' › ')}</span>${tunnelsTxt}${r.ttError ? '<span class="bad">TomTom: ' + esc(r.ttError) + '</span>' : ''}</div>`;
+  $('#tOptsTxt').textContent = ({ fast: 'Szybka', main: 'Główne drogi', notoll: 'Bez opłat', eco: 'Ekonomiczna' })[S.mode] + ' · Unikaj';
+  drawProgressMarks(); fillCountryTable($('#rCcTable')); fillRouteOpts();
   loadPoi(); loadLimits();
 }
 const KRAJ = { PL: 'Polska', CZ: 'Czechy', SK: 'Słowacja', AT: 'Austria', DE: 'Niemcy', IT: 'Włochy', HU: 'Węgry', SI: 'Słowenia', HR: 'Chorwacja', FR: 'Francja', CH: 'Szwajcaria', NL: 'Holandia', BE: 'Belgia', DK: 'Dania', SE: 'Szwecja', NO: 'Norwegia', ES: 'Hiszpania', PT: 'Portugalia', LT: 'Litwa', LV: 'Łotwa', EE: 'Estonia', RO: 'Rumunia', BG: 'Bułgaria', GR: 'Grecja', RS: 'Serbia', BA: 'Bośnia', ME: 'Czarnogóra', AL: 'Albania', MK: 'Macedonia Płn.', LU: 'Luksemburg', GB: 'Wielka Brytania', IE: 'Irlandia', FI: 'Finlandia', UA: 'Ukraina' };
@@ -326,13 +350,26 @@ async function recalcKeepNav() {
   drawRoute(); drawProgressMarks(); loadPoi(); loadLimits(); updateHud(); speak('Trasa przeliczona.');
 }
 
+function fillRouteOpts() {
+  $$('#rModes button').forEach(x => x.setAttribute('aria-pressed', x.dataset.mode === S.mode));
+  $('#rAvoidMoto').checked = !!S.avoid.highways; $('#rAvoidToll').checked = !!S.avoid.tolls;
+  const r = S.route; $('#rNote').textContent = r ? `${Math.round(r.km)} km · ${hm(r.sec)}${r.byCountry ? ' · odcinkami między granicami' : ''}` : '';
+  fillCountryTable($('#rCcTable'));
+}
+$('#tOpts').addEventListener('click', () => { fillRouteOpts(); $('#ropts').classList.remove('hidden'); });
+$('#roptsClose').addEventListener('click', () => $('#ropts').classList.add('hidden'));
+$('#tVeh').addEventListener('click', () => showTab('veh'));
+$('#rModes').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; S.mode = b.dataset.mode; store.set('mode', S.mode); fillRouteOpts(); if (S.to) computeRoute().then(fillRouteOpts); });
+$('#rAvoidMoto').addEventListener('change', e => { S.avoid.highways = e.target.checked; store.set('avoid', S.avoid); if (S.to) computeRoute().then(fillRouteOpts); });
+$('#rAvoidToll').addEventListener('change', e => { S.avoid.tolls = e.target.checked; store.set('avoid', S.avoid); if (S.to) computeRoute().then(fillRouteOpts); });
+
 /* ---------- jazda ---------- */
 const NAV = { idx: 0, prog: 0, offCount: 0, stepI: 0, said: {}, lastReroute: 0, lastFix: null };
 $('#btnGo').addEventListener('click', () => { startNav(); });
 function startNav() {
   if (!S.route) return;
   S.nav = true; S.follow = true; NAV.idx = 0; NAV.prog = 0; NAV.offCount = 0; NAV.stepI = 0; NAV.said = {};
-  showTab('jazda'); $('#hud').classList.remove('hidden'); setSheetHalf(false);
+  showTab('jazda'); $('#hud').classList.remove('hidden'); altMarkers.forEach(m => m.remove()); altMarkers = []; if (map.getSource('alts')) map.getSource('alts').setData({ type: 'FeatureCollection', features: [] });
   speak('Rozpoczynam nawigację.'); keepAwake();
   map.easeTo({ pitch: S.opt.d3 ? 58 : 0, zoom: 16, duration: 800 });
   if (S.opt.sim) startSim(); else startGps();
@@ -367,7 +404,7 @@ function onFix(f) {
   S.pos = f;
   meMarker.setLngLat([f.lon, f.lat]).setRotation(f.heading || 0);
   if (!meMarker._added) { meMarker.addTo(map); meMarker._added = true; setTimeout(() => autoNight(), 500); if (!S.nav && !S.route) map.jumpTo({ center: [f.lon, f.lat], zoom: 14.5, pitch: 0, bearing: 0 }); }
-  if (!S.nav) { if (S.from === null && !$('#from').value) $('#from').placeholder = 'Bieżąca pozycja (GPS)'; return; }
+  if (!S.nav) { if (S.from === null && !$('#from').value) $('#from').placeholder = 'Bieżąca pozycja (GPS)'; if (S.to && !S.route && !onFix._auto) { onFix._auto = true; computeRoute(); } return; }
   navStep(f);
 }
 function navStep(f) {
@@ -551,10 +588,11 @@ function showTab(t) {
   if (t === 'jazda' && !S.nav) { $('#fVehTxt').textContent = `🚐 Kamper ${fmt1(S.veh.h)} m · ${fmt1(S.veh.t)} t`; $('#fViewTxt').textContent = S.opt.d3 ? '3D' : '2D'; }
   $$('.tabs button').forEach(b => { if (b.dataset.tab === t) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
   if (t === 'veh') fillVeh();
+  if (t === 'trasa' && S.route && !S.nav) setTimeout(() => { drawRoute(); drawAlts(); }, 50);
+  if (t !== 'trasa') { altMarkers.forEach(m => m.remove()); altMarkers = []; }
   if (t === 'poi') renderPoi();
 }
 $('.tabs').addEventListener('click', e => { const b = e.target.closest('button'); if (b) showTab(b.dataset.tab); });
-$('#vehLine').addEventListener('click', e => { if (e.target.tagName === 'A') { e.preventDefault(); showTab('veh'); } });
 $('#btnView').addEventListener('click', () => setView3d(!S.opt.d3));
 $('#opt3d').addEventListener('change', e => setView3d(e.target.checked));
 $('#optNight').addEventListener('change', e => setNight(e.target.checked));

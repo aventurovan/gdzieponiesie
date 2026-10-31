@@ -13,7 +13,7 @@
 <link rel="icon" href="../icons/favicon-32.png">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800&display=swap">
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
-<link rel="stylesheet" href="style.css?v=13">
+<link rel="stylesheet" href="style.css?v=14">
 </head>
 <body>
 <div id="desk" class="desk hidden">
@@ -46,7 +46,7 @@
   <div class="limit hidden" id="limit"><span id="limitVal">50</span></div>
   <div class="speed card" id="speedBox"><b id="speedVal">0</b><small>km/h</small></div>
   <button class="round" id="btnView" type="button">3D</button>
-  <button class="round" id="btnRecenter" type="button" aria-label="Wyśrodkuj" hidden>⌖</button>
+  <button class="round" id="btnRecenter" type="button" aria-label="Wyśrodkuj" hidden><svg viewBox="0 0 24 24" width="26" height="26"><path d="M12 3 L19 20 L12 16 L5 20 Z" fill="currentColor"/></svg></button>
 
   <div class="bbar card" id="bbar">
     <button type="button" id="bbSearch" aria-label="Szukaj"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20L16.5 16.5"/></svg></button>
@@ -78,7 +78,7 @@
     <div class="row-h"><h1>Opcje trasy</h1><button type="button" class="x" data-back aria-label="Wróć">‹</button></div>
     <div class="sec">Typ trasy</div>
     <div class="qmodes" id="qModes">
-      <button type="button" data-mode="fast">Szybka</button><button type="button" data-mode="main">Główne drogi</button><button type="button" data-mode="notoll">Bez myta</button><button type="button" data-mode="eco">Ekonomiczna</button>
+      <button type="button" data-mode="fast">Szybka</button><button type="button" data-mode="main">Główne drogi</button><button type="button" data-mode="notoll">Bez opłat</button><button type="button" data-mode="eco">Ekonomiczna</button>
     </div>
     <div class="sec">Unikaj</div>
     <div class="qlist">
@@ -150,29 +150,45 @@
   <button type="button" class="fab br search" id="fSearch" aria-label="Szukaj celu"><svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20L16.5 16.5"/></svg></button>
 </div>
 
-<!-- ekran TRASA -->
-<div id="sheet" class="sheet">
-  <div class="grip" id="sheetGrip"></div>
-  <h1>Trasa</h1>
-  <a href="#" class="edit-link" id="editRoute">✎ Zmień punkty lub tryb</a>
-  <div class="box">
-    <label><i class="dot a"></i><span>Z</span><input id="from" placeholder="Bieżąca pozycja" autocomplete="off"></label>
-    <label><i class="dot b"></i><span>Do</span><input id="to" placeholder="Miejscowość" autocomplete="off"></label>
+<!-- ekran TRASA (jak w Sygic: karta A/B u góry, mapa z wariantami, podsumowanie u dołu) -->
+<div id="sheet" class="trasa hidden">
+  <div class="tcard top">
+    <label class="trow"><i class="dot a">A</i><input id="from" placeholder="Bieżąca pozycja" autocomplete="off"></label>
+    <label class="trow"><i class="dot b">B</i><input id="to" placeholder="Dokąd jedziemy?" autocomplete="off"></label>
+    <label class="trow"><i class="dot v">+</i><input id="viaAdd" placeholder="Dodaj punkt pośredni" autocomplete="off"></label>
+    <ul id="sugg" class="sugg dark hidden"></ul>
+    <div id="viaChips" class="vchips"></div>
+    <div class="tlinks">
+      <button type="button" id="tVeh"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 16V8h11l3 3h4v5z"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg><span id="tVehTxt">Kamper</span></button>
+      <button type="button" id="tOpts"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20L9 4M19 20l-4-16"/><path d="M4 12h16"/></svg><span id="tOptsTxt">Szybka · Unikaj</span></button>
+    </div>
   </div>
-  <ul id="sugg" class="sugg hidden"></ul>
-  <div class="veh" id="vehLine"></div>
-  <div class="modes" id="modes">
-    <button type="button" data-mode="fast" aria-pressed="true">Szybka</button>
-    <button type="button" data-mode="main" aria-pressed="false">Główne drogi</button>
-    <button type="button" data-mode="notoll" aria-pressed="false">Bez myta</button>
-    <button type="button" data-mode="eco" aria-pressed="false">Ekonomiczna</button>
+  <div class="tcard bottom" id="tBottom">
+    <div class="msg" id="msg"></div>
+    <div class="tsum hidden" id="tSum"></div>
+    <div class="tdots" id="tDots"></div>
+    <button class="primary go hidden" id="btnGo" type="button">Rozpocznij</button>
+    <button class="primary hidden" id="btnRoute" type="button">Wyznacz trasę</button>
   </div>
-  <div class="tiles" id="tiles"></div>
-  <button class="primary go hidden" id="btnGo" type="button">▶ Rozpocznij jazdę</button>
-  <div class="cc hidden" id="ccTable"></div>
-  <div class="info" id="routeInfo"></div>
-  <div class="msg" id="msg"></div>
-  <button class="primary" id="btnRoute" type="button">Wyznacz trasę</button>
+  <div class="hidden" id="tiles"></div><div class="hidden" id="routeInfo"></div><div class="hidden" id="modes"></div><div class="hidden" id="ccTable"></div>
+</div>
+
+<!-- opcje trasy (ekran Trasa) -->
+<div id="ropts" class="sheet quick hidden">
+  <div class="grip"></div>
+  <div class="row-h"><h1>Trasa i unikanie</h1><button type="button" class="x" id="roptsClose" aria-label="Zamknij">✕</button></div>
+  <div class="sec">Typ trasy</div>
+  <div class="qmodes" id="rModes">
+    <button type="button" data-mode="fast">Szybka</button><button type="button" data-mode="main">Główne drogi</button><button type="button" data-mode="notoll">Bez opłat</button><button type="button" data-mode="eco">Ekonomiczna</button>
+  </div>
+  <div class="sec">Unikaj na całej trasie</div>
+  <div class="qlist">
+    <label class="sw"><span><b>Autostrady</b></span><input type="checkbox" id="rAvoidMoto"></label>
+    <label class="sw"><span><b>Drogi płatne</b></span><input type="checkbox" id="rAvoidToll"></label>
+  </div>
+  <div class="sec">Per kraj</div>
+  <div class="cc dark" id="rCcTable"></div>
+  <p class="qnote" id="rNote"></p>
 </div>
 
 <!-- ekran POJAZD -->
@@ -242,6 +258,6 @@
 
 <script src="../assets/config.js"></script>
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
-<script src="app.js?v=14"></script>
+<script src="app.js?v=15"></script>
 </body>
 </html>
