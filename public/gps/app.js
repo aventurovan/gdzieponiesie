@@ -466,14 +466,14 @@ $('#rAvoidMoto').addEventListener('change', e => { S.avoid.highways = e.target.c
 $('#rAvoidToll').addEventListener('change', e => { S.avoid.tolls = e.target.checked; store.set('avoid', S.avoid); if (S.to) computeRoute().then(fillRouteOpts); });
 
 /* ---------- jazda ---------- */
-const NAV = { idx: 0, prog: 0, offCount: 0, stepI: 0, said: {}, lastReroute: 0, lastFix: null };
+const NAV = { idx: 0, prog: 0, offCount: 0, stepI: 0, said: {}, lastReroute: 0, lastFix: null, onRoute: false, fixT: 0, speed: 0, zoomT: 16.5 };
 $('#btnGo').addEventListener('click', () => { startNav(); });
 function startNav() {
   if (!S.route) return;
   S.nav = true; S.follow = true; NAV.idx = 0; NAV.prog = 0; NAV.offCount = 0; NAV.stepI = 0; NAV.said = {};
   showTab('jazda'); $('#hud').classList.remove('hidden'); altMarkers.forEach(m => m.remove()); altMarkers = []; if (map.getSource('alts')) map.getSource('alts').setData({ type: 'FeatureCollection', features: [] });
   speak('Rozpoczynam nawigację.'); keepAwake();
-  map.easeTo({ pitch: S.opt.d3 ? 58 : 0, zoom: 16, duration: 800 });
+  MK.zoom = 16; NAV.zoomT = 16.5; map.jumpTo({ pitch: S.opt.d3 ? 60 : 0, zoom: 16 });
   if (S.opt.sim) startSim(); else startGps();
   updateHud(); updatePoiCol(); applyOpts(); autoNight();
 }
@@ -483,19 +483,36 @@ function stopNav() {
   if (wake) { wake.release().catch(() => {}); wake = null; }
 }
 
-/* płynna strzałka: interpolacja między pozycjami, przyciągnięta do trasy gdy jedziemy po niej */
-const MK = { from: null, to: null, h0: 0, h1: 0, t0: 0, dur: 500, raf: null };
-function setMarkerTarget(p, heading, dur) {
-  const cur = MK.cur || p; MK.from = cur; MK.to = p; MK.h0 = MK.curH ?? heading; MK.h1 = heading; MK.t0 = performance.now(); MK.dur = dur;
-  if (!MK.raf) MK.raf = requestAnimationFrame(tickMarker);
+/* płynna strzałka + kamera: jedna pętla rAF; między pozycjami GPS pozycja jest przewidywana wzdłuż trasy */
+const MK = { cur: null, curH: 0, zoom: 16.5, raf: null, last: null };
+function setMarkerTarget(p, heading) { if (!MK.cur) { MK.cur = p; MK.curH = heading; } MK.tgt = p; MK.tgtH = heading; MK.tgtT = performance.now(); if (!MK.raf) MK.raf = requestAnimationFrame(tickMarker); }
+function routePointAt(prog) {
+  const r = S.route; let i = Math.max(0, Math.min(NAV.idx, r.cum.length - 2));
+  while (i < r.cum.length - 2 && r.cum[i + 1] < prog) i++;
+  while (i > 0 && r.cum[i] > prog) i--;
+  const a = r.coords[i], b = r.coords[i + 1], t = Math.max(0, Math.min(1, (prog - r.cum[i]) / Math.max(1, r.cum[i + 1] - r.cum[i])));
+  return { p: [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t], h: bearing(a, b) };
 }
 function tickMarker(now) {
-  const k = Math.min(1, (now - MK.t0) / MK.dur);
-  const lon = MK.from[0] + (MK.to[0] - MK.from[0]) * k, lat = MK.from[1] + (MK.to[1] - MK.from[1]) * k;
-  let dh = ((MK.h1 - MK.h0 + 540) % 360) - 180; const h = (MK.h0 + dh * k + 360) % 360;
-  MK.cur = [lon, lat]; MK.curH = h;
-  meMarker.setLngLat([lon, lat]).setRotation(h);
-  MK.raf = k < 1 ? requestAnimationFrame(tickMarker) : null;
+  MK.raf = requestAnimationFrame(tickMarker);
+  let p, h;
+  if (S.nav && NAV.onRoute && S.route) {
+    // przewidywanie po trasie: ostatni postęp + prędkość × czas od ostatniej pozycji (maks. 2 s w przód)
+    const dt = Math.min(2, Math.max(0, (now - NAV.fixT) / 1000));
+    const q = routePointAt(NAV.prog + NAV.speed * dt); p = q.p; h = NAV.speed > 1.5 ? q.h : MK.curH;
+  } else if (MK.tgt) {
+    // poza trasą: interpolacja do ostatniej pozycji
+    const k = Math.min(1, (now - MK.tgtT) / 700);
+    p = [MK.cur[0] + (MK.tgt[0] - MK.cur[0]) * k, MK.cur[1] + (MK.tgt[1] - MK.cur[1]) * k]; h = MK.tgtH;
+  } else return;
+  // wygładzenie obrotu
+  let dh = ((h - MK.curH + 540) % 360) - 180; MK.curH = (MK.curH + dh * 0.15 + 360) % 360;
+  MK.cur = p;
+  meMarker.setLngLat(p).setRotation(MK.curH);
+  if (S.nav && S.follow && S.tab === 'jazda') {
+    MK.zoom += (NAV.zoomT - MK.zoom) * 0.05;
+    map.jumpTo({ center: p, bearing: MK.curH, zoom: MK.zoom, pitch: S.opt.d3 ? 60 : 0, padding: { top: window.innerHeight * 0.38, bottom: 0 } });
+  }
 }
 
 /* GPS */
@@ -519,8 +536,7 @@ function onFix(f) {
   if (prev && (f.speed == null || Number.isNaN(f.speed)) && f.t > prev.t) f.speed = dist([prev.lon, prev.lat], [f.lon, f.lat]) / ((f.t - prev.t) / 1000);
   if (f.heading == null) f.heading = prev ? prev.heading : 0;
   S.pos = f;
-  // płynny ruch strzałki: cel ustawia navStep (punkt na trasie) lub surowa pozycja; animacja w rAF
-  setMarkerTarget([f.lon, f.lat], f.heading || 0, prev ? Math.min(1500, Math.max(200, f.t - prev.t)) : 500);
+  setMarkerTarget([f.lon, f.lat], f.heading || 0);
   if (!meMarker._added) { meMarker.addTo(map); meMarker._added = true; setTimeout(() => autoNight(), 500); if (!S.nav && !S.route) map.jumpTo({ center: [f.lon, f.lat], zoom: 14.5, pitch: 0, bearing: 0 }); }
   if (!S.nav) { if (S.from === null) $('#from').textContent = 'Bieżąca pozycja (GPS)'; if (S.to && !S.route && !onFix._auto) { onFix._auto = true; computeRoute(); } return; }
   navStep(f);
@@ -529,25 +545,16 @@ function navStep(f) {
   const r = S.route, p = [f.lon, f.lat];
   const sn = snap(p, r.coords, r.cum, NAV.idx);
   if (sn.off > 60) { NAV.offCount++; } else { NAV.offCount = 0; NAV.idx = sn.idx; NAV.prog = sn.prog; }
-  // na trasie: strzałka i kamera jadą po linii trasy, w kierunku trasy (GPS „obok drogi” nie przesuwa ikony)
-  let camP = p, camH = f.heading || 0;
-  if (sn.off <= 35) {
-    const a0 = r.coords[sn.idx], a1 = r.coords[Math.min(sn.idx + 1, r.coords.length - 1)];
-    const t = (sn.prog - r.cum[sn.idx]) / Math.max(1, r.cum[sn.idx + 1] - r.cum[sn.idx]);
-    camP = [a0[0] + (a1[0] - a0[0]) * t, a0[1] + (a1[1] - a0[1]) * t];
-    if ((f.speed || 0) > 1.5) camH = bearing(a0, a1);
-    setMarkerTarget(camP, camH, NAV.lastFix ? Math.min(1500, Math.max(200, f.t - NAV.lastFix)) : 500);
-  }
-  // przeliczenie tylko w ruchu (>8 km/h) – na postoju obok drogi nie zjadamy limitu ORS
+  // przeliczenie tylko w ruchu (>8 km/h) – na postoju obok drogi nie zjadamy limitu
   if (NAV.offCount >= 5 && (f.speed || 0) > 2.2 && Date.now() - NAV.lastReroute > 20000) reroute(f);
-  // kamera
-  if (S.follow && S.tab === 'jazda') {
-    const kmh = (f.speed || 0) * 3.6;
-    let zoom = kmh > 90 ? 15.6 : kmh > 50 ? 16.3 : 17;
+  NAV.onRoute = sn.off <= 35; NAV.fixT = performance.now(); NAV.speed = f.speed || 0;
+  if (!NAV.onRoute) { NAV.zoomT = 16; }
+  else {
+    const kmh = NAV.speed * 3.6; let zoom = kmh > 90 ? 15.6 : kmh > 50 ? 16.3 : 17;
     const cs = currentStep(); if (cs && cs.dist < 600 && cs.s.t !== 10) zoom = Math.max(zoom, cs.dist < 250 ? 17.8 : 17.2);
-    const dt = NAV.lastFix ? Math.min(1500, Math.max(150, f.t - NAV.lastFix)) : 900; NAV.lastFix = f.t;
-    map.easeTo({ center: camP, bearing: camH, zoom, pitch: S.opt.d3 ? 60 : 0, duration: dt, easing: t => t, padding: { top: window.innerHeight * 0.38, bottom: 0 } });
+    NAV.zoomT = zoom;
   }
+  if (!S.follow) { /* mapa odsunięta ręcznie – pętla rAF nie rusza kamery */ }
   updateHud();
   // cel
   if (r.total - NAV.prog < 30 && !NAV.said.goal) { NAV.said.goal = true; speak('Jesteś u celu.'); setTimeout(stopNav, 4000); }
@@ -672,7 +679,7 @@ let voicePl = null; const VQ = []; let vBusy = false; window._utt = null;
 function speak(t, urgent) {
   if (!S.opt.voice || !('speechSynthesis' in window)) return;
   // iOS ucina komunikat, gdy od razu po nim wywołać cancel() lub gdy obiekt utterance zostanie zwolniony – kolejkujemy i trzymamy referencję
-  if (urgent) { VQ.length = 0; try { speechSynthesis.cancel(); } catch (e) {} vBusy = false; }
+  if (urgent) { VQ.length = 0; try { speechSynthesis.cancel(); } catch (e) {} vBusy = true; setTimeout(() => { vBusy = false; VQ.push(t); vNext(); }, 300); return; }
   VQ.push(t); if (!vBusy) vNext();
 }
 function vNext() {
