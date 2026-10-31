@@ -302,3 +302,5 @@ body.night .cc{background:#1f2634}body.night .cc-r{border-color:#2E3647;color:#c
 .trow-wrap{display:flex;align-items:flex-start;gap:8px}
 .trows{flex:1;min-width:0}
 .tback{width:44px;height:52px;border:0;background:none;color:#fff;font-size:30px;font-weight:700;line-height:1;flex:none;padding:0}
+
+.quick .primary.danger,#quick .primary.danger{background:var(--red)!important;color:#fff}
