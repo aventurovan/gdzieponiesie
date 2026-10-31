@@ -13,7 +13,7 @@
 <link rel="icon" href="../icons/favicon-32.png">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800&display=swap">
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
-<link rel="stylesheet" href="style.css?v=10">
+<link rel="stylesheet" href="style.css?v=11">
 </head>
 <body>
 <div id="desk" class="desk hidden">
@@ -38,25 +38,39 @@
     </div>
   </div>
   <div class="chip next hidden" id="nextChip"></div>
-
-  <div class="pill road-now" id="roadNow"></div>
-
-  <div class="limit hidden" id="limit"><span id="limitVal">50</span></div>
-
-  <button class="round" id="btnPoi" type="button">POI</button>
-  <button class="round" id="btnView" type="button">3D</button>
-  <button class="round plus" id="btnRecenter" type="button" aria-label="Wyśrodkuj" hidden>⌖</button>
-
-  <div class="speed card" id="speedBox"><b id="speedVal">0</b><small>km/h</small></div>
-
-  <div class="card eta" id="etaBox">
-    <div class="row1"><b id="etaTime">--:--</b><small>przyjazd</small></div>
-    <div class="row2"><span id="etaKm">0 km</span><span id="etaMin">0 min</span><span class="warn" id="etaNote"></span></div>
-  </div>
   <div class="events hidden" id="events"></div>
   <div class="rbar" id="rbar"></div>
-  <div class="poi-strip hidden" id="poiStrip"><div class="ps-h"><span>Najbliżej</span><span>znika za <b id="poiStripCnt">20</b> s</span></div><div id="poiStripList"></div></div>
+
+  <div class="poi-col" id="poiCol"></div>
+  <div class="pill road-now" id="roadNow"></div>
+  <div class="limit hidden" id="limit"><span id="limitVal">50</span></div>
+  <div class="speed card" id="speedBox"><b id="speedVal">0</b><small>km/h</small></div>
+  <button class="round" id="btnView" type="button">3D</button>
+  <button class="round" id="btnRecenter" type="button" aria-label="Wyśrodkuj" hidden>⌖</button>
+
+  <div class="bbar card" id="bbar">
+    <button type="button" id="bbSearch" aria-label="Szukaj"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20L16.5 16.5"/></svg></button>
+    <div class="bb-mid"><b id="etaMin">—</b><small><span id="etaKm">0 km</span><i>·</i><span id="etaTime">--:--</span></small><span class="warn" id="etaNote"></span></div>
+    <button type="button" id="bbMenu" aria-label="Szybkie działania"><svg viewBox="0 0 24 24" width="26" height="26" fill="currentColor"><circle cx="8" cy="8" r="3"/><circle cx="16" cy="8" r="3"/><circle cx="8" cy="16" r="3"/><circle cx="16" cy="16" r="3"/></svg></button>
+  </div>
   <div class="progress"><i id="progBar"></i><span id="progMarks"></span></div>
+</div>
+
+<!-- szybkie działania w czasie jazdy -->
+<div id="quick" class="sheet quick hidden">
+  <div class="grip"></div>
+  <div class="row-h"><h1>Szybkie działania</h1><button type="button" class="x" id="quickClose" aria-label="Zamknij">✕</button></div>
+  <div class="sec">Cel</div>
+  <div class="dest"><i></i><div><b id="qDest">—</b><small id="qDestSub"></small></div></div>
+  <div class="qgrid">
+    <button type="button" data-q="trasa"><span>🛣️</span>Opcje trasy</button>
+    <button type="button" data-q="voice"><span id="qVoiceIco">🔊</span><em id="qVoiceTxt">Dźwięk włączony</em></button>
+    <button type="button" data-q="poi"><span>📍</span>POI przy trasie</button>
+    <button type="button" data-q="view"><span>🗺️</span><em id="qViewTxt">Widok 3D</em></button>
+    <button type="button" data-q="night"><span>🌙</span><em id="qNightTxt">Tryb nocny</em></button>
+    <button type="button" data-q="menu"><span>⚙️</span>Ustawienia</button>
+  </div>
+  <button type="button" class="primary danger" id="qCancel">Anuluj trasę</button>
 </div>
 
 <!-- JAZDA bez trasy: pływające przyciski jak w nawigacjach -->
@@ -143,7 +157,7 @@
   <div class="grip"></div>
   <div class="row-h"><h1>Przy trasie</h1><small>do 5 km od trasy</small></div>
   <div class="chips" id="poiChips">
-    <button type="button" data-f="all" aria-pressed="true">Wszystko</button><button type="button" data-f="camp">Kemping</button><button type="button" data-f="dump">Zrzut</button><button type="button" data-f="water">Woda</button><button type="button" data-f="lpg">LPG</button><button type="button" data-f="fuel">Paliwo</button>
+    <button type="button" data-f="all" aria-pressed="true">Wszystko</button><button type="button" data-f="camp">Kemping</button><button type="button" data-f="dump">Zrzut</button><button type="button" data-f="water">Woda</button><button type="button" data-f="lpg">LPG</button><button type="button" data-f="fuel">Paliwo</button><button type="button" data-f="park">Parking</button>
   </div>
   <div id="poiList" class="poi-list"><p class="note">Wyznacz trasę — pokażę kempingi, zrzuty, wodę, LPG i stacje wzdłuż niej.</p></div>
 </div>
@@ -158,6 +172,6 @@
 
 <script src="../assets/config.js"></script>
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
-<script src="app.js?v=11"></script>
+<script src="app.js?v=12"></script>
 </body>
 </html>

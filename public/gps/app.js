@@ -120,7 +120,7 @@ function addLayers() {
   if (!map.getSource('poi')) {
     map.addSource('poi', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
     map.addLayer({ id: 'poi-pts', type: 'circle', source: 'poi', minzoom: 9,
-      paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 9, 4, 14, 9], 'circle-color': ['match', ['get', 'kind'], 'fuel', '#F2C230', 'dump', '#3A74FF', 'caravan', '#1E8A4C', '#1E8A4C'], 'circle-stroke-color': '#fff', 'circle-stroke-width': 2 } });
+      paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 9, 4, 14, 9], 'circle-color': ['match', ['get', 'kind'], 'fuel', '#F2C230', 'dump', '#3A74FF', 'caravan', '#1E8A4C', 'mop', '#5A6478', 'rest', '#5A6478', 'parking', '#5A6478', '#1E8A4C'], 'circle-stroke-color': '#fff', 'circle-stroke-width': 2 } });
     map.on('click', 'poi-pts', e => { const f = e.features[0]; if (f) openPoi(f.properties.id); });
   }
   if (S.route) drawRoute();
@@ -279,7 +279,7 @@ async function loadPoi() {
   S.poi = j.items; S.poiFilter = S.poiFilter || 'all';
   drawPoi(); renderPoi();
 }
-const POI_KIND = { camp: ['Kemping', '#1E8A4C'], caravan: ['Kemping (kampery)', '#1E8A4C'], dump: ['Zrzut / woda', '#3A74FF'], fuel: ['Stacja', '#B7791F'] };
+const POI_KIND = { camp: ['Kemping', '#1E8A4C'], caravan: ['Kemping (kampery)', '#1E8A4C'], dump: ['Zrzut / woda', '#3A74FF'], fuel: ['Stacja', '#B7791F'], mop: ['MOP', '#5A6478'], rest: ['Parking przy drodze', '#5A6478'], parking: ['Parking dla kamperów', '#5A6478'] };
 function drawPoi() {
   if (!map.getSource('poi') || !S.poi) return;
   map.getSource('poi').setData({ type: 'FeatureCollection', features: S.poi.map(p => ({ type: 'Feature', properties: { id: p.id, kind: p.kind }, geometry: { type: 'Point', coordinates: [p.lon, p.lat] } })) });
@@ -287,7 +287,7 @@ function drawPoi() {
 function renderPoi() {
   const list = $('#poiList'); if (!S.poi) { list.innerHTML = '<p class="note">Wyznacz trasę — pokażę kempingi, zrzuty, wodę, LPG i stacje wzdłuż niej.</p>'; return; }
   const f = S.poiFilter, prog = S.nav ? NAV.prog : 0;
-  const items = S.poi.filter(p => p.at >= prog - 500 && (f === 'all' || (f === 'camp' && (p.kind === 'camp' || p.kind === 'caravan')) || (f === 'dump' && (p.kind === 'dump' || p.dump)) || (f === 'water' && (p.water || p.kind === 'dump')) || (f === 'lpg' && p.lpg) || (f === 'fuel' && p.kind === 'fuel')));
+  const items = S.poi.filter(p => p.at >= prog - 500 && (f === 'all' || (f === 'camp' && (p.kind === 'camp' || p.kind === 'caravan')) || (f === 'dump' && (p.kind === 'dump' || p.dump)) || (f === 'water' && (p.water || p.kind === 'dump')) || (f === 'lpg' && p.lpg) || (f === 'fuel' && p.kind === 'fuel') || (f === 'park' && ['mop', 'rest', 'parking'].includes(p.kind))));
   if (!items.length) { list.innerHTML = '<p class="note">Nic takiego przy trasie.</p>'; return; }
   list.innerHTML = items.slice(0, 80).map(p => {
     const [label, col] = POI_KIND[p.kind] || POI_KIND.camp; const pr = PRICES && PRICES[p.cc];
@@ -323,10 +323,10 @@ function startNav() {
   speak('Rozpoczynam nawigację.'); keepAwake();
   map.easeTo({ pitch: S.opt.d3 ? 58 : 0, zoom: 16, duration: 800 });
   if (S.opt.sim) startSim(); else startGps();
-  updateHud();
+  updateHud(); updatePoiCol();
 }
 function stopNav() {
-  S.nav = false; hidePoiStrip(); $('#rbar').innerHTML = ''; $('#hud').classList.add('hidden'); stopSim(); $('#btnRecenter').hidden = true;
+  S.nav = false; $('#rbar').innerHTML = ''; $('#poiCol').innerHTML = ''; $('#quick').classList.add('hidden'); $('#hud').classList.add('hidden'); stopSim(); $('#btnRecenter').hidden = true;
   map.easeTo({ pitch: 0, bearing: 0, zoom: 14.5, duration: 600 }); showTab('jazda');
   if (wake) { wake.release().catch(() => {}); wake = null; }
 }
@@ -425,9 +425,9 @@ function updateHud() {
   for (const t of r.ferries || []) if (t.at - NAV.prog > -200 && t.at - NAV.prog < 20000) ev.push({ at: t.at, txt: 'Prom', sub: 'przygotuj bilet' });
   for (const t of r.traffic || []) if (t.mag >= 2 && r.cum[t.a] - NAV.prog > -200 && r.cum[t.a] - NAV.prog < 20000) ev.push({ at: r.cum[t.a], txt: 'Korek +' + Math.round(t.delay / 60) + ' min', sub: (r.cum[t.b] - r.cum[t.a]) / 1000 > 0.5 ? ((r.cum[t.b] - r.cum[t.a]) / 1000).toFixed(1).replace('.', ',') + ' km' : '' });
   ev.sort((x, y) => x.at - y.at);
-  const box = $('#events'); box.classList.toggle('hidden', !ev.length || !!poiStripT);
+  const box = $('#events'); box.classList.toggle('hidden', !ev.length);
   box.innerHTML = ev.slice(0, 3).map(e => `<div><b>${e.txt}</b><small>za ${fmtDist(Math.max(0, e.at - NAV.prog))}${e.sub ? ' · ' + e.sub : ''}</small></div>`).join('');
-  if (!updateHud._rb || Date.now() - updateHud._rb > 3000) { updateHud._rb = Date.now(); updateRouteBar(); }
+  if (!updateHud._rb || Date.now() - updateHud._rb > 3000) { updateHud._rb = Date.now(); updateRouteBar(); updatePoiCol(); }
 }
 function updateRouteBar() {
   const r = S.route, el = $('#rbar'); if (!el || !r) return;
@@ -549,27 +549,42 @@ $('#fCompass').addEventListener('click', () => map.easeTo({ bearing: 0, pitch: S
 $('#fCenter').addEventListener('click', () => { if (S.pos) map.easeTo({ center: [S.pos.lon, S.pos.lat], zoom: 15, duration: 500 }); else startGps(); });
 $('#fView').addEventListener('click', () => { setView3d(!S.opt.d3); $('#fViewTxt').textContent = S.opt.d3 ? '3D' : '2D'; map.easeTo({ pitch: S.opt.d3 ? 45 : 0, duration: 500 }); });
 $('#btnRecenter').addEventListener('click', () => { S.follow = true; $('#btnRecenter').hidden = true; });
-let poiStripT = null, poiStripLeft = 0;
-function hidePoiStrip() { if (poiStripT) clearInterval(poiStripT); poiStripT = null; $('#poiStrip').classList.add('hidden'); }
-function showPoiStrip() {
-  if (!S.poi || !S.nav) { showTab('poi'); return; }
-  const prog = NAV.prog;
-  const items = S.poi.filter(p => p.at >= prog - 200 && p.off < 2500).slice(0, 4);
-  if (!items.length) { speak('Brak miejsc przy trasie w pobliżu.'); return; }
-  $('#poiStripList').innerHTML = items.map(p => {
-    const [label, col] = POI_KIND[p.kind] || POI_KIND.camp; const pr = PRICES && PRICES[p.cc];
-    let main = p.kind === 'fuel' ? (pr && pr.diesel ? fmt1(pr.diesel) + ' <small>zł ON</small>' : 'Stacja') : (label.split(' ')[0]);
-    let sub = p.kind === 'fuel' ? [(p.brand || p.name || 'stacja'), p.lpg ? 'LPG' : ''].filter(Boolean).join(' · ') : (p.name || label);
-    return `<div class="ps-it" data-id="${p.id}"><i style="background:${col}"></i><div><b>${main}</b><small>${esc(sub)} · ${fmtDist(Math.max(0, p.at - prog))}</small></div></div>`;
-  }).join('');
-  poiStripLeft = 20; $('#poiStripCnt').textContent = poiStripLeft;
-  $('#poiStrip').classList.remove('hidden');
-  if (poiStripT) clearInterval(poiStripT);
-  poiStripT = setInterval(() => { poiStripLeft--; $('#poiStripCnt').textContent = poiStripLeft; if (poiStripLeft <= 0) hidePoiStrip(); }, 1000);
+$('#bbSearch').addEventListener('click', () => showTab('poi'));
+$('#bbMenu').addEventListener('click', openQuick);
+$('#quickClose').addEventListener('click', () => $('#quick').classList.add('hidden'));
+$('#qCancel').addEventListener('click', () => { $('#quick').classList.add('hidden'); stopNav(); });
+$('.qgrid').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return; const q = b.dataset.q;
+  if (q === 'trasa') { $('#quick').classList.add('hidden'); showTab('trasa'); setSheetHalf(true); }
+  else if (q === 'voice') { S.opt.voice = !S.opt.voice; store.set('opt', S.opt); $('#optVoice').checked = S.opt.voice; fillQuick(); if (S.opt.voice) speak('Dźwięk włączony.'); }
+  else if (q === 'poi') { $('#quick').classList.add('hidden'); showTab('poi'); }
+  else if (q === 'view') { setView3d(!S.opt.d3); fillQuick(); }
+  else if (q === 'night') { setNight(!S.opt.night); fillQuick(); }
+  else if (q === 'menu') { $('#quick').classList.add('hidden'); showTab('menu'); }
+});
+function fillQuick() {
+  $('#qVoiceIco').textContent = S.opt.voice ? '🔊' : '🔇'; $('#qVoiceTxt').textContent = S.opt.voice ? 'Dźwięk włączony' : 'Dźwięk wyłączony';
+  $('#qViewTxt').textContent = S.opt.d3 ? 'Widok 3D' : 'Widok 2D'; $('#qNightTxt').textContent = S.opt.night ? 'Tryb dzienny' : 'Tryb nocny';
 }
-$('#btnPoi').addEventListener('click', () => { if (S.nav) { if (poiStripT) hidePoiStrip(); else showPoiStrip(); } else showTab('poi'); });
-$('#poiStripList').addEventListener('click', e => { const it = e.target.closest('.ps-it'); if (!it) return; const p = S.poi.find(x => x.id === it.dataset.id); if (p && confirm('Nawigować do: ' + (p.name || POI_KIND[p.kind][0]) + '?')) { hidePoiStrip(); goTo(p); } });
-$('#etaBox').addEventListener('click', () => { if (confirm('Zakończyć nawigację?')) stopNav(); });
+function openQuick() {
+  const r = S.route; if (!r) return;
+  $('#qDest').textContent = S.to ? S.to.name : 'Cel';
+  const rem = Math.max(0, r.total - NAV.prog), remSec = r.sec * (1 - NAV.prog / r.total);
+  $('#qDestSub').textContent = hhmm(new Date(Date.now() + remSec * 1000)) + ' · ' + Math.round(rem / 1000) + ' km';
+  fillQuick(); $('#quick').classList.remove('hidden');
+}
+const POI_ICON = { fuel: '⛽', mop: '🅿️', rest: '🅿️', parking: '🚐', camp: '⛺', caravan: '⛺', dump: '🚰' };
+function updatePoiCol() {
+  const r = S.route, el = $('#poiCol'); if (!el || !r || !S.poi) return;
+  const prog = NAV.prog;
+  const items = S.poi.filter(p => p.at >= prog - 100 && p.off < 1500 && ['fuel', 'mop', 'rest', 'parking'].includes(p.kind)).slice(0, 3);
+  el.innerHTML = items.map(p => {
+    const pr = PRICES && PRICES[p.cc]; const price = p.kind === 'fuel' && pr && pr.diesel ? `<small>${fmt1(pr.diesel)}</small>` : (p.kind === 'fuel' && p.lpg ? '<small>LPG</small>' : '');
+    return `<div class="pc" data-id="${p.id}"><span class="ic">${POI_ICON[p.kind] || '📍'}</span><b>${fmtDist(Math.max(0, p.at - prog))}</b>${price}</div>`;
+  }).join('');
+}
+$('#poiCol').addEventListener('click', e => { const it = e.target.closest('.pc'); if (!it) return; const p = S.poi.find(x => x.id === it.dataset.id); if (p && confirm('Nawigować do: ' + (p.name || POI_KIND[p.kind]?.[0] || 'miejsce') + '?')) goTo(p); });
+
 
 /* start */
 // komputer (mysz, brak dotyku, szeroki ekran) – tylko informacja z kodem QR; ?desk=1 wymusza pełną wersję do testów

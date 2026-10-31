@@ -1771,7 +1771,9 @@ async function handleGpsPoi(request, env, cors) {
     nwr["tourism"~"^(camp_site|caravan_site)$"](around:${radius},${line});
     nwr["amenity"="sanitary_dump_station"](around:${radius},${line});
     nwr["amenity"="fuel"](around:${Math.min(radius, 1500)},${line});
-  );out center tags 400;`;
+    nwr["highway"~"^(rest_area|services)$"](around:${Math.min(radius, 800)},${line});
+    nwr["amenity"="parking"]["motorhome"="yes"](around:${radius},${line});
+  );out center tags 500;`;
   let data = null, lastErr = '';
   for (const ep of OVERPASS) {
     try {
@@ -1787,6 +1789,7 @@ async function handleGpsPoi(request, env, cors) {
     if (lat == null) continue;
     let kind = 'camp';
     if (t.amenity === 'fuel') kind = 'fuel'; else if (t.amenity === 'sanitary_dump_station') kind = 'dump'; else if (t.tourism === 'caravan_site') kind = 'caravan';
+    else if (t.highway === 'services') kind = 'mop'; else if (t.highway === 'rest_area') kind = 'rest'; else if (t.amenity === 'parking') kind = 'parking';
     items.push({
       id: el.type[0] + el.id, kind, lon: Math.round(lon * 1e5) / 1e5, lat: Math.round(lat * 1e5) / 1e5,
       name: t.name || t.brand || t.operator || '', brand: t.brand || '',
