@@ -45,7 +45,8 @@ const S = {
   tab: 'trasa',
 };
 const STYLE = { light: 'https://tiles.openfreemap.org/styles/liberty', dark: 'https://tiles.openfreemap.org/styles/dark' };
-const styleUrl = () => S.opt.mapSrc === 'tomtom' ? API + '/gps/tt/style.json' : STYLE[S.opt.night ? 'dark' : 'light'];
+const styleUrl = () => STYLE[S.opt.night ? 'dark' : 'light'];
+S.opt.mapSrc = 'osm';
 
 /* ---------- geometria ---------- */
 const R_EARTH = 6371000, rad = d => d * Math.PI / 180;
@@ -832,7 +833,7 @@ function showTab(t) {
 $('#btnView').addEventListener('click', () => setView3d(!S.opt.d3));
 $('#opt3d').addEventListener('change', e => setView3d(e.target.checked));
 $('#optNight').addEventListener('change', e => setNight(e.target.checked));
-$('#optMapSrc').addEventListener('change', e => { S.opt.mapSrc = e.target.value; store.set('opt', S.opt); map.setStyle(styleUrl(), { diff: false }); });
+
 $('#optVoice').addEventListener('change', e => { S.opt.voice = e.target.checked; store.set('opt', S.opt); });
 $('#optSim').addEventListener('change', e => { S.opt.sim = e.target.checked; store.set('opt', S.opt); if (S.nav) { if (S.opt.sim) startSim(); else stopSim(); } });
 $('#fSearch').addEventListener('click', () => { showTab('trasa'); if (!S.to) setTimeout(() => $('#to').focus(), 50); });
@@ -981,7 +982,7 @@ function isDesktop() {
 function init() {
   if (isDesktop()) { $('#desk').classList.remove('hidden'); $('#sheet').classList.add('hidden'); return; }
   document.body.classList.toggle('night', !!S.opt.night);
-  $('#optVoice').checked = !!S.opt.voice; $('#opt3d').checked = !!S.opt.d3; $('#optMapSrc').value = S.opt.mapSrc || 'osm'; $('#optRate').value = S.opt.rate || 1; $('#rateTxt').textContent = (S.opt.rate || 1).toFixed(2).replace('.', ',').replace(/0$/, '') + '×'; $('#optNight').checked = !!S.opt.night; $('#optSim').checked = !!S.opt.sim;
+  $('#optVoice').checked = !!S.opt.voice; $('#opt3d').checked = !!S.opt.d3; $('#optRate').value = S.opt.rate || 1; $('#rateTxt').textContent = (S.opt.rate || 1).toFixed(2).replace('.', ',').replace(/0$/, '') + '×'; $('#optNight').checked = !!S.opt.night; $('#optSim').checked = !!S.opt.sim;
   $$('#modes button').forEach(x => x.setAttribute('aria-pressed', x.dataset.mode === S.mode));
   vehInit(); vehLine(); fillVeh(S.vehId); initMap(); $('#btnView').textContent = S.opt.d3 ? '3D' : '2D';
   startGps();
