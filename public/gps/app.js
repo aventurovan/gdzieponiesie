@@ -483,6 +483,21 @@ function stopNav() {
   if (wake) { wake.release().catch(() => {}); wake = null; }
 }
 
+/* płynna strzałka: interpolacja między pozycjami, przyciągnięta do trasy gdy jedziemy po niej */
+const MK = { from: null, to: null, h0: 0, h1: 0, t0: 0, dur: 500, raf: null };
+function setMarkerTarget(p, heading, dur) {
+  const cur = MK.cur || p; MK.from = cur; MK.to = p; MK.h0 = MK.curH ?? heading; MK.h1 = heading; MK.t0 = performance.now(); MK.dur = dur;
+  if (!MK.raf) MK.raf = requestAnimationFrame(tickMarker);
+}
+function tickMarker(now) {
+  const k = Math.min(1, (now - MK.t0) / MK.dur);
+  const lon = MK.from[0] + (MK.to[0] - MK.from[0]) * k, lat = MK.from[1] + (MK.to[1] - MK.from[1]) * k;
+  let dh = ((MK.h1 - MK.h0 + 540) % 360) - 180; const h = (MK.h0 + dh * k + 360) % 360;
+  MK.cur = [lon, lat]; MK.curH = h;
+  meMarker.setLngLat([lon, lat]).setRotation(h);
+  MK.raf = k < 1 ? requestAnimationFrame(tickMarker) : null;
+}
+
 /* GPS */
 let watchId = null;
 function startGps() {
@@ -504,7 +519,8 @@ function onFix(f) {
   if (prev && (f.speed == null || Number.isNaN(f.speed)) && f.t > prev.t) f.speed = dist([prev.lon, prev.lat], [f.lon, f.lat]) / ((f.t - prev.t) / 1000);
   if (f.heading == null) f.heading = prev ? prev.heading : 0;
   S.pos = f;
-  meMarker.setLngLat([f.lon, f.lat]).setRotation(f.heading || 0);
+  // płynny ruch strzałki: cel ustawia navStep (punkt na trasie) lub surowa pozycja; animacja w rAF
+  setMarkerTarget([f.lon, f.lat], f.heading || 0, prev ? Math.min(1500, Math.max(200, f.t - prev.t)) : 500);
   if (!meMarker._added) { meMarker.addTo(map); meMarker._added = true; setTimeout(() => autoNight(), 500); if (!S.nav && !S.route) map.jumpTo({ center: [f.lon, f.lat], zoom: 14.5, pitch: 0, bearing: 0 }); }
   if (!S.nav) { if (S.from === null) $('#from').textContent = 'Bieżąca pozycja (GPS)'; if (S.to && !S.route && !onFix._auto) { onFix._auto = true; computeRoute(); } return; }
   navStep(f);
@@ -513,6 +529,15 @@ function navStep(f) {
   const r = S.route, p = [f.lon, f.lat];
   const sn = snap(p, r.coords, r.cum, NAV.idx);
   if (sn.off > 60) { NAV.offCount++; } else { NAV.offCount = 0; NAV.idx = sn.idx; NAV.prog = sn.prog; }
+  // na trasie: strzałka i kamera jadą po linii trasy, w kierunku trasy (GPS „obok drogi” nie przesuwa ikony)
+  let camP = p, camH = f.heading || 0;
+  if (sn.off <= 35) {
+    const a0 = r.coords[sn.idx], a1 = r.coords[Math.min(sn.idx + 1, r.coords.length - 1)];
+    const t = (sn.prog - r.cum[sn.idx]) / Math.max(1, r.cum[sn.idx + 1] - r.cum[sn.idx]);
+    camP = [a0[0] + (a1[0] - a0[0]) * t, a0[1] + (a1[1] - a0[1]) * t];
+    if ((f.speed || 0) > 1.5) camH = bearing(a0, a1);
+    setMarkerTarget(camP, camH, NAV.lastFix ? Math.min(1500, Math.max(200, f.t - NAV.lastFix)) : 500);
+  }
   // przeliczenie tylko w ruchu (>8 km/h) – na postoju obok drogi nie zjadamy limitu ORS
   if (NAV.offCount >= 5 && (f.speed || 0) > 2.2 && Date.now() - NAV.lastReroute > 20000) reroute(f);
   // kamera
@@ -521,7 +546,7 @@ function navStep(f) {
     let zoom = kmh > 90 ? 15.6 : kmh > 50 ? 16.3 : 17;
     const cs = currentStep(); if (cs && cs.dist < 600 && cs.s.t !== 10) zoom = Math.max(zoom, cs.dist < 250 ? 17.8 : 17.2);
     const dt = NAV.lastFix ? Math.min(1500, Math.max(150, f.t - NAV.lastFix)) : 900; NAV.lastFix = f.t;
-    map.easeTo({ center: p, bearing: f.heading || 0, zoom, pitch: S.opt.d3 ? 60 : 0, duration: dt, easing: t => t, padding: { top: window.innerHeight * 0.38, bottom: 0 } });
+    map.easeTo({ center: camP, bearing: camH, zoom, pitch: S.opt.d3 ? 60 : 0, duration: dt, easing: t => t, padding: { top: window.innerHeight * 0.38, bottom: 0 } });
   }
   updateHud();
   // cel
@@ -639,18 +664,27 @@ function announce(s, d, at) {
   if (lvl > said) {
     NAV.said[key] = lvl;
     const txt = lvl === 3 ? s.i : 'Za ' + sayDist(d) + ' ' + s.i.charAt(0).toLowerCase() + s.i.slice(1);
-    speak(txt);
+    speak(txt, lvl === 3);
   }
 }
 const sayDist = m => m >= 950 ? (Math.round(m / 100) / 10 + '').replace('.', ',') + ' kilometra' : Math.round(m / 50) * 50 + ' metrów';
-let voicePl = null;
-function speak(t) {
+let voicePl = null; const VQ = []; let vBusy = false; window._utt = null;
+function speak(t, urgent) {
   if (!S.opt.voice || !('speechSynthesis' in window)) return;
+  // iOS ucina komunikat, gdy od razu po nim wywołać cancel() lub gdy obiekt utterance zostanie zwolniony – kolejkujemy i trzymamy referencję
+  if (urgent) { VQ.length = 0; try { speechSynthesis.cancel(); } catch (e) {} vBusy = false; }
+  VQ.push(t); if (!vBusy) vNext();
+}
+function vNext() {
+  const t = VQ.shift(); if (!t) { vBusy = false; return; }
+  vBusy = true;
   try {
     if (!voicePl) voicePl = speechSynthesis.getVoices().find(v => /^pl/i.test(v.lang)) || null;
-    const u = new SpeechSynthesisUtterance(t); u.lang = 'pl-PL'; if (voicePl) u.voice = voicePl; u.rate = 1.05;
-    speechSynthesis.cancel(); speechSynthesis.speak(u);
-  } catch (e) {}
+    const u = new SpeechSynthesisUtterance(t); u.lang = 'pl-PL'; if (voicePl) u.voice = voicePl; u.rate = 1.0;
+    u.onend = u.onerror = () => { window._utt = null; setTimeout(vNext, 150); };
+    window._utt = u; speechSynthesis.resume(); speechSynthesis.speak(u);
+    setTimeout(() => { if (window._utt === u) { window._utt = null; vBusy = false; vNext(); } }, 12000);
+  } catch (e) { vBusy = false; }
 }
 if ('speechSynthesis' in window) speechSynthesis.onvoiceschanged = () => { voicePl = null; };
 
