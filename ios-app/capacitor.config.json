@@ -1,6 +1,6 @@
 {
-  "appId": "pl.gdzieponiesie.gps",
-  "appName": "GdziePoniesie GPS",
+  "appId": "pl.gdzieponiesie.azimo",
+  "appName": "Azimo",
   "webDir": "www",
   "server": {
     "url": "https://gdzieponiesie.pl/gps/",
@@ -16,7 +16,7 @@
   },
   "ios": {
     "contentInset": "never",
-    "backgroundColor": "#161C2B",
+    "backgroundColor": "#16181D",
     "allowsLinkPreview": false,
     "scrollEnabled": false
   },

@@ -27,7 +27,7 @@ ext.build_configurations.each do |c|
   c.build_settings['PRODUCT_NAME'] = 'NavWidget'
   c.build_settings['WRAPPER_EXTENSION'] = 'appex'
   c.build_settings['INFOPLIST_FILE'] = plist.real_path.to_s
-  c.build_settings['PRODUCT_BUNDLE_IDENTIFIER'] = 'pl.gdzieponiesie.gps.NavWidget'
+  c.build_settings['PRODUCT_BUNDLE_IDENTIFIER'] = 'pl.gdzieponiesie.azimo.NavWidget'
   c.build_settings['SWIFT_VERSION'] = '5.0'
   c.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '16.2'
   c.build_settings['TARGETED_DEVICE_FAMILY'] = '1,2'

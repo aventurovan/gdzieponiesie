@@ -31,7 +31,7 @@ jobs:
         working-directory: ios-app
         run: |
           npx cap add ios
-          npx capacitor-assets generate --ios --iconBackgroundColor '#F2A900' --iconBackgroundColorDark '#F2A900' --splashBackgroundColor '#F2A900' --splashBackgroundColorDark '#F2A900'
+          npx capacitor-assets generate --ios --iconBackgroundColor '#16181D' --iconBackgroundColorDark '#16181D' --splashBackgroundColor '#16181D' --splashBackgroundColorDark '#16181D'
           npx cap sync ios
 
       - name: Wersja (z ios-app/package.json + numer builda)
@@ -55,7 +55,7 @@ jobs:
           /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes array" $PL || true
           /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes:0 string location" $PL || true
           /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes:1 string audio" $PL || true
-          /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName 'GdziePoniesie'" $PL || /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string 'GdziePoniesie'" $PL
+          /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName 'Azimo'" $PL || /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string 'Azimo'" $PL
           /usr/libexec/PlistBuddy -c "Add :CFBundleDevelopmentRegion string pl" $PL || /usr/libexec/PlistBuddy -c "Set :CFBundleDevelopmentRegion pl" $PL
           /usr/libexec/PlistBuddy -c "Add :UIViewControllerBasedStatusBarAppearance bool true" $PL || true
           /usr/libexec/PlistBuddy -c "Add :ITSAppUsesNonExemptEncryption bool false" $PL || true
@@ -100,7 +100,7 @@ jobs:
         run: |
           mkdir -p Payload
           cp -R App.xcarchive/Products/Applications/App.app Payload/
-          NAME="GdziePoniesie-GPS-v${{ steps.ver.outputs.version }}-build${{ steps.ver.outputs.build }}-unsigned.ipa"
+          NAME="Azimo-v${{ steps.ver.outputs.version }}-build${{ steps.ver.outputs.build }}-unsigned.ipa"
           zip -qry "$NAME" Payload
           ls -la "$NAME"
           echo "## IPA v${{ steps.ver.outputs.version }} (build ${{ steps.ver.outputs.build }})" >> $GITHUB_STEP_SUMMARY
@@ -109,6 +109,6 @@ jobs:
       - name: Artefakt
         uses: actions/upload-artifact@v4
         with:
-          name: GdziePoniesie-GPS-v${{ steps.ver.outputs.version }}-build${{ steps.ver.outputs.build }}-unsigned
+          name: Azimo-v${{ steps.ver.outputs.version }}-build${{ steps.ver.outputs.build }}-unsigned
           path: ios-app/ios/App/build/*.ipa
           retention-days: 14

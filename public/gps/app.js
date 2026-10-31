@@ -593,7 +593,7 @@ let watchId = null, bgWatch = null;
 async function startBgGps() {
   if (!NBG || bgWatch) return;
   try {
-    bgWatch = await NBG.addWatcher({ backgroundMessage: 'Nawigacja prowadzi po trasie.', backgroundTitle: 'GdziePoniesie GPS', requestPermissions: true, stale: false, distanceFilter: 3 },
+    bgWatch = await NBG.addWatcher({ backgroundMessage: 'Nawigacja prowadzi po trasie.', backgroundTitle: 'Azimo', requestPermissions: true, stale: false, distanceFilter: 3 },
       (loc, err) => { if (err || !loc) return; onFix({ lon: loc.longitude, lat: loc.latitude, speed: loc.speed, heading: loc.bearing, acc: loc.accuracy, t: loc.time || Date.now() }); });
   } catch (e) { bgWatch = null; }
 }
@@ -935,7 +935,7 @@ function fillData() {
 async function shareRoute() {
   if (!S.to) return;
   const url = location.origin + '/gps/?to=' + encodeURIComponent(S.to.lon + ',' + S.to.lat + ',' + S.to.name);
-  try { if (navigator.share) await navigator.share({ title: 'Trasa do ' + S.to.name, url }); else { await navigator.clipboard.writeText(url); alert('Link skopiowany.'); } } catch (e) {}
+  try { if (navigator.share) await navigator.share({ title: 'Azimo – trasa do ' + S.to.name, url }); else { await navigator.clipboard.writeText(url); alert('Link skopiowany.'); } } catch (e) {}
 }
 // --- noc automatycznie: wysokość Słońca < -3° wg pozycji
 function sunElev(lat, lon, d = new Date()) {

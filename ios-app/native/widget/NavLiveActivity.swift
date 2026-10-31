@@ -45,7 +45,7 @@ struct NavLiveActivity: Widget {
                 }
                 ProgressView(value: context.state.progress).tint(.white).scaleEffect(x: 1, y: 1.4, anchor: .center)
                 HStack {
-                    Text("GdziePoniesie").font(.system(size: 12, weight: .semibold)).foregroundStyle(.white.opacity(0.7))
+                    Text("Azimo").font(.system(size: 12, weight: .semibold)).foregroundStyle(.white.opacity(0.7))
                     Spacer()
                     Text(context.state.remKm).font(.system(size: 15, weight: .bold)).foregroundStyle(.white)
                     Text(context.state.remTime).font(.system(size: 15, weight: .bold)).foregroundStyle(Color(red: 0.49, green: 0.89, blue: 0.55))

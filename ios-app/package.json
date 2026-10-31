@@ -1,10 +1,10 @@
 {
-  "name": "gdzieponiesie-gps",
-  "version": "0.5.0",
+  "name": "azimo",
+  "version": "0.6.0",
   "private": true,
   "scripts": {
     "sync": "cap sync ios",
-    "icons": "capacitor-assets generate --ios --iconBackgroundColor '#F2A900' --iconBackgroundColorDark '#F2A900' --splashBackgroundColor '#F2A900' --splashBackgroundColorDark '#F2A900'"
+    "icons": "capacitor-assets generate --ios --iconBackgroundColor '#16181D' --iconBackgroundColorDark '#16181D' --splashBackgroundColor '#16181D' --splashBackgroundColorDark '#16181D'"
   },
   "dependencies": {
     "@capacitor/core": "8.5.3",
