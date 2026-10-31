@@ -986,12 +986,22 @@ function init() {
   $$('#modes button').forEach(x => x.setAttribute('aria-pressed', x.dataset.mode === S.mode));
   vehInit(); vehLine(); fillVeh(S.vehId); initMap(); $('#btnView').textContent = S.opt.d3 ? '3D' : '2D';
   startGps();
-  // ?to=lon,lat,Nazwa – wejście z planera
-  const u = new URLSearchParams(location.search);
-  if (u.get('to')) { const [lon, lat, ...n] = u.get('to').split(','); S.to = { lon: +lon, lat: +lat, name: n.join(',') || 'Cel' }; $('#to').textContent = S.to.name; $('#to').classList.remove('empty'); } else { $('#to').classList.add('empty'); }
-  // ?via=dł,szer,Nazwa|dł,szer,Nazwa – przystanki z planera (przycisk „Prowadź w Azimo”)
-  if (u.get('via')) { S.via = u.get('via').split('|').map(s => { const [lon, lat, ...n] = s.split(','); return { lon: +lon, lat: +lat, name: n.join(',') || 'Przystanek' }; }).filter(v => isFinite(v.lon) && isFinite(v.lat)).slice(0, 8); renderViaChips(); }
+  // ?to=lon,lat,Nazwa&via=… – wejście z planera (www) albo azimo://trasa?to=…&via=… (aplikacja natywna)
+  applyLink(new URLSearchParams(location.search));
   $('#from').classList.add('empty'); $('#viaAdd').classList.add('empty');
   showTab(S.to ? 'trasa' : 'jazda');
+}
+function applyLink(u) {
+  if (u.get('to')) { const [lon, lat, ...n] = u.get('to').split(','); if (isFinite(+lon) && isFinite(+lat)) { S.to = { lon: +lon, lat: +lat, name: n.join(',') || 'Cel' }; $('#to').textContent = S.to.name; $('#to').classList.remove('empty'); } }
+  else if (!S.to) $('#to').classList.add('empty');
+  if (u.get('via')) { S.via = u.get('via').split('|').map(s => { const [lon, lat, ...n] = s.split(','); return { lon: +lon, lat: +lat, name: n.join(',') || 'Przystanek' }; }).filter(v => isFinite(v.lon) && isFinite(v.lat)).slice(0, 8); renderViaChips(); }
+  else if (u.get('to')) { S.via = []; renderViaChips(); }
+}
+// schemat azimo:// – planer otwiera aplikację z celem i przystankami (także gdy była zamknięta)
+if (NATIVE) {
+  const AP = plugin('App');
+  const openLink = url => { try { if (!/^azimo:/i.test(url || '')) return; const u = new URL(url.replace(/^azimo:\/*/i, 'https://azimo/')).searchParams;
+    applyLink(u); if (S.to) { S.route = null; showTab('trasa'); computeRoute(); } } catch (e) {} };
+  if (AP) { AP.addListener('appUrlOpen', e => openLink(e && e.url)); AP.getLaunchUrl && AP.getLaunchUrl().then(r => r && openLink(r.url)).catch(() => {}); }
 }
 init();

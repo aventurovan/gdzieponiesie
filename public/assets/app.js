@@ -1150,7 +1150,16 @@ function azimoUrl(){
   const via = (R.via || []).map(v => pt(v, v.name));
   return location.origin + '/gps/?to=' + encodeURIComponent(pt(end, R.toName)) + (via.length ? '&via=' + encodeURIComponent(via.join('|')) : '');
 }
-function openAzimo(){ location.href = azimoUrl(); }
+// Najpierw aplikacja (schemat azimo://), a gdy jej nie ma – wersja w przeglądarce.
+function openAzimo(){
+  const web = azimoUrl(), app = 'azimo://trasa' + web.slice(web.indexOf('?'));
+  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  if(!ios){ location.href = web; return; }
+  let left = false; const onHide = () => { if(document.hidden) left = true; };
+  document.addEventListener('visibilitychange', onHide);
+  setTimeout(() => { document.removeEventListener('visibilitychange', onHide); if(!left && !document.hidden) location.href = web; }, 1500);
+  location.href = app;
+}
 
 /* --- 1. noclegi: podział trasy na dni wg limitu km dziennie --- */
 let KNOWN = null;

@@ -60,6 +60,13 @@ jobs:
           /usr/libexec/PlistBuddy -c "Add :UIViewControllerBasedStatusBarAppearance bool true" $PL || true
           /usr/libexec/PlistBuddy -c "Add :ITSAppUsesNonExemptEncryption bool false" $PL || true
           /usr/libexec/PlistBuddy -c "Add :NSSupportsLiveActivities bool true" $PL || true
+          # własny schemat adresu azimo:// – planer otwiera aplikację z celem i przystankami
+          /usr/libexec/PlistBuddy -c "Delete :CFBundleURLTypes" $PL || true
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes array" $PL
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0 dict" $PL
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0:CFBundleURLName string pl.gdzieponiesie.azimo" $PL
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0:CFBundleURLSchemes array" $PL
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0:CFBundleURLSchemes:0 string azimo" $PL
           plutil -lint $PL
 
       - name: Live Activity – rozszerzenie widgetu i wtyczka
