@@ -236,6 +236,10 @@ export default {
         if (!ALLOWED_ORIGINS.includes(origin) && !ALLOWED_ORIGINS.includes('https://' + (request.headers.get('Referer') || '').split('/')[2])) return json({ error: 'Ta strona nie ma dostępu do API.' }, 403, cors);
         return await handleTtMap(request, url, env, cors);
       }
+      if (url.pathname === '/gps/cams' && request.method === 'POST') {
+        if (!ALLOWED_ORIGINS.includes(origin)) return json({ error: 'Ta strona nie ma dostępu do API.' }, 403, cors);
+        return await handleGpsCams(request, env, cors);
+      }
       if (url.pathname === '/gps/lanes' && request.method === 'POST') {
         if (!ALLOWED_ORIGINS.includes(origin)) return json({ error: 'Ta strona nie ma dostępu do API.' }, 403, cors);
         return await handleGpsLanes(request, env, cors);
@@ -1966,5 +1970,34 @@ async function handleGpsLanes(request, env, cors) {
   });
   const out = { lanes };
   if (env.NK) await env.NK.put(kvKey, JSON.stringify(out), { expirationTtl: 30 * 24 * 3600 });
+  return json(out, 200, cors);
+}
+
+// ---- Fotoradary (OSM highway=speed_camera) w korytarzu trasy ----
+async function handleGpsCams(request, env, cors) {
+  let body; try { body = await request.json(); } catch { return json({ error: 'Niepoprawny JSON.' }, 400, cors); }
+  const coords = Array.isArray(body.coords) ? body.coords.filter(isPoint) : [];
+  if (coords.length < 2) return json({ cams: [] }, 200, cors);
+  const kvKey = 'gps:cams:' + (await sha256(JSON.stringify(coords))).slice(0, 32);
+  if (env.NK) { const hit = await env.NK.get(kvKey, 'json'); if (hit) return json({ ...hit, cached: true }, 200, cors); }
+  const chunks = []; for (let i = 0; i < coords.length - 1; i += 24) chunks.push(coords.slice(i, i + 26));
+  const cams = new Map(); let errors = 0;
+  const run = async (chunk, k) => {
+    const line = chunk.map(([x, y]) => `${y.toFixed(4)},${x.toFixed(4)}`).join(',');
+    const ql = `[out:json][timeout:20];(node["highway"="speed_camera"](around:60,${line});node["enforcement"="maxspeed"](around:60,${line}););out tags 300;`;
+    const eps = [...OVERPASS.slice(k % OVERPASS.length), ...OVERPASS.slice(0, k % OVERPASS.length)];
+    for (const ep of eps) {
+      try {
+        const r = await fetch(ep, { method: 'POST', body: 'data=' + encodeURIComponent(ql), headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, signal: AbortSignal.timeout(22000) });
+        if (!r.ok) continue; const d = await r.json();
+        for (const el of d.elements || []) { if (el.lat == null) continue; const t = el.tags || {}; cams.set('n' + el.id, { id: 'n' + el.id, lon: Math.round(el.lon * 1e5) / 1e5, lat: Math.round(el.lat * 1e5) / 1e5, max: parseInt(t.maxspeed) || 0, dir: t.direction || '', avg: /average|section/i.test((t.enforcement || '') + ' ' + (t.speed_camera || '') + ' ' + (t.camera_type || '')) }); }
+        return;
+      } catch (e) {}
+    }
+    errors++;
+  };
+  for (let i = 0; i < chunks.length; i += 4) await Promise.all(chunks.slice(i, i + 4).map((c, j) => run(c, i + j)));
+  const out = { cams: [...cams.values()], errors };
+  if (env.NK && !errors) await env.NK.put(kvKey, JSON.stringify(out), { expirationTtl: 14 * 24 * 3600 });
   return json(out, 200, cors);
 }

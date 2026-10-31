@@ -14,7 +14,7 @@ const NTTS = NATIVE ? plugin('TextToSpeech') : null, NBG = NATIVE ? plugin('Back
 // Live Activity (ekran blokady / Dynamic Island) – tylko w aplikacji natywnej
 const LA = { on: false, last: 0, key: '' };
 function laPayload() {
-  const r = S.route, cs = currentStep(); const rem = Math.max(0, r.total - NAV.prog), remSec = r.sec * (1 - NAV.prog / r.total);
+  const r = S.route, cs = currentStep(); const rem = Math.max(0, r.total - NAV.prog), remSec = r.sec * (1 - NAV.prog / r.total) + waitAhead(NAV.prog);
   const lim = (r.limits || []).find(l => NAV.idx >= l.a && NAV.idx < l.b);
   const ahead = (r.traffic || []).filter(t => t.b > NAV.idx).reduce((s, t) => s + t.delay, 0);
   return { dest: S.to ? S.to.name : 'Cel', dist: cs ? fmtDist(cs.dist) : '', instr: cs ? (cs.s.n || cleanInstr(cs.s.i)) : '', maneuver: cs ? cs.s.t : 6,
@@ -34,7 +34,7 @@ async function laEnd() { if (!NLA) return; LA.on = false; try { await NLA.end();
 const S = {
   veh: store.get('veh', { h: 3.1, l: 6.36, w: 2.05, t: 3.5 }),
   profiles: store.get('profiles', null), vehId: store.get('vehId', null),
-  opt: Object.assign({ voice: true, d3: true, night: false, sim: false, roadNow: true, poiCol: true, events: true, nextChip: true, autoNight: false }, store.get('opt', {})),
+  opt: Object.assign({ voice: true, d3: true, night: false, sim: false, roadNow: true, poiCol: true, events: true, nextChip: true, autoNight: false, cams: true, limits: true, lanes: true }, store.get('opt', {})),
   via: [], avoid: store.get('avoid', { highways: false, tolls: false }), avoidCC: store.get('avoidCC', {}),
   mode: store.get('mode', 'fast'),
   from: null, to: null,          // {name, lon, lat} | null = bieżąca pozycja
@@ -385,13 +385,14 @@ $('#tDots').addEventListener('click', e => { const d = e.target.closest('[data-a
 let swX = null;
 $('#tBottom').addEventListener('touchstart', e => { swX = e.touches[0].clientX; }, { passive: true });
 $('#tBottom').addEventListener('touchend', e => { if (swX == null || !S.routes || S.routes.length < 2) return; const dx = e.changedTouches[0].clientX - swX; swX = null; if (Math.abs(dx) < 40) return; selectAlt((S.altIdx + (dx < 0 ? 1 : S.routes.length - 1)) % S.routes.length); });
-function renderSummary() {
-  const r = S.route, eta = new Date(Date.now() + r.sec * 1000);
+function renderSummary(reload = true) {
+  const r = S.route, waitS = waitAhead(0), eta = new Date(Date.now() + (r.sec + waitS) * 1000);
   const tunnelsTxt = (r.tunnels || []).length ? `<span class="tag">tunele ${r.tunnels.length}</span>` : '';
   $('#tSum').classList.remove('hidden');
-  $('#tSum').innerHTML = `<div class="l1"><b>${hm(r.sec)}</b><i>•</i><span>${hhmm(eta)}${eta.getDate() !== new Date().getDate() ? ' jutro' : ''}</span><i>•</i><span>${Math.round(r.km)} km</span></div>
+  const bordersTxt = (r.borders || []).length ? r.borders.map(b => `<span class="tag ${b.wait > 30 ? 'bad' : ''}">🛂 ${b.from}→${b.to}${b.name ? ' ' + esc(b.name) : ''}: ${b.wait != null ? 'kolejka ~' + b.wait + ' min' : 'brak danych'}</span>`).join('') + '<span class="tag" style="opacity:.7">Data by <a href="https://nakordoni.eu" style="color:#5B8CFF">nakordoni.eu</a></span>' : '';
+  $('#tSum').innerHTML = `<div class="l1"><b>${hm(r.sec + waitS)}</b><i>•</i><span>${hhmm(eta)}${eta.getDate() !== new Date().getDate() ? ' jutro' : ''}</span><i>•</i><span>${Math.round(r.km)} km</span></div>
     <div class="l2">${r.engine === 'tomtom' ? (r.delay > 60 ? '<span class="bad">🚗 +' + Math.round(r.delay / 60) + ' min przez ruch</span>' : '<span class="ok">🚗 Brak opóźnień</span>') : '<span>ORS</span>'}
-    <span class="tag">${(r.path || []).join(' › ')}</span>${tunnelsTxt}${r.ttError ? '<span class="bad">TomTom: ' + esc(r.ttError) + '</span>' : ''}</div>`;
+    <span class="tag">${(r.path || []).join(' › ')}</span>${tunnelsTxt}${bordersTxt}${r.ttError ? '<span class="bad">TomTom: ' + esc(r.ttError) + '</span>' : ''}</div>`;
   $('#tOptsTxt').textContent = ({ fast: 'Szybka', main: 'Główne drogi', notoll: 'Bez opłat', eco: 'Ekonomiczna' })[S.mode] + ' · Unikaj';
   drawProgressMarks(); fillCountryTable($('#rCcTable')); fillRouteOpts();
   loadPoi(); loadLimits();
@@ -422,6 +423,49 @@ async function loadLimits() {
   }
   lim.sort((p, q) => p.a - q.a);
   r.limits = lim;
+}
+
+/* ---------- kolejki na granicach poza Schengen (planer / nakordoni.eu) ---------- */
+const SCHENGEN = new Set(['AT','BE','BG','HR','CZ','DK','EE','FI','FR','DE','GR','HU','IS','IT','LV','LI','LT','LU','MT','NL','NO','PL','PT','RO','SK','SI','ES','SE','CH']);
+async function loadBorders() {
+  const r = S.route; if (!r || !API) return; r.borders = [];
+  const ext = (r.crossings || []).filter(c => !(SCHENGEN.has(c.from) && SCHENGEN.has(c.to)));
+  for (const c of ext) {
+    try {
+      const j = await (await fetch(API + '/border?from=' + c.from + '&to=' + c.to)).json();
+      const pt = r.coords[c.idx]; let best = null, bd = Infinity;
+      for (const cp of j.checkpoints || []) { if (cp.lat == null) continue; const d = dist(pt, [cp.lon, cp.lat]); if (d < bd) { bd = d; best = cp; } }
+      r.borders.push({ ...c, name: best && bd < 20000 ? best.name : '', wait: best && bd < 20000 && Number.isFinite(+best.wait_min) ? +best.wait_min : null, updated: best ? best.updated : null });
+    } catch (e) { r.borders.push({ ...c, name: '', wait: null }); }
+  }
+  if (S.route === r) { renderSummary(false); }
+}
+function waitAhead(prog) { return (S.route && S.route.borders || []).filter(b => b.at > prog).reduce((s, b) => s + (b.wait || 0), 0) * 60; }
+
+/* ---------- fotoradary (OSM) ---------- */
+const CAMS_BANNED = new Set(['DE', 'FR', 'CH']);
+async function loadCams() {
+  const r = S.route; if (!r || !API) return; r.cams = null;
+  const step = Math.max(1, Math.ceil(r.coords.length / 400)); const coords = r.coords.filter((_, i) => i % step === 0 || i === r.coords.length - 1);
+  try {
+    const j = await (await fetch(API + '/gps/cams', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ coords }) })).json();
+    if (S.route !== r) return;
+    const samp = r.coords.map((c, i) => [c, i]).filter((_, i) => i % Math.max(1, Math.ceil(r.coords.length / 2000)) === 0);
+    const cams = [];
+    for (const cm of j.cams || []) { let best = Infinity, bi = 0; for (const [c, i] of samp) { const d = dist(c, [cm.lon, cm.lat]); if (d < best) { best = d; bi = i; } } if (best > 80) continue;
+      const cr = (r.crossings || []).filter(x => x.idx <= bi); const cc = cr.length ? cr[cr.length - 1].to : (r.path || [])[0];
+      cams.push({ ...cm, at: r.cum[bi], idx: bi, cc }); }
+    cams.sort((x, y) => x.at - y.at); r.cams = cams;
+  } catch (e) {}
+}
+function updateCams() {
+  const r = S.route, box = $('#camBox'); if (!r || !r.cams || !S.opt.cams) { box.classList.add('hidden'); return; }
+  const next = r.cams.find(c => c.at > NAV.prog - 30 && !CAMS_BANNED.has(c.cc));
+  const d = next ? next.at - NAV.prog : Infinity;
+  if (d > 600) { box.classList.add('hidden'); return; }
+  $('#camDist').textContent = fmtDist(Math.max(0, d)); $('#camSub').textContent = (next.avg ? 'odcinkowy pomiar' : 'fotoradar') + (next.max ? ' · ' + next.max + ' km/h' : '');
+  box.classList.remove('hidden');
+  if (!NAV.said['cam' + next.id] && d <= 600) { NAV.said['cam' + next.id] = 1; speak((next.avg ? 'Odcinkowy pomiar prędkości' : 'Fotoradar') + (next.max ? ', ograniczenie ' + next.max : '') + ', za ' + sayDist(d) + '.'); }
 }
 
 /* ---------- asystent pasów: OSM turn:lanes przy manewrach ---------- */
@@ -514,7 +558,7 @@ async function recalcKeepNav() {
   $('#manRoad').textContent = 'Przeliczam trasę…';
   const j = await computeRoute({ lon: S.pos.lon, lat: S.pos.lat }); if (!j) return;
   NAV.idx = 0; NAV.prog = 0; NAV.stepI = 0; NAV.said = {}; NAV.lastReroute = Date.now();
-  drawRoute(); drawProgressMarks(); loadPoi(); loadLimits(); loadLanes(); updateHud(); speak('Trasa przeliczona.');
+  drawRoute(); drawProgressMarks(); loadPoi(); loadLimits(); loadLanes(); loadBorders(); loadCams(); updateHud(); speak('Trasa przeliczona.');
 }
 
 function fillRouteOpts() {
@@ -676,7 +720,7 @@ function updateHud() {
   // aktualna droga = nazwa kroku, w którym jesteśmy
   const cur = r.steps[Math.max(0, NAV.stepI - 1)]; const rn = cur && cur.n ? cur.n : ''; $('#roadNow').textContent = rn; $('#roadNow').classList.toggle('hidden', !rn);
   const rem = Math.max(0, r.total - NAV.prog), frac = NAV.prog / r.total;
-  const remSec = r.sec * (1 - frac);
+  const remSec = r.sec * (1 - frac) + waitAhead(NAV.prog);
   $('#etaTime').textContent = hhmm(new Date(Date.now() + remSec * 1000));
   $('#etaKm').textContent = (rem >= 10000 ? Math.round(rem / 1000) : Math.round(rem / 100) / 10) + ' km';
   $('#etaMin').textContent = hm(remSec);
@@ -684,7 +728,7 @@ function updateHud() {
   const kmh = Math.round((S.pos && S.pos.speed || 0) * 3.6); $('#speedVal').textContent = kmh;
   // limit prędkości na bieżącym odcinku (TomTom speedLimit)
   const lim = (r.limits || []).find(l => NAV.idx >= l.a && NAV.idx < l.b);
-  $('#limit').classList.toggle('hidden', !lim); if (lim) $('#limitVal').textContent = lim.kmh;
+  $('#limit').classList.toggle('hidden', !lim || !S.opt.limits); if (lim) $('#limitVal').textContent = lim.kmh;
   $('#speedBox').classList.toggle('over', !!lim && kmh > lim.kmh + 5);
   // korki: opóźnienie przed nami
   const ahead = (r.traffic || []).filter(t => t.b > NAV.idx).reduce((s, t) => s + t.delay, 0);
@@ -693,12 +737,13 @@ function updateHud() {
   const ev = [];
   for (const t of r.tunnels || []) if (t.at - NAV.prog > -t.len && t.at - NAV.prog < 20000) ev.push({ at: t.at, txt: 'Tunel' + (t.len > 500 ? ' ' + (t.len / 1000).toFixed(1).replace('.', ',') + ' km' : ''), sub: t.cat ? 'kat. ' + t.cat + (/[CDE]/.test(t.cat) ? ' · uwaga: butle gazowe' : ' · gaz OK') : 'gaz OK' });
   for (const t of r.ferries || []) if (t.at - NAV.prog > -200 && t.at - NAV.prog < 20000) ev.push({ at: t.at, txt: 'Prom', sub: 'przygotuj bilet' });
+  for (const b of r.borders || []) if (b.at - NAV.prog > -500 && b.at - NAV.prog < 60000) ev.push({ at: b.at, txt: 'Granica ' + b.from + '→' + b.to, sub: b.wait != null ? 'kolejka ~' + b.wait + ' min' + (b.name ? ' · ' + b.name : '') : (b.name || 'brak danych o kolejce') });
   for (const t of r.traffic || []) if (t.mag >= 2 && r.cum[t.a] - NAV.prog > -200 && r.cum[t.a] - NAV.prog < 20000) ev.push({ at: r.cum[t.a], txt: 'Korek +' + Math.round(t.delay / 60) + ' min', sub: (r.cum[t.b] - r.cum[t.a]) / 1000 > 0.5 ? ((r.cum[t.b] - r.cum[t.a]) / 1000).toFixed(1).replace('.', ',') + ' km' : '' });
   ev.sort((x, y) => x.at - y.at);
   const box = $('#events'); box.classList.toggle('hidden', !ev.length);
   box.innerHTML = ev.slice(0, 3).map(e => `<div><b>${e.txt}</b><small>za ${fmtDist(Math.max(0, e.at - NAV.prog))}${e.sub ? ' · ' + e.sub : ''}</small></div>`).join('');
   if (!updateHud._rb || Date.now() - updateHud._rb > 3000) { updateHud._rb = Date.now(); updatePoiCol(); }
-  laUpdate();
+  laUpdate(); updateCams();
 }
 function drawProgressMarks() {
   const r = S.route, el = $('#progMarks'); if (!el || !r) return;
@@ -819,7 +864,7 @@ function showTab(t) {
   S.tab = t;
   $('#sheet').classList.toggle('hidden', t !== 'trasa'); $('#veh').classList.toggle('hidden', t !== 'veh'); $('#menu').classList.toggle('hidden', t !== 'menu'); $('#poi').classList.toggle('hidden', t !== 'poi'); $('#search').classList.toggle('hidden', t !== 'search'); $('#pick').classList.add('hidden');
   $('#hud').classList.toggle('hidden', !(t === 'jazda' && S.nav));
-  if (t === 'menu') { fillVoices(); if (NATIVE) { const AP = plugin('App'); (AP ? AP.getInfo() : Promise.resolve(null)).then(i => { $('#about').textContent = $('#about').textContent.replace(/\s*·\s*aplikacja natywna.*$/, '') + ' · aplikacja natywna' + (i ? ' v' + i.version + ' (build ' + i.build + ')' : ''); }).catch(() => {}); } }
+  if (t === 'menu') { fillVoices(); fillSettings(); if (NATIVE) { const AP = plugin('App'); (AP ? AP.getInfo() : Promise.resolve(null)).then(i => { $('#about').textContent = $('#about').textContent.replace(/\s*·\s*aplikacja natywna.*$/, '') + ' · aplikacja natywna' + (i ? ' v' + i.version + ' (build ' + i.build + ')' : ''); }).catch(() => {}); } }
   if (t === 'menu') { const p = S.profiles.find(x => x.id === S.vehId) || {}; $('#menuVeh').textContent = `${p.name || 'Kamper'} · ${fmt1(S.veh.h)} m · ${fmt1(S.veh.l)} m · ${fmt1(S.veh.t)} t`; }
   $('#idle').classList.toggle('hidden', !(t === 'jazda' && !S.nav));
   if (t === 'jazda' && !S.nav) { const p = S.profiles.find(x => x.id === S.vehId) || {}; $('#fVehTxt').textContent = `🚐 ${p.name || 'Kamper'} · ${fmt1(S.veh.h)} m · ${fmt1(S.veh.t)} t`; $('#fViewTxt').textContent = S.opt.d3 ? '3D' : '2D'; }
@@ -870,7 +915,7 @@ const ICO_MUTE = '<svg viewBox="0 0 24 24" width="30" height="30" fill="none" st
 function openQuick() {
   const r = S.route; if (!r) return;
   $('#qDest').textContent = S.to ? S.to.name : 'Cel';
-  const rem = Math.max(0, r.total - NAV.prog), remSec = r.sec * (1 - NAV.prog / r.total);
+  const rem = Math.max(0, r.total - NAV.prog), remSec = r.sec * (1 - NAV.prog / r.total) + waitAhead(NAV.prog);
   $('#qDestSub').textContent = hhmm(new Date(Date.now() + remSec * 1000)) + ' · ' + Math.round(rem / 1000) + ' km';
   fillQuick(); qPanel('main'); $('#quick').classList.remove('hidden');
 }
@@ -901,10 +946,10 @@ document.addEventListener('change', e => {
   recalcKeepNav().then(() => { fillCountryTable($('#ccTable')); fillCountryTable($('#qCcTable')); fillRoutePanel(); });
 });
 // --- szybkie ustawienia (przełączniki działają od razu)
-const OPT_EL = { roadNow: '#roadNow', poiCol: '#poiCol', events: '#events', nextChip: '#nextChip' };
+const OPT_EL = { roadNow: '#roadNow', poiCol: '#poiCol', events: '#events', nextChip: '#nextChip', lanes: '#lanes', cams: '#camBox', limits: '#limit' };
 function applyOpts() { for (const k in OPT_EL) $(OPT_EL[k]).classList.toggle('off', !S.opt[k]); }
-function fillSettings() { $$('#quick [data-opt]').forEach(i => { i.checked = !!S.opt[i.dataset.opt]; }); }
-$('#quick').addEventListener('change', e => {
+function fillSettings() { $$('[data-opt]').forEach(i => { i.checked = !!S.opt[i.dataset.opt]; }); }
+document.addEventListener('change', e => {
   const i = e.target.closest('[data-opt]'); if (!i) return; const k = i.dataset.opt;
   if (k === 'd3') { setView3d(i.checked); return; }
   if (k === 'night') { setNight(i.checked); return; }
@@ -986,22 +1031,10 @@ function init() {
   $$('#modes button').forEach(x => x.setAttribute('aria-pressed', x.dataset.mode === S.mode));
   vehInit(); vehLine(); fillVeh(S.vehId); initMap(); $('#btnView').textContent = S.opt.d3 ? '3D' : '2D';
   startGps();
-  // ?to=lon,lat,Nazwa&via=… – wejście z planera (www) albo azimo://trasa?to=…&via=… (aplikacja natywna)
-  applyLink(new URLSearchParams(location.search));
+  // ?to=lon,lat,Nazwa – wejście z planera
+  const u = new URLSearchParams(location.search);
+  if (u.get('to')) { const [lon, lat, ...n] = u.get('to').split(','); S.to = { lon: +lon, lat: +lat, name: n.join(',') || 'Cel' }; $('#to').textContent = S.to.name; $('#to').classList.remove('empty'); } else { $('#to').classList.add('empty'); }
   $('#from').classList.add('empty'); $('#viaAdd').classList.add('empty');
   showTab(S.to ? 'trasa' : 'jazda');
-}
-function applyLink(u) {
-  if (u.get('to')) { const [lon, lat, ...n] = u.get('to').split(','); if (isFinite(+lon) && isFinite(+lat)) { S.to = { lon: +lon, lat: +lat, name: n.join(',') || 'Cel' }; $('#to').textContent = S.to.name; $('#to').classList.remove('empty'); } }
-  else if (!S.to) $('#to').classList.add('empty');
-  if (u.get('via')) { S.via = u.get('via').split('|').map(s => { const [lon, lat, ...n] = s.split(','); return { lon: +lon, lat: +lat, name: n.join(',') || 'Przystanek' }; }).filter(v => isFinite(v.lon) && isFinite(v.lat)).slice(0, 8); renderViaChips(); }
-  else if (u.get('to')) { S.via = []; renderViaChips(); }
-}
-// schemat azimo:// – planer otwiera aplikację z celem i przystankami (także gdy była zamknięta)
-if (NATIVE) {
-  const AP = plugin('App');
-  const openLink = url => { try { if (!/^azimo:/i.test(url || '')) return; const u = new URL(url.replace(/^azimo:\/*/i, 'https://azimo/')).searchParams;
-    applyLink(u); if (S.to) { S.route = null; showTab('trasa'); computeRoute(); } } catch (e) {} };
-  if (AP) { AP.addListener('appUrlOpen', e => openLink(e && e.url)); AP.getLaunchUrl && AP.getLaunchUrl().then(r => r && openLink(r.url)).catch(() => {}); }
 }
 init();

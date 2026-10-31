@@ -13,7 +13,7 @@
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800&display=swap">
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
-<link rel="stylesheet" href="style.css?v=21">
+<link rel="stylesheet" href="style.css?v=22">
 </head>
 <body>
 <div id="desk" class="desk hidden">
@@ -38,6 +38,7 @@
     </div>
   </div>
   <div class="lanes hidden" id="lanes"></div>
+  <div class="cam hidden" id="camBox"><svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="12" rx="3"/><circle cx="12" cy="13" r="3.5"/><path d="M8 7l1.5-3h5L16 7"/></svg><div><b id="camDist">600 m</b><small id="camSub">fotoradar</small></div></div>
   <div class="chip next hidden" id="nextChip"></div>
   <div class="events hidden" id="events"></div>
 
@@ -243,26 +244,47 @@
     <a class="it" href="#" data-go="veh"><div><b>Profil pojazdu</b><small id="menuVeh">Kamper</small></div><span class="chev">›</span></a>
     <a class="it" href="#" data-go="poi"><div><b>POI przy trasie</b><small>kempingi, zrzuty, parkingi, stacje</small></div><span class="chev">›</span></a>
   </div>
-  <div class="sec">Mapy i dane</div>
+
+  <div class="sec">Głos</div>
   <div class="box list">
-    <div class="it"><div><b>Mapy offline</b><small>etap 2 — PMTiles per region</small></div><span class="soon">wkrótce</span></div>
-    <div class="it"><div><b>Dane kamperowe</b><small>kempingi, zrzuty, stacje — z OSM, przy wyznaczonej trasie</small></div><span class="soon">działa</span></div>
-  </div>
-  <div class="sec">Jazda</div>
-  <div class="box list">
-    <label class="sw"><span><b>Głos</b><small>polski · manewry i ostrzeżenia</small></span><input type="checkbox" id="optVoice" checked></label>
+    <label class="sw"><span><b>Komunikaty głosowe</b><small>manewry, ostrzeżenia, fotoradary</small></span><input type="checkbox" id="optVoice" checked></label>
     <label class="sw"><span><b>Lektor</b><small id="voiceHint">głosy z systemu iOS</small></span><select id="optVoiceName" class="sel"></select></label>
     <label class="sw"><span><b>Tempo mowy</b><small id="rateTxt">1,0×</small></span><input type="range" id="optRate" min="0.8" max="1.3" step="0.05" value="1"></label>
     <div class="it"><div><b>Posłuchaj</b><small>„Za 300 metrów skręć w prawo"</small></div><button type="button" class="mini" id="voiceTest">▶</button></div>
-    <label class="sw"><span><b>Mapa 3D</b><small>pochylona kamera i bryły budynków (OSM)</small></span><input type="checkbox" id="opt3d" checked></label>
+  </div>
+
+  <div class="sec">Ostrzeżenia</div>
+  <div class="box list">
+    <label class="sw"><span><b>Fotoradary</b><small>z OSM · ostrzeżenie 600 m przed · wyłączane w DE, FR, CH (zakaz)</small></span><input type="checkbox" data-opt="cams"></label>
+    <label class="sw"><span><b>Ograniczenia prędkości</b><small>znak na HUD, prędkość na pomarańczowo po przekroczeniu</small></span><input type="checkbox" data-opt="limits"></label>
+    <div class="it"><div><b>Kolejki na granicach</b><small>poza Schengen, z planera (nakordoni.eu) — doliczane do czasu</small></div><span class="soon">auto</span></div>
+  </div>
+
+  <div class="sec">Mapa</div>
+  <div class="box list">
+    <label class="sw"><span><b>Mapa 3D</b><small>pochylona kamera i bryły budynków</small></span><input type="checkbox" id="opt3d" checked></label>
     <label class="sw"><span><b>Tryb nocny</b><small>ciemna mapa i panele</small></span><input type="checkbox" id="optNight"></label>
-    <label class="sw"><span><b>Symulacja jazdy</b><small>test bez GPS — jedzie po trasie 70 km/h</small></span><input type="checkbox" id="optSim"></label>
-    <div class="it"><div><b>Fotoradary i odcinkowe</b><small>wyłączone w DE, FR, CH (zakaz)</small></div><span class="soon">wkrótce</span></div>
+    <label class="sw"><span><b>Nocny automatycznie</b><small>po zmroku, wg pozycji Słońca</small></span><input type="checkbox" data-opt="autoNight"></label>
   </div>
+
+  <div class="sec">Ekran jazdy</div>
+  <div class="box list">
+    <label class="sw"><span><b>Bieżąca ulica</b></span><input type="checkbox" data-opt="roadNow"></label>
+    <label class="sw"><span><b>POI po lewej</b><small>3 najbliższe stacje i parkingi</small></span><input type="checkbox" data-opt="poiCol"></label>
+    <label class="sw"><span><b>Nadchodzące zdarzenia</b><small>tunele, promy, korki, granice</small></span><input type="checkbox" data-opt="events"></label>
+    <label class="sw"><span><b>Drugi manewr („potem")</b></span><input type="checkbox" data-opt="nextChip"></label>
+    <label class="sw"><span><b>Asystent pasów</b><small>z OSM, gdzie są oznaczenia</small></span><input type="checkbox" data-opt="lanes"></label>
   </div>
+
+  <div class="sec">Testy</div>
+  <div class="box list">
+    <label class="sw"><span><b>Symulacja jazdy</b><small>bez GPS — jedzie po trasie 70 km/h</small></span><input type="checkbox" id="optSim"></label>
+  </div>
+
   <div class="sec">Aplikacja</div>
   <div class="box list">
-    <div class="it"><div><b>O aplikacji</b><small id="about">Azimo · 0.6 · © OpenStreetMap, OpenFreeMap, TomTom, openrouteservice</small></div></div>
+    <div class="it"><div><b>Mapy offline</b><small>pobieranie regionów — w przygotowaniu</small></div><span class="soon">wkrótce</span></div>
+    <div class="it"><div><b>O aplikacji</b><small id="about">Azimo · 0.7 · © OpenStreetMap, OpenFreeMap, TomTom, openrouteservice · kolejki: nakordoni.eu</small></div></div>
   </div>
 </div>
 
@@ -279,6 +301,6 @@
 
 <script src="../assets/config.js"></script>
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
-<script src="app.js?v=32"></script>
+<script src="app.js?v=31"></script>
 </body>
 </html>

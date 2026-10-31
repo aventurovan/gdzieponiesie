@@ -358,3 +358,6 @@ body.night #map{background:#1C2029}
 .lanes i{width:0;height:30px;border-left:2px dashed #4A5160;margin:0 2px}
 .lanes:not(.hidden) ~ #nextChip{top:calc(var(--sat) + 186px)}
 .lanes:not(.hidden) ~ #events{top:calc(var(--sat) + 232px)}
+
+.cam{right:14px;top:calc(var(--sat) + 130px);background:#D92D20;color:#fff;border-radius:16px;padding:8px 12px;display:flex;align-items:center;gap:10px;z-index:6;box-shadow:0 4px 14px rgba(0,0,0,.3)}
+.cam b{display:block;font-size:18px;font-weight:800;line-height:1}.cam small{display:block;font-size:11px;font-weight:700;opacity:.9}
