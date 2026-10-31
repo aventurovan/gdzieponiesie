@@ -16,6 +16,7 @@ end
 
 # --- target rozszerzenia
 ext = project.new_target(:app_extension, 'NavWidget', :ios, '16.2')
+ext.product_reference.path = 'NavWidget.appex' if ext.product_reference
 ext_group = project.main_group.new_group('NavWidget')
 %w[widget/NavWidgetBundle.swift widget/NavLiveActivity.swift NavAttributes.swift].each do |rel|
   ref = ext_group.new_file(File.join(native, rel))
@@ -23,6 +24,8 @@ ext_group = project.main_group.new_group('NavWidget')
 end
 plist = ext_group.new_file(File.join(native, 'widget/Info.plist'))
 ext.build_configurations.each do |c|
+  c.build_settings['PRODUCT_NAME'] = 'NavWidget'
+  c.build_settings['WRAPPER_EXTENSION'] = 'appex'
   c.build_settings['INFOPLIST_FILE'] = plist.real_path.to_s
   c.build_settings['PRODUCT_BUNDLE_IDENTIFIER'] = 'pl.gdzieponiesie.gps.NavWidget'
   c.build_settings['SWIFT_VERSION'] = '5.0'
