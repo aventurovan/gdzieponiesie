@@ -22,7 +22,7 @@ jobs:
 
       - name: Zależności Capacitor
         working-directory: ios-app
-        run: npm install --no-audit --no-fund
+        run: npm install --no-audit --no-fund --legacy-peer-deps
 
       - name: Projekt Xcode (cap add ios)
         working-directory: ios-app

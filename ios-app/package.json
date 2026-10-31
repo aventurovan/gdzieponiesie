@@ -7,16 +7,16 @@
     "icons": "capacitor-assets generate --ios --iconBackgroundColor '#161C2B' --iconBackgroundColorDark '#161C2B' --splashBackgroundColor '#161C2B' --splashBackgroundColorDark '#161C2B'"
   },
   "dependencies": {
-    "@capacitor/core": "^7.0.0",
-    "@capacitor/ios": "^7.0.0",
-    "@capacitor/geolocation": "^7.0.0",
-    "@capacitor/app": "^7.0.0",
-    "@capacitor/keep-awake": "^7.0.0",
-    "@capacitor-community/text-to-speech": "^6.0.0",
-    "@capacitor-community/background-geolocation": "^1.2.0"
+    "@capacitor/core": "8.5.3",
+    "@capacitor/ios": "8.5.3",
+    "@capacitor/geolocation": "8.2.3",
+    "@capacitor/app": "8.1.2",
+    "@capacitor-community/keep-awake": "8.0.1",
+    "@capacitor-community/text-to-speech": "8.0.2",
+    "@capacitor-community/background-geolocation": "1.2.26"
   },
   "devDependencies": {
-    "@capacitor/cli": "^7.0.0",
-    "@capacitor/assets": "^3.0.0"
+    "@capacitor/cli": "8.5.3",
+    "@capacitor/assets": "3.0.5"
   }
 }
