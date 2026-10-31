@@ -13,7 +13,7 @@
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800&display=swap">
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
-<link rel="stylesheet" href="style.css?v=24">
+<link rel="stylesheet" href="style.css?v=25">
 </head>
 <body>
 <div id="desk" class="desk hidden">
@@ -287,9 +287,12 @@
 
   <div class="sec">Aplikacja</div>
   <div class="box list">
+    <div class="it"><div><b>Mapy krajów</b><small id="packsHint">paczki do jazdy bez zasięgu · pobierane na telefon</small></div><button type="button" class="mini" id="packsReload">Odśwież</button></div>
+    <div id="packs" class="packs"></div>
+    <label class="sw"><span><b>Tylko mapy offline</b><small>nie pobieraj kafelków z sieci (test / roaming)</small></span><input type="checkbox" data-opt="forceOffline"></label>
     <div class="it"><div id="offInfo"><b>Brak zapisanej trasy</b><small>Wyznacz trasę i dotknij „Zapisz offline"</small></div></div>
     <div class="it" style="gap:8px"><button type="button" class="mini" id="offSave">Zapisz offline</button><button type="button" class="mini" id="offLoad" hidden>Wczytaj</button><button type="button" class="mini" id="offClear" hidden>Usuń</button><small id="offStatus" style="flex:1;font-size:12px;color:#8b93a5"></small></div>
-    <div class="it"><div><b>O aplikacji</b><small id="about">Azimo · 0.9 · © OpenStreetMap, OpenFreeMap, TomTom, openrouteservice · kolejki: nakordoni.eu</small></div></div>
+    <div class="it"><div><b>O aplikacji</b><small id="about">Azimo · 1.0 · © OpenStreetMap, OpenFreeMap, TomTom, openrouteservice · kolejki: nakordoni.eu</small></div></div>
   </div>
 </div>
 
@@ -306,6 +309,7 @@
 
 <script src="../assets/config.js"></script>
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
-<script src="app.js?v=33"></script>
+<script src="https://unpkg.com/pmtiles@4.3.2/dist/pmtiles.js"></script>
+<script src="app.js?v=34"></script>
 </body>
 </html>

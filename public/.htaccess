@@ -4,6 +4,12 @@ DirectoryIndex index.html
 
 # PWA
 AddType application/manifest+json .webmanifest
+# paczki map offline (Azimo)
+AddType application/octet-stream .pmtiles
+<FilesMatch "\.pmtiles$">
+  Header set Accept-Ranges bytes
+  Header set Cache-Control "public, max-age=604800"
+</FilesMatch>
 <IfModule mod_headers.c>
   <Files "sw.js">
     Header set Cache-Control "no-cache"

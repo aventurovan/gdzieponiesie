@@ -1,9 +1,9 @@
 /* Azimo – service worker: powłoka aplikacji + kafelki/czcionki/ikony mapy do jazdy bez zasięgu */
-const SHELL = 'azimo-shell-v8';
+const SHELL = 'azimo-shell-v9';
 const TILES = 'azimo-tiles';
 const SHELL_URLS = [
-  './', 'index.html', 'app.js?v=33', 'style.css?v=24', 'manifest.webmanifest', '../assets/config.js',
-  'https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js', 'https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css',
+  './', 'index.html', 'app.js?v=34', 'style.css?v=25', 'manifest.webmanifest', '../assets/config.js',
+  'https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js', 'https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css', 'https://unpkg.com/pmtiles@4.3.2/dist/pmtiles.js',
 ];
 
 self.addEventListener('install', (e) => {
@@ -13,7 +13,7 @@ self.addEventListener('activate', (e) => {
   e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k.startsWith('azimo-shell-') && k !== SHELL).map((k) => caches.delete(k)))).then(() => self.clients.claim()));
 });
 
-const isTile = (u) => /tiles\.openfreemap\.org\/(planet|fonts|sprites|styles)/.test(u) || /\.pbf(\?|$)/.test(u);
+const isTile = (u) => !/\.pmtiles(\?|$)/.test(u) && (/tiles\.openfreemap\.org\/(planet|fonts|sprites|styles)/.test(u) || /\.pbf(\?|$)/.test(u));
 const isShell = (u) => SHELL_URLS.some((s) => u.endsWith(s.replace('./', '')) || u === s) || /\/gps\/(index\.html)?(\?.*)?$/.test(u);
 
 self.addEventListener('fetch', (e) => {

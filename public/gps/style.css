@@ -377,3 +377,9 @@ body.night #map{background:#1C2029}
 .sec-box .ss{font-size:11px;font-weight:700;color:var(--sub);max-width:90px}
 .sec-box.over .sa b{color:var(--amber)}
 .sec-box:not(.hidden) ~ #camBox{top:calc(var(--sat) + 200px)}
+
+.packs{display:flex;flex-direction:column}
+.pk{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid #2E3647}
+.pk>div{flex:1;min-width:0}.pk b{display:block;font-size:15px;font-weight:700;color:#fff}.pk small{display:block;font-size:12px;font-weight:600;color:#8b93a5}
+.pk .bar{height:6px;border-radius:3px;background:#2E3647;overflow:hidden;margin-top:6px}.pk .bar i{display:block;height:100%;background:var(--blue)}
+.pk .mini.ok{background:#1E8A4C;color:#fff}

@@ -34,7 +34,7 @@ async function laEnd() { if (!NLA) return; LA.on = false; try { await NLA.end();
 const S = {
   veh: store.get('veh', { h: 3.1, l: 6.36, w: 2.05, t: 3.5 }),
   profiles: store.get('profiles', null), vehId: store.get('vehId', null),
-  opt: Object.assign({ voice: true, d3: true, night: false, sim: false, roadNow: true, poiCol: true, events: true, nextChip: true, autoNight: false, cams: true, limits: true, lanes: true }, store.get('opt', {})),
+  opt: Object.assign({ voice: true, d3: true, night: false, sim: false, roadNow: true, poiCol: true, events: true, nextChip: true, autoNight: false, cams: true, limits: true, lanes: true, forceOffline: false }, store.get('opt', {})),
   via: [], avoid: store.get('avoid', { highways: false, tolls: false }), avoidCC: store.get('avoidCC', {}),
   mode: store.get('mode', 'fast'),
   from: null, to: null,          // {name, lon, lat} | null = bieżąca pozycja
@@ -122,7 +122,7 @@ function tuneStyle() {
   }
 }
 function addLayers() {
-  tuneStyle();
+  tuneStyle(); hookTiles();
   // budynki 3D z kafelków OpenMapTiles (warstwa building, render_height)
   if (BUD3D) { map.setLayoutProperty(BUD3D, 'visibility', S.opt.d3 ? 'visible' : 'none'); try { map.setLayerZoomRange(BUD3D, 15, 24); } catch (e) {} }
   else if (!map.getLayer('bud3d') && map.getSource('openmaptiles')) {
@@ -895,7 +895,7 @@ function showTab(t) {
   S.tab = t;
   $('#sheet').classList.toggle('hidden', t !== 'trasa'); $('#veh').classList.toggle('hidden', t !== 'veh'); $('#menu').classList.toggle('hidden', t !== 'menu'); $('#poi').classList.toggle('hidden', t !== 'poi'); $('#search').classList.toggle('hidden', t !== 'search'); $('#pick').classList.add('hidden');
   $('#hud').classList.toggle('hidden', !(t === 'jazda' && S.nav));
-  if (t === 'menu') { fillVoices(); fillSettings(); renderOffline(); if (NATIVE) { const AP = plugin('App'); (AP ? AP.getInfo() : Promise.resolve(null)).then(i => { $('#about').textContent = $('#about').textContent.replace(/\s*·\s*aplikacja natywna.*$/, '') + ' · aplikacja natywna' + (i ? ' v' + i.version + ' (build ' + i.build + ')' : ''); }).catch(() => {}); } }
+  if (t === 'menu') { fillVoices(); fillSettings(); renderOffline(); renderPacks(); if (NATIVE) { const AP = plugin('App'); (AP ? AP.getInfo() : Promise.resolve(null)).then(i => { $('#about').textContent = $('#about').textContent.replace(/\s*·\s*aplikacja natywna.*$/, '') + ' · aplikacja natywna' + (i ? ' v' + i.version + ' (build ' + i.build + ')' : ''); }).catch(() => {}); } }
   if (t === 'menu') { const p = S.profiles.find(x => x.id === S.vehId) || {}; $('#menuVeh').textContent = `${p.name || 'Kamper'} · ${fmt1(S.veh.h)} m · ${fmt1(S.veh.l)} m · ${fmt1(S.veh.t)} t`; }
   $('#idle').classList.toggle('hidden', !(t === 'jazda' && !S.nav));
   if (t === 'jazda' && !S.nav) { const p = S.profiles.find(x => x.id === S.vehId) || {}; $('#fVehTxt').textContent = `🚐 ${p.name || 'Kamper'} · ${fmt1(S.veh.h)} m · ${fmt1(S.veh.t)} t`; $('#fViewTxt').textContent = S.opt.d3 ? '3D' : '2D'; }
@@ -1108,6 +1108,73 @@ $('#offClear').addEventListener('click', async () => { if (!confirm('Usunąć za
 window.addEventListener('online', () => $('#netBadge').classList.add('hidden'));
 window.addEventListener('offline', () => $('#netBadge').classList.remove('hidden'));
 
+/* ---------- paczki krajów (PMTiles w IndexedDB) ---------- */
+const PK = { db: null, packs: [], readers: {}, online: null };
+function idb() {
+  if (PK.db) return Promise.resolve(PK.db);
+  return new Promise((res, rej) => { const q = indexedDB.open('azimo', 1); q.onupgradeneeded = () => { const d = q.result; d.createObjectStore('chunks'); d.createObjectStore('meta'); }; q.onsuccess = () => { PK.db = q.result; res(PK.db); }; q.onerror = () => rej(q.error); });
+}
+const idbOp = (store, mode, fn) => idb().then(d => new Promise((res, rej) => { const tx = d.transaction(store, mode); const r = fn(tx.objectStore(store)); tx.oncomplete = () => res(r && r.result !== undefined ? r.result : r); tx.onerror = () => rej(tx.error); }));
+async function packsInstalled() { return (await idbOp('meta', 'readonly', s => s.getAll())) || []; }
+async function packBlob(code, n) { const d = await idb(); return new Promise((res, rej) => { const tx = d.transaction('chunks', 'readonly'); const st = tx.objectStore('chunks'); const parts = []; let i = 0; const next = () => { if (i >= n) return res(new Blob(parts)); const q = st.get(code + ':' + i); q.onsuccess = () => { parts.push(q.result); i++; next(); }; q.onerror = () => rej(q.error); }; next(); }); }
+async function openPacks() {
+  PK.packs = await packsInstalled();
+  for (const p of PK.packs) { if (PK.readers[p.code]) continue; try { const blob = await packBlob(p.code, p.chunks); PK.readers[p.code] = new pmtiles.PMTiles(new pmtiles.FileSource(new File([blob], p.file))); } catch (e) { console.warn('pack', p.code, e); } }
+}
+const CH = 16 * 1024 * 1024;
+async function downloadPack(p, onProgress) {
+  const r = await fetch(PACKS_BASE + p.file, { cache: 'no-store' }); if (!r.ok || !r.body) throw new Error('HTTP ' + r.status);
+  const total = +r.headers.get('Content-Length') || p.size; const reader = r.body.getReader();
+  let buf = [], bufLen = 0, got = 0, n = 0;
+  const flush = async () => { if (!bufLen) return; const b = new Blob(buf); buf = []; bufLen = 0; await idbOp('chunks', 'readwrite', s => s.put(b, p.code + ':' + n)); n++; };
+  while (true) { const { done, value } = await reader.read(); if (done) break; buf.push(value); bufLen += value.length; got += value.length; if (bufLen >= CH) await flush(); onProgress(got / total); }
+  await flush();
+  await idbOp('meta', 'readwrite', s => s.put({ ...p, chunks: n, installed: Date.now() }, p.code));
+  await openPacks();
+}
+async function removePack(code) {
+  const p = PK.packs.find(x => x.code === code); if (!p) return;
+  await idbOp('chunks', 'readwrite', s => { for (let i = 0; i < p.chunks; i++) s.delete(code + ':' + i); });
+  await idbOp('meta', 'readwrite', s => s.delete(code)); delete PK.readers[code]; await openPacks();
+}
+let PACKS_BASE = '/maps/', PACKS_IDX = null;
+async function renderPacks() {
+  const el = $('#packs'); if (!el) return;
+  if (!PACKS_IDX) { try { PACKS_IDX = await (await fetch('/maps/index.json', { cache: 'no-store' })).json(); PACKS_BASE = PACKS_IDX.base || '/maps/'; } catch (e) { PACKS_IDX = { packs: [] }; } }
+  await openPacks();
+  const inst = Object.fromEntries(PK.packs.map(p => [p.code, p]));
+  const list = [...PACKS_IDX.packs]; for (const p of PK.packs) if (!list.find(x => x.code === p.code)) list.push(p);
+  if (!list.length) { el.innerHTML = '<p class="note">Brak paczek na serwerze — uruchom „Mapy offline (paczki krajów)" w Actions.</p>'; return; }
+  el.innerHTML = list.map(p => { const i = inst[p.code]; const mb = Math.round(p.size / 1e6); return `<div class="pk" data-code="${p.code}"><div><b>${esc(p.name)}</b><small>${mb} MB · dane ${p.updated}${i ? ' · pobrano ' + new Date(i.installed).toLocaleDateString('pl-PL') + (i.updated !== p.updated ? ' · jest nowsza' : '') : ''}</small><div class="bar hidden"><i style="width:0"></i></div></div>${i ? '<button type="button" class="mini ok" data-rm>✓ Usuń</button>' : '<button type="button" class="mini" data-dl>Pobierz</button>'}</div>`; }).join('');
+  $('#packsHint').textContent = PK.packs.length ? PK.packs.length + ' paczek na telefonie · razem ' + Math.round(PK.packs.reduce((s, p) => s + p.size, 0) / 1e6) + ' MB' : 'paczki do jazdy bez zasięgu · pobierane na telefon';
+}
+$('#packs').addEventListener('click', async e => {
+  const row = e.target.closest('.pk'); if (!row) return; const code = row.dataset.code; const p = [...PACKS_IDX.packs, ...PK.packs].find(x => x.code === code);
+  if (e.target.closest('[data-dl]')) {
+    const btn = e.target.closest('[data-dl]'); btn.disabled = true; btn.textContent = '…'; const bar = row.querySelector('.bar'); bar.classList.remove('hidden');
+    try { await downloadPack(p, f => { bar.firstElementChild.style.width = (f * 100).toFixed(1) + '%'; btn.textContent = Math.round(f * 100) + '%'; }); }
+    catch (err) { alert('Nie udało się pobrać: ' + err.message); }
+    renderPacks();
+  } else if (e.target.closest('[data-rm]')) { if (confirm('Usunąć paczkę ' + p.name + '?')) { await removePack(code); renderPacks(); } }
+});
+$('#packsReload').addEventListener('click', () => { PACKS_IDX = null; renderPacks(); });
+// protokół azimo://tiles/{z}/{x}/{y}: sieć, a bez sieci paczki z telefonu
+function tileInBbox(bb, z, x, y) { const n = 2 ** z; const lon1 = x / n * 360 - 180, lon2 = (x + 1) / n * 360 - 180; const lat1 = Math.atan(Math.sinh(Math.PI * (1 - 2 * (y + 1) / n))) * 180 / Math.PI, lat2 = Math.atan(Math.sinh(Math.PI * (1 - 2 * y / n))) * 180 / Math.PI; return lon2 >= bb[0] && lon1 <= bb[2] && lat2 >= bb[1] && lat1 <= bb[3]; }
+maplibregl.addProtocol('azimo', async (params) => {
+  const m = params.url.match(/azimo:\/\/tiles\/(\d+)\/(\d+)\/(\d+)/); if (!m) return { data: new ArrayBuffer(0) };
+  const z = +m[1], x = +m[2], y = +m[3];
+  if (PK.online && navigator.onLine && !S.opt.forceOffline) {
+    try { const r = await fetch(PK.online.replace('{z}', z).replace('{x}', x).replace('{y}', y)); if (r.ok) return { data: await r.arrayBuffer() }; if (r.status === 204 || r.status === 404) return { data: new ArrayBuffer(0) }; } catch (e) {}
+  }
+  for (const p of PK.packs) { if (!PK.readers[p.code] || !tileInBbox(p.bbox, z, x, y)) continue; try { const t = await PK.readers[p.code].getZxy(z, x, y); if (t && t.data) return { data: t.data }; } catch (e) {} }
+  return { data: new ArrayBuffer(0) };
+});
+function hookTiles() {
+  const src = map.getSource('openmaptiles'); if (!src) return;
+  const wire = () => { if (src.tiles && src.tiles[0] && !src.tiles[0].startsWith('azimo://')) { PK.online = src.tiles[0]; src.setTiles(['azimo://tiles/{z}/{x}/{y}.pbf']); } };
+  if (src.tiles) wire(); else map.once('sourcedata', e => { if (e.sourceId === 'openmaptiles') wire(); });
+}
+
 /* start */
 // komputer (mysz, brak dotyku, szeroki ekran) – tylko informacja z kodem QR; ?desk=1 wymusza pełną wersję do testów
 function isDesktop() {
@@ -1127,6 +1194,7 @@ function init() {
   const u = new URLSearchParams(location.search);
   if (u.get('to')) { const [lon, lat, ...n] = u.get('to').split(','); S.to = { lon: +lon, lat: +lat, name: n.join(',') || 'Cel' }; $('#to').textContent = S.to.name; $('#to').classList.remove('empty'); } else { $('#to').classList.add('empty'); }
   $('#from').classList.add('empty'); $('#viaAdd').classList.add('empty');
+  openPacks().catch(() => {});
   if (!navigator.onLine) { $('#netBadge').classList.remove('hidden'); if (loadOffline()) { showTab('trasa'); return; } }
   showTab(S.to ? 'trasa' : 'jazda');
 }
