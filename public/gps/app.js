@@ -16,7 +16,7 @@ const LA = { on: false, last: 0, key: '' };
 function laPayload() {
   const r = S.route, cs = currentStep(); const rem = Math.max(0, r.total - NAV.prog), remSec = r.sec * (1 - NAV.prog / r.total) + waitAhead(NAV.prog);
   const lim = (r.limits || []).find(l => NAV.idx >= l.a && NAV.idx < l.b);
-  const ahead = (r.traffic || []).filter(t => t.b > NAV.idx).reduce((s, t) => s + t.delay, 0);
+  const ahead = trafficAhead(NAV.idx).sec;
   return { dest: S.to ? S.to.name : 'Cel', dist: cs ? fmtDist(cs.dist) : '', instr: cs ? (cs.s.n || cleanInstr(cs.s.i)) : '', maneuver: cs ? cs.s.t : 6,
     eta: hhmm(new Date(Date.now() + remSec * 1000)), remKm: (rem >= 10000 ? Math.round(rem / 1000) : Math.round(rem / 100) / 10) + ' km', remTime: hm(remSec),
     limit: lim ? lim.kmh : 0, progress: Math.min(1, NAV.prog / r.total), delay: ahead > 60 ? '+' + Math.round(ahead / 60) + ' min' : '' };
@@ -391,7 +391,7 @@ function renderSummary(reload = true) {
   $('#tSum').classList.remove('hidden');
   const bordersTxt = (r.borders || []).length ? r.borders.map(b => `<span class="tag ${b.wait > 30 ? 'bad' : ''}">🛂 ${b.from}→${b.to}${b.name ? ' ' + esc(b.name) : ''}: ${b.wait != null ? 'kolejka ~' + b.wait + ' min' : 'brak danych'}</span>`).join('') + '<span class="tag" style="opacity:.7">Data by <a href="https://nakordoni.eu" style="color:#5B8CFF">nakordoni.eu</a></span>' : '';
   $('#tSum').innerHTML = `<div class="l1"><b>${hm(r.sec + waitS)}</b><i>•</i><span>${hhmm(eta)}${eta.getDate() !== new Date().getDate() ? ' jutro' : ''}</span><i>•</i><span>${Math.round(r.km)} km</span></div>
-    <div class="l2">${r.engine === 'tomtom' ? (r.delay > 60 ? '<span class="bad">🚗 +' + Math.round(r.delay / 60) + ' min przez ruch</span>' : '<span class="ok">🚗 Brak opóźnień</span>') : '<span>ORS</span>'}
+    <div class="l2">${r.engine === 'tomtom' ? (trafficAhead(0).min > 0 ? '<span class="bad">🚗 +' + trafficAhead(0).min + ' min korki</span>' : '<span class="ok">🚗 Brak opóźnień</span>') : '<span>ORS</span>'}
     <span class="tag">${(r.path || []).join(' › ')}</span>${tunnelsTxt}${bordersTxt}${r.ttError ? '<span class="bad">TomTom: ' + esc(r.ttError) + '</span>' : ''}</div>`;
   $('#tOptsTxt').textContent = ({ fast: 'Szybka', main: 'Główne drogi', notoll: 'Bez opłat', eco: 'Ekonomiczna' })[S.mode] + ' · Unikaj';
   drawProgressMarks(); fillCountryTable($('#rCcTable')); fillRouteOpts();
@@ -511,6 +511,12 @@ function renderLanes(stepI, distM) {
   const lanes = spec.split('|').map(l => (l || 'none').split(';'));
   box.innerHTML = lanes.map(ds => { const on = ds.some(match); return `<span class="ln${on ? ' on' : ''}">${ds.map(d => `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="${LANE_ARROW[d] || LANE_ARROW.none}"/><path d="${LANE_HEAD[d] || LANE_HEAD.none}"/></svg>`).join('')}</span>`; }).join('<i></i>');
   box.classList.remove('hidden');
+}
+
+function trafficAhead(idx) {
+  const r = S.route; let sum = 0, extra = 0;
+  for (const t of (r && r.traffic) || []) { if (t.b <= idx) continue; const floor = t.mag >= 3 ? 180 : t.mag === 2 ? 60 : 0; const eff = Math.max(t.delay || 0, floor); sum += eff; extra += eff - (t.delay || 0); }
+  return { sec: sum, min: Math.round(sum / 60), extra };
 }
 
 /* ---------- POI przy trasie ---------- */
@@ -751,7 +757,7 @@ function updateHud() {
   // aktualna droga = nazwa kroku, w którym jesteśmy
   const cur = r.steps[Math.max(0, NAV.stepI - 1)]; const rn = cur && cur.n ? cur.n : ''; $('#roadNow').textContent = rn; $('#roadNow').classList.toggle('hidden', !rn);
   const rem = Math.max(0, r.total - NAV.prog), frac = NAV.prog / r.total;
-  const remSec = r.sec * (1 - frac) + waitAhead(NAV.prog);
+  const remSec = r.sec * (1 - frac) + waitAhead(NAV.prog) + trafficAhead(NAV.idx).extra;
   $('#etaTime').textContent = hhmm(new Date(Date.now() + remSec * 1000));
   $('#etaKm').textContent = (rem >= 10000 ? Math.round(rem / 1000) : Math.round(rem / 100) / 10) + ' km';
   $('#etaMin').textContent = hm(remSec);
@@ -761,9 +767,9 @@ function updateHud() {
   const lim = (r.limits || []).find(l => NAV.idx >= l.a && NAV.idx < l.b);
   $('#limit').classList.toggle('hidden', !lim || !S.opt.limits); if (lim) $('#limitVal').textContent = lim.kmh;
   $('#speedBox').classList.toggle('over', !!lim && kmh > lim.kmh + 5);
-  // korki: opóźnienie przed nami
-  const ahead = (r.traffic || []).filter(t => t.b > NAV.idx).reduce((s, t) => s + t.delay, 0);
-  $('#etaNote').textContent = ahead > 60 ? '+' + Math.round(ahead / 60) + ' min przez ruch' : '';
+  // korki przed nami: TomTom czasem daje 0 s dla czerwonego odcinka – przyjmujemy minimum 3 min (czerwony) / 1 min (pomarańczowy)
+  const ahead = trafficAhead(NAV.idx);
+  $('#etaNote').textContent = ahead.min > 0 ? '+' + ahead.min + ' min korki' : '';
   // nadchodzące: tunel / prom / korek w zasięgu 20 km
   const ev = [];
   for (const t of r.tunnels || []) if (t.at - NAV.prog > -t.len && t.at - NAV.prog < 20000) ev.push({ at: t.at, txt: 'Tunel' + (t.len > 500 ? ' ' + (t.len / 1000).toFixed(1).replace('.', ',') + ' km' : ''), sub: t.cat ? 'kat. ' + t.cat + (/[CDE]/.test(t.cat) ? ' · uwaga: butle gazowe' : ' · gaz OK') : 'gaz OK' });
