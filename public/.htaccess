@@ -2,6 +2,10 @@ Options -Indexes
 AddDefaultCharset UTF-8
 DirectoryIndex index.html
 
+# Azimo – krótki adres nawigacji
+RewriteEngine On
+RewriteRule ^azimo/?$ /gps/ [R=302,L]
+
 # PWA
 AddType application/manifest+json .webmanifest
 # paczki map offline (Azimo)
