@@ -217,7 +217,19 @@ export default {
           const r = await fetch(`https://api.tomtom.com/routing/1/calculateRoute/49.82,19.05:50.06,19.94/json?key=${encodeURIComponent(k)}&travelMode=car`, { signal: AbortSignal.timeout(15000) });
           status = r.status; const j = await r.json().catch(() => ({})); msg = j?.detailedError?.message || j?.error?.description || (j.routes ? 'OK, trasa policzona' : null);
         } catch (e) { msg = e.message; }
-        return json({ key: masked, tomtom_status: status, tomtom_message: msg }, 200, cors, { 'Cache-Control': 'no-store' });
+        let snap = null;
+        try {
+          const r2 = await fetch(snapUrl(k, [[19.05, 49.82], [19.06, 49.825], [19.07, 49.83]]), { signal: AbortSignal.timeout(15000) });
+          const j2 = await r2.json().catch(() => ({}));
+          snap = { status: r2.status, message: j2?.detailedError?.message || j2?.error?.description || (j2.route ? 'OK, ' + j2.route.length + ' odcinków' : JSON.stringify(j2).slice(0, 200)) };
+        } catch (e) { snap = { status: null, message: e.message }; }
+        return json({ key: masked, tomtom_status: status, tomtom_message: msg, snap_to_roads: snap }, 200, cors, { 'Cache-Control': 'no-store' });
+      }
+      if (url.pathname === '/gps/limits' && request.method === 'POST') {
+        if (!ALLOWED_ORIGINS.includes(origin)) {
+          return json({ error: 'Ta strona nie ma dostępu do API.' }, 403, cors);
+        }
+        return await handleGpsLimits(request, env, cors);
       }
       if (url.pathname === '/gps/poi' && request.method === 'POST') {
         if (!ALLOWED_ORIGINS.includes(origin)) {
@@ -1787,5 +1799,42 @@ async function handleGpsPoi(request, env, cors) {
   }
   const out = { items, count: items.length, radius, updated: new Date().toISOString() };
   if (env.NK) await env.NK.put(kvKey, JSON.stringify(out), { expirationTtl: 24 * 3600 });
+  return json(out, 200, cors);
+}
+
+// ---- Ograniczenia prędkości wzdłuż trasy: TomTom Snap to Roads (paczki po 100 punktów) ----
+function snapUrl(key, pts) {
+  const fields = '{route{type,geometry{type,coordinates},properties{speedLimits{value,unit,type}}}}';
+  return 'https://api.tomtom.com/snap-to-roads/1/snap-to-roads?key=' + encodeURIComponent(key) + '&points=' + pts.map(([lon, lat]) => lat.toFixed(5) + ',' + lon.toFixed(5)).join(';') + '&fields=' + encodeURIComponent(fields);
+}
+async function handleGpsLimits(request, env, cors) {
+  const k = String(env.TOMTOM_KEY || '').trim();
+  if (!k) return json({ error: 'brak TOMTOM_KEY' }, 500, cors);
+  let body;
+  try { body = await request.json(); } catch { return json({ error: 'Niepoprawny JSON.' }, 400, cors); }
+  const pts = (Array.isArray(body.coords) ? body.coords : []).filter(isPoint).slice(0, 1200);
+  if (pts.length < 2) return json({ error: 'Brak trasy.' }, 400, cors);
+  const kvKey = 'gps:lim:' + (await sha256(JSON.stringify(pts))).slice(0, 32);
+  if (env.NK) { const hit = await env.NK.get(kvKey, 'json'); if (hit) return json({ ...hit, cached: true }, 200, cors); }
+  const segs = []; let calls = 0, errors = 0, lastErr = '';
+  for (let i = 0; i < pts.length - 1; i += 99) {
+    const chunk = pts.slice(i, i + 100); if (chunk.length < 2) break;
+    calls++;
+    try {
+      const r = await fetch(snapUrl(k, chunk), { signal: AbortSignal.timeout(20000) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { errors++; lastErr = r.status + ': ' + (j?.detailedError?.message || j?.error?.description || ''); continue; }
+      for (const f of j.route || []) {
+        const c = f.geometry?.coordinates || []; if (c.length < 2) continue;
+        const lim = (f.properties?.speedLimits || []).find((s) => s.value > 0);
+        if (!lim) continue;
+        const kmh = lim.unit === 'MPH' ? Math.round(lim.value * 1.609) : Math.round(lim.value);
+        const a = c[0], b = c[c.length - 1];
+        segs.push([Math.round(a[0] * 1e5) / 1e5, Math.round(a[1] * 1e5) / 1e5, Math.round(b[0] * 1e5) / 1e5, Math.round(b[1] * 1e5) / 1e5, kmh]);
+      }
+    } catch (e) { errors++; lastErr = e.message; }
+  }
+  const out = { segs, calls, errors, lastErr: errors ? lastErr : undefined };
+  if (env.NK && segs.length) await env.NK.put(kvKey, JSON.stringify(out), { expirationTtl: 7 * 24 * 3600 });
   return json(out, 200, cors);
 }

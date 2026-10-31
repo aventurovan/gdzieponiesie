@@ -13,7 +13,7 @@
 <link rel="icon" href="../icons/favicon-32.png">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800&display=swap">
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
-<link rel="stylesheet" href="style.css?v=9">
+<link rel="stylesheet" href="style.css?v=10">
 </head>
 <body>
 <div id="desk" class="desk hidden">
@@ -54,6 +54,8 @@
     <div class="row2"><span id="etaKm">0 km</span><span id="etaMin">0 min</span><span class="warn" id="etaNote"></span></div>
   </div>
   <div class="events hidden" id="events"></div>
+  <div class="rbar" id="rbar"></div>
+  <div class="poi-strip hidden" id="poiStrip"><div class="ps-h"><span>Najbliżej</span><span>znika za <b id="poiStripCnt">20</b> s</span></div><div id="poiStripList"></div></div>
   <div class="progress"><i id="progBar"></i><span id="progMarks"></span></div>
 </div>
 
@@ -128,15 +130,11 @@
     <label class="sw"><span><b>Symulacja jazdy</b><small>test bez GPS — jedzie po trasie 70 km/h</small></span><input type="checkbox" id="optSim"></label>
     <div class="it"><div><b>Fotoradary i odcinkowe</b><small>wyłączone w DE, FR, CH (zakaz)</small></div><span class="soon">wkrótce</span></div>
   </div>
-  <div class="sec">Kamper</div>
-  <div class="box list">
-    <div class="it"><div><b>Checklista przed wyjazdem</b><small>gaz, woda, antena, stopnie</small></div><span class="soon">wkrótce</span></div>
     <div class="it"><div><b>Serwis</b><small>z planera gdzieponiesie.pl</small></div><span class="soon">wkrótce</span></div>
   </div>
   <div class="sec">Aplikacja</div>
   <div class="box list">
-    <a class="it" href="/"><div><b>Planer gdzieponiesie.pl</b><small>trasy, winiety, paliwo, granice</small></div><span class="chev">›</span></a>
-    <div class="it"><div><b>O aplikacji</b><small id="about">Nawigacja kamper · 0.3 · © OpenStreetMap, OpenFreeMap, TomTom, openrouteservice</small></div></div>
+    <div class="it"><div><b>O aplikacji</b><small id="about">Nawigacja kamper · 0.4 · © OpenStreetMap, OpenFreeMap, TomTom, openrouteservice</small></div></div>
   </div>
 </div>
 
@@ -160,6 +158,6 @@
 
 <script src="../assets/config.js"></script>
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
-<script src="app.js?v=10"></script>
+<script src="app.js?v=11"></script>
 </body>
 </html>

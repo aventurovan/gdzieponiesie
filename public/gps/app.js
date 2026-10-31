@@ -225,11 +225,35 @@ function renderSummary() {
     <span>Odcinki płatne: ${Math.round(tollKm)} km · ${r.engine === 'tomtom' ? 'TomTom, z korkami, wymiary kampera' : r.profile === 'hgv' ? 'ORS z ograniczeniami wysokości i masy' : 'ORS osobowy (HGV nie znalazł trasy)'}</span>
     ${r.ttError ? '<span style="color:#B42318">TomTom nie policzył: ' + esc(r.ttError) + '</span>' : ''}`;
   drawProgressMarks();
-  loadPoi();
+  loadPoi(); loadLimits();
 }
 const KRAJ = { PL: 'Polska', CZ: 'Czechy', SK: 'Słowacja', AT: 'Austria', DE: 'Niemcy', IT: 'Włochy', HU: 'Węgry', SI: 'Słowenia', HR: 'Chorwacja', FR: 'Francja', CH: 'Szwajcaria', NL: 'Holandia', BE: 'Belgia', DK: 'Dania', SE: 'Szwecja', NO: 'Norwegia', ES: 'Hiszpania', PT: 'Portugalia', LT: 'Litwa', LV: 'Łotwa', EE: 'Estonia', RO: 'Rumunia', BG: 'Bułgaria', GR: 'Grecja', RS: 'Serbia', BA: 'Bośnia', ME: 'Czarnogóra', AL: 'Albania', MK: 'Macedonia Płn.', LU: 'Luksemburg', GB: 'Wielka Brytania', IE: 'Irlandia', FI: 'Finlandia', UA: 'Ukraina' };
 const hm = s => { const h = Math.floor(s / 3600), m = Math.round((s % 3600) / 60); return h ? `${h}:${String(m).padStart(2, '0')} h` : `${m} min`; };
 const hhmm = d => String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+
+/* ---------- ograniczenia prędkości (TomTom Snap to Roads) ---------- */
+async function loadLimits() {
+  const r = S.route; if (!r || !API) return;
+  // próbkujemy co ~300 m (maks. 1200 punktów) – Snap to Roads zwraca odcinki dróg z limitami
+  const every = Math.max(300, r.total / 1200);
+  const coords = []; let next = 0;
+  for (let i = 0; i < r.coords.length; i++) { if (r.cum[i] >= next) { coords.push(r.coords[i]); next = r.cum[i] + every; } }
+  if (coords[coords.length - 1] !== r.coords[r.coords.length - 1]) coords.push(r.coords[r.coords.length - 1]);
+  let j;
+  try { const res = await fetch(API + '/gps/limits', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ coords }) }); j = await res.json(); if (!res.ok) throw new Error(j.error); }
+  catch (e) { console.warn('limits', e); return; }
+  if (S.route !== r) return;
+  // odcinek z limitem → indeksy naszej trasy (przez próbkę co ~600 pkt)
+  const samp = r.coords.map((c, i) => [c, i]).filter((_, i) => i % Math.max(1, Math.ceil(r.coords.length / 1500)) === 0);
+  const near = p => { let best = Infinity, bi = 0; for (const [c, i] of samp) { const d = dist(c, p); if (d < best) { best = d; bi = i; } } return best < 150 ? bi : -1; };
+  const lim = [];
+  for (const [x1, y1, x2, y2, kmh] of j.segs || []) {
+    const a = near([x1, y1]), b = near([x2, y2]); if (a < 0 || b < 0) continue;
+    lim.push({ a: Math.min(a, b), b: Math.max(a, b) + 1, kmh });
+  }
+  lim.sort((p, q) => p.a - q.a);
+  r.limits = lim;
+}
 
 /* ---------- POI przy trasie ---------- */
 let PRICES = null;
@@ -302,7 +326,7 @@ function startNav() {
   updateHud();
 }
 function stopNav() {
-  S.nav = false; $('#hud').classList.add('hidden'); stopSim(); $('#btnRecenter').hidden = true;
+  S.nav = false; hidePoiStrip(); $('#rbar').innerHTML = ''; $('#hud').classList.add('hidden'); stopSim(); $('#btnRecenter').hidden = true;
   map.easeTo({ pitch: 0, bearing: 0, zoom: 14.5, duration: 600 }); showTab('jazda');
   if (wake) { wake.release().catch(() => {}); wake = null; }
 }
@@ -401,8 +425,29 @@ function updateHud() {
   for (const t of r.ferries || []) if (t.at - NAV.prog > -200 && t.at - NAV.prog < 20000) ev.push({ at: t.at, txt: 'Prom', sub: 'przygotuj bilet' });
   for (const t of r.traffic || []) if (t.mag >= 2 && r.cum[t.a] - NAV.prog > -200 && r.cum[t.a] - NAV.prog < 20000) ev.push({ at: r.cum[t.a], txt: 'Korek +' + Math.round(t.delay / 60) + ' min', sub: (r.cum[t.b] - r.cum[t.a]) / 1000 > 0.5 ? ((r.cum[t.b] - r.cum[t.a]) / 1000).toFixed(1).replace('.', ',') + ' km' : '' });
   ev.sort((x, y) => x.at - y.at);
-  const box = $('#events'); box.classList.toggle('hidden', !ev.length);
+  const box = $('#events'); box.classList.toggle('hidden', !ev.length || !!poiStripT);
   box.innerHTML = ev.slice(0, 3).map(e => `<div><b>${e.txt}</b><small>za ${fmtDist(Math.max(0, e.at - NAV.prog))}${e.sub ? ' · ' + e.sub : ''}</small></div>`).join('');
+  if (!updateHud._rb || Date.now() - updateHud._rb > 3000) { updateHud._rb = Date.now(); updateRouteBar(); }
+}
+function updateRouteBar() {
+  const r = S.route, el = $('#rbar'); if (!el || !r) return;
+  const prog = NAV.prog, rem = Math.max(1, r.total - prog);
+  const ev = [];
+  for (const c of r.crossings || []) if (c.at > prog) ev.push({ at: c.at, cls: 'bd', txt: c.to });
+  for (const t of r.traffic || []) if (t.mag >= 2 && r.cum[t.b] > prog) ev.push({ at: Math.max(prog, r.cum[t.a]), cls: t.mag >= 3 ? 'tr3' : 'tr2', txt: '' });
+  for (const t of r.tunnels || []) if (t.at > prog && t.len > 300) ev.push({ at: t.at, cls: 'tn', txt: '' });
+  for (const t of r.ferries || []) if (t.at > prog) ev.push({ at: t.at, cls: 'fe', txt: '' });
+  for (const p of (S.poi || [])) if (p.kind === 'fuel' && p.lpg && p.at > prog && p.off < 500) { ev.push({ at: p.at, cls: 'lpg', txt: '' }); break; }
+  ev.sort((x, y) => x.at - y.at);
+  // pozycja na pasku: cel u góry (0 %), ja u dołu (100 %)
+  let html = '<span class="flag">🏁</span>';
+  let lastTop = -10;
+  for (const e of ev) {
+    let top = (1 - (e.at - prog) / rem) * 100; if (top < 6) top = 6; if (top - lastTop < 7) top = lastTop + 7; if (top > 90) break; lastTop = top;
+    html += `<span class="ev ${e.cls}" style="top:${top.toFixed(1)}%">${e.txt}</span>`;
+  }
+  html += '<span class="me-arrow"></span>';
+  el.innerHTML = html;
 }
 function drawProgressMarks() {
   const r = S.route, el = $('#progMarks'); if (!el || !r) return;
@@ -504,7 +549,26 @@ $('#fCompass').addEventListener('click', () => map.easeTo({ bearing: 0, pitch: S
 $('#fCenter').addEventListener('click', () => { if (S.pos) map.easeTo({ center: [S.pos.lon, S.pos.lat], zoom: 15, duration: 500 }); else startGps(); });
 $('#fView').addEventListener('click', () => { setView3d(!S.opt.d3); $('#fViewTxt').textContent = S.opt.d3 ? '3D' : '2D'; map.easeTo({ pitch: S.opt.d3 ? 45 : 0, duration: 500 }); });
 $('#btnRecenter').addEventListener('click', () => { S.follow = true; $('#btnRecenter').hidden = true; });
-$('#btnPoi').addEventListener('click', () => showTab('poi'));
+let poiStripT = null, poiStripLeft = 0;
+function hidePoiStrip() { if (poiStripT) clearInterval(poiStripT); poiStripT = null; $('#poiStrip').classList.add('hidden'); }
+function showPoiStrip() {
+  if (!S.poi || !S.nav) { showTab('poi'); return; }
+  const prog = NAV.prog;
+  const items = S.poi.filter(p => p.at >= prog - 200 && p.off < 2500).slice(0, 4);
+  if (!items.length) { speak('Brak miejsc przy trasie w pobliżu.'); return; }
+  $('#poiStripList').innerHTML = items.map(p => {
+    const [label, col] = POI_KIND[p.kind] || POI_KIND.camp; const pr = PRICES && PRICES[p.cc];
+    let main = p.kind === 'fuel' ? (pr && pr.diesel ? fmt1(pr.diesel) + ' <small>zł ON</small>' : 'Stacja') : (label.split(' ')[0]);
+    let sub = p.kind === 'fuel' ? [(p.brand || p.name || 'stacja'), p.lpg ? 'LPG' : ''].filter(Boolean).join(' · ') : (p.name || label);
+    return `<div class="ps-it" data-id="${p.id}"><i style="background:${col}"></i><div><b>${main}</b><small>${esc(sub)} · ${fmtDist(Math.max(0, p.at - prog))}</small></div></div>`;
+  }).join('');
+  poiStripLeft = 20; $('#poiStripCnt').textContent = poiStripLeft;
+  $('#poiStrip').classList.remove('hidden');
+  if (poiStripT) clearInterval(poiStripT);
+  poiStripT = setInterval(() => { poiStripLeft--; $('#poiStripCnt').textContent = poiStripLeft; if (poiStripLeft <= 0) hidePoiStrip(); }, 1000);
+}
+$('#btnPoi').addEventListener('click', () => { if (S.nav) { if (poiStripT) hidePoiStrip(); else showPoiStrip(); } else showTab('poi'); });
+$('#poiStripList').addEventListener('click', e => { const it = e.target.closest('.ps-it'); if (!it) return; const p = S.poi.find(x => x.id === it.dataset.id); if (p && confirm('Nawigować do: ' + (p.name || POI_KIND[p.kind][0]) + '?')) { hidePoiStrip(); goTo(p); } });
 $('#etaBox').addEventListener('click', () => { if (confirm('Zakończyć nawigację?')) stopNav(); });
 
 /* start */
