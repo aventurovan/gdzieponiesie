@@ -50,10 +50,14 @@ jobs:
       - name: Archiwum Xcode (bez podpisu)
         working-directory: ios-app/ios/App
         run: |
-          xcodebuild -workspace App.xcworkspace -scheme App -configuration Release -sdk iphoneos \
+          ls
+          if [ -d App.xcworkspace ]; then SRC="-workspace App.xcworkspace"; else SRC="-project App.xcodeproj"; fi
+          set -o pipefail
+          xcodebuild $SRC -scheme App -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' \
             -archivePath "$PWD/build/App.xcarchive" archive \
+            -skipPackagePluginValidation -skipMacroValidation \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" DEVELOPMENT_TEAM="" \
-            IPHONEOS_DEPLOYMENT_TARGET=15.0 | xcpretty || true
+            2>&1 | tail -n 150
           test -d "$PWD/build/App.xcarchive/Products/Applications/App.app"
 
       - name: Pakowanie .ipa
