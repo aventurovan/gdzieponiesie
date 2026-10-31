@@ -857,9 +857,10 @@ async function vNext() {
   if (NTTS) {
     try {
       if (!nativeVoices) { try { nativeVoices = (await NTTS.getSupportedVoices()).voices || []; } catch (e) { nativeVoices = []; } }
-      let vi; if (S.opt.voiceName) { vi = nativeVoices.findIndex(v => v.name === S.opt.voiceName || v.voiceURI === S.opt.voiceName); }
-      if (vi == null || vi < 0) { vi = nativeVoices.findIndex(v => /^pl/i.test(v.lang) && /premium|enhanced|rozszerz/i.test(v.name + ' ' + (v.voiceURI || ''))); }
-      if (vi < 0) vi = nativeVoices.findIndex(v => /^pl/i.test(v.lang));
+      let vi = -1; if (S.opt.voiceName) { vi = nativeVoices.findIndex(v => v.voiceURI === S.opt.voiceName || v.name === S.opt.voiceName); }
+      if (vi < 0) vi = nativeVoices.findIndex(v => /^pl/i.test(v.lang || '') && /premium/i.test(v.voiceURI || ''));
+      if (vi < 0) vi = nativeVoices.findIndex(v => /^pl/i.test(v.lang || '') && /enhanced/i.test(v.voiceURI || ''));
+      if (vi < 0) vi = nativeVoices.findIndex(v => /^pl/i.test(v.lang || ''));
       await NTTS.speak({ text: t, lang: 'pl-PL', rate: S.opt.rate || 1.0, pitch: 1.0, volume: 1.0, category: 'playback', ...(vi >= 0 ? { voice: vi } : {}) });
     } catch (e) {}
     vBusy = false; setTimeout(vNext, 120); return;
@@ -877,15 +878,16 @@ async function fillVoices() {
   const sel = $('#optVoiceName'); if (!sel) return;
   if (NTTS) {
     try { nativeVoices = (await NTTS.getSupportedVoices()).voices || []; } catch (e) { nativeVoices = []; }
-    const vs = nativeVoices.filter(v => /^pl/i.test(v.lang));
-    sel.innerHTML = '<option value="">Automatycznie (najlepszy polski)</option>' + vs.map(v => `<option value="${esc(v.name)}">${esc(v.name)}${/premium|enhanced|rozszerz/i.test(v.name + ' ' + (v.voiceURI || '')) ? ' ★' : ''}</option>`).join('');
-    sel.value = S.opt.voiceName || ''; $('#voiceHint').textContent = vs.length + ' polskie głosy iOS (★ rozszerzone)'; return;
+    const vs = nativeVoices.filter(v => /^pl/i.test(v.lang || ''));
+    const q = v => /premium/i.test(v.voiceURI || '') ? 'premium' : /enhanced/i.test(v.voiceURI || '') ? 'rozszerzony' : /siri/i.test(v.voiceURI || '') ? 'Siri' : 'zwykły';
+    sel.innerHTML = '<option value="">Automatycznie (najlepszy polski)</option>' + vs.map(v => `<option value="${esc(v.voiceURI || v.name)}">${esc(v.name)} (${q(v)})${q(v) !== 'zwykły' ? ' ★' : ''}</option>`).join('');
+    sel.value = S.opt.voiceName || ''; $('#voiceHint').textContent = `natywne: ${vs.length} pl z ${nativeVoices.length} głosów iOS (★ lepsza jakość)`; return;
   }
   if (!('speechSynthesis' in window)) return;
   const vs = speechSynthesis.getVoices().filter(v => /^pl/i.test(v.lang));
   sel.innerHTML = '<option value="">Automatycznie</option>' + vs.map(v => `<option value="${esc(v.name)}">${esc(v.name.replace(/\s*\(.*?\)/g, ''))}${/premium|enhanced|rozszerz/i.test(v.name) ? ' ★' : ''}</option>`).join('');
   sel.value = S.opt.voiceName || '';
-  $('#voiceHint').textContent = vs.length > 1 ? vs.length + ' polskie głosy z systemu' : 'Safari udostępnia tylko podstawowy głos iOS (Zosia); wersja rozszerzona będzie w aplikacji natywnej';
+  $('#voiceHint').textContent = (NATIVE ? 'most natywny bez TTS · ' : 'Safari: ') + (vs.length > 1 ? vs.length + ' polskie głosy' : 'tylko podstawowa Zosia (rozszerzona wymaga aplikacji natywnej)');
 }
 if ('speechSynthesis' in window) { speechSynthesis.onvoiceschanged = () => { voicePl = null; fillVoices(); }; setTimeout(fillVoices, 500); }
 $('#optVoiceName').addEventListener('change', e => { S.opt.voiceName = e.target.value; store.set('opt', S.opt); voicePl = null; });
