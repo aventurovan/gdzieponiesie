@@ -1657,7 +1657,7 @@ const TT_MANEUVER = {
 async function tomtomGpsRoute({ points, mode, dims, av, env }) {
   const locs = points.map(([lon, lat]) => `${lat},${lon}`).join(':');
   const q = new URLSearchParams({
-    key: env.TOMTOM_KEY, travelMode: 'truck', traffic: 'true', computeTravelTimeFor: 'all',
+    key: String(env.TOMTOM_KEY).trim(), travelMode: 'truck', traffic: 'true', computeTravelTimeFor: 'all',
     routeType: mode === 'eco' ? 'eco' : mode === 'short' ? 'shortest' : 'fastest',
     instructionsType: 'text', language: 'pl-PL', maxAlternatives: '0',
     vehicleHeight: String(dims.height), vehicleWidth: String(dims.width), vehicleLength: String(dims.length),
