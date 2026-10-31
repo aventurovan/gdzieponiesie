@@ -209,6 +209,16 @@ export default {
         }
         return await handleGpsRoute(request, env, cors);
       }
+      if (url.pathname === '/gps/tt-check' && request.method === 'GET') {
+        const k = String(env.TOMTOM_KEY || '').trim();
+        const masked = k ? k.slice(0, 4) + '…' + k.slice(-4) + ' (' + k.length + ' znaków)' : '(brak)';
+        let status = null, msg = null;
+        try {
+          const r = await fetch(`https://api.tomtom.com/routing/1/calculateRoute/49.82,19.05:50.06,19.94/json?key=${encodeURIComponent(k)}&travelMode=car`, { signal: AbortSignal.timeout(15000) });
+          status = r.status; const j = await r.json().catch(() => ({})); msg = j?.detailedError?.message || j?.error?.description || (j.routes ? 'OK, trasa policzona' : null);
+        } catch (e) { msg = e.message; }
+        return json({ key: masked, tomtom_status: status, tomtom_message: msg }, 200, cors, { 'Cache-Control': 'no-store' });
+      }
       if (url.pathname === '/gps/poi' && request.method === 'POST') {
         if (!ALLOWED_ORIGINS.includes(origin)) {
           return json({ error: 'Ta strona nie ma dostępu do API.' }, 403, cors);
