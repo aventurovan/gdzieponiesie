@@ -344,3 +344,8 @@ body.night #map{background:#1C2029}
 
 .sel{max-width:46%;border:0;border-radius:10px;background:#2E3647;color:#fff;font:inherit;font-size:13px;font-weight:700;padding:8px 10px}
 .list input[type=range]{width:46%;accent-color:#3A74FF}
+
+.vp{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid #2E3647;cursor:pointer;color:#fff}
+.vp:last-child{border-bottom:0}.vp i{width:22px;height:22px;border-radius:50%;border:2px solid #8b93a5;flex:none}
+.vp.on i{border-color:var(--blue);background:var(--blue);box-shadow:inset 0 0 0 4px #222A3A}
+.vp>div{flex:1;min-width:0}.vp b{display:block;font-size:15px;font-weight:700}.vp small{display:block;font-size:12px;color:#8b93a5;font-weight:600}

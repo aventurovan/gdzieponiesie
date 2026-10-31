@@ -33,7 +33,8 @@ async function laEnd() { if (!NLA) return; LA.on = false; try { await NLA.end();
 /* ---------- stan ---------- */
 const S = {
   veh: store.get('veh', { h: 3.1, l: 6.36, w: 2.05, t: 3.5 }),
-  opt: Object.assign({ voice: true, d3: true, night: false, sim: false, roadNow: true, poiCol: true, rbar: true, events: true, nextChip: true, autoNight: false }, store.get('opt', {})),
+  profiles: store.get('profiles', null), vehId: store.get('vehId', null),
+  opt: Object.assign({ voice: true, d3: true, night: false, sim: false, roadNow: true, poiCol: true, events: true, nextChip: true, autoNight: false }, store.get('opt', {})),
   via: [], avoid: store.get('avoid', { highways: false, tolls: false }), avoidCC: store.get('avoidCC', {}),
   mode: store.get('mode', 'fast'),
   from: null, to: null,          // {name, lon, lat} | null = bieżąca pozycja
@@ -289,15 +290,35 @@ $('#sheet').addEventListener('click', e => { const b = e.target.closest('button[
 function renderViaChips() { $('#viaChips').innerHTML = S.via.map((v, i) => `<span>${esc(v.name)}<button type="button" data-vrm="${i}" aria-label="Usuń">✕</button></span>`).join(''); }
 $('#viaChips').addEventListener('click', e => { const b = e.target.closest('[data-vrm]'); if (!b) return; S.via.splice(+b.dataset.vrm, 1); renderViaChips(); if (S.to) computeRoute(); });
 
-/* ---------- pojazd ---------- */
-function vehLine() { const v = S.veh; $('#tVehTxt').textContent = `Kamper ${fmt1(v.h)} m · ${fmt1(v.t)} t`; }
+/* ---------- pojazd: kilka profili ---------- */
+function vehInit() {
+  if (!S.profiles || !S.profiles.length) { S.profiles = [{ id: 'p1', name: 'Kamper', ...S.veh }]; S.vehId = 'p1'; store.set('profiles', S.profiles); store.set('vehId', S.vehId); }
+  const cur = S.profiles.find(p => p.id === S.vehId) || S.profiles[0]; S.vehId = cur.id; S.veh = { h: cur.h, l: cur.l, w: cur.w, t: cur.t }; store.set('veh', S.veh);
+}
+function vehLine() { const p = S.profiles.find(x => x.id === S.vehId) || {}; $('#tVehTxt').textContent = `${p.name || 'Kamper'} · ${fmt1(S.veh.h)} m · ${fmt1(S.veh.t)} t`; }
 const fmt1 = n => String(Math.round(n * 100) / 100).replace('.', ',');
 const num = s => parseFloat(String(s).replace(',', '.'));
-function fillVeh() { $('#vH').value = fmt1(S.veh.h); $('#vL').value = fmt1(S.veh.l); $('#vW').value = fmt1(S.veh.w); $('#vT').value = fmt1(S.veh.t); }
+let vehEdit = null; // id edytowanego profilu
+function renderVehList() {
+  $('#vehList').innerHTML = S.profiles.map(p => `<div class="vp${p.id === S.vehId ? ' on' : ''}" data-vid="${p.id}"><i></i><div><b>${esc(p.name)}</b><small>${fmt1(p.h)} m · ${fmt1(p.l)} m · ${fmt1(p.w)} m · ${fmt1(p.t)} t</small></div></div>`).join('');
+}
+function fillVeh(id) {
+  vehEdit = id || S.vehId; const p = S.profiles.find(x => x.id === vehEdit) || S.profiles[0];
+  $('#vName').value = p.name; $('#vH').value = fmt1(p.h); $('#vL').value = fmt1(p.l); $('#vW').value = fmt1(p.w); $('#vT').value = fmt1(p.t);
+  $('#btnVehDel').disabled = S.profiles.length < 2; renderVehList();
+}
+$('#vehList').addEventListener('click', e => { const r = e.target.closest('[data-vid]'); if (!r) return; S.vehId = r.dataset.vid; store.set('vehId', S.vehId); vehInit(); vehLine(); fillVeh(S.vehId); S.route = null; $('#btnGo').classList.add('hidden'); });
+$('#vehAdd').addEventListener('click', () => { const id = 'p' + Date.now(); S.profiles.push({ id, name: 'Nowy profil', ...S.veh }); store.set('profiles', S.profiles); fillVeh(id); $('#vName').focus(); $('#vName').select(); });
 $('#btnVehSave').addEventListener('click', () => {
   const v = { h: num($('#vH').value), l: num($('#vL').value), w: num($('#vW').value), t: num($('#vT').value) };
   if (![v.h, v.l, v.w, v.t].every(Number.isFinite)) return alert('Wpisz liczby, np. 3,10');
-  S.veh = v; store.set('veh', v); vehLine(); S.route = null; $('#btnGo').classList.add('hidden'); showTab('trasa');
+  const p = S.profiles.find(x => x.id === vehEdit); if (!p) return;
+  Object.assign(p, v, { name: ($('#vName').value.trim() || 'Kamper') }); S.vehId = p.id; store.set('profiles', S.profiles); store.set('vehId', S.vehId);
+  vehInit(); vehLine(); S.route = null; $('#btnGo').classList.add('hidden'); showTab(S.nav ? 'jazda' : 'trasa'); if (S.to && !S.nav) computeRoute();
+});
+$('#btnVehDel').addEventListener('click', () => {
+  if (S.profiles.length < 2) return; const p = S.profiles.find(x => x.id === vehEdit); if (!p || !confirm('Usunąć profil „' + p.name + '"?')) return;
+  S.profiles = S.profiles.filter(x => x.id !== vehEdit); if (S.vehId === vehEdit) S.vehId = S.profiles[0].id; store.set('profiles', S.profiles); store.set('vehId', S.vehId); vehInit(); vehLine(); fillVeh(S.vehId);
 });
 
 /* ---------- trasa ---------- */
@@ -501,7 +522,7 @@ function startNav() {
   updateHud(); updatePoiCol(); applyOpts(); autoNight();
 }
 function stopNav() {
-  S.nav = false; $('#rbar').innerHTML = ''; $('#poiCol').innerHTML = ''; $('#quick').classList.add('hidden'); $('#hud').classList.add('hidden'); stopSim(); $('#btnRecenter').hidden = true;
+  S.nav = false; $('#poiCol').innerHTML = ''; $('#quick').classList.add('hidden'); $('#hud').classList.add('hidden'); stopSim(); $('#btnRecenter').hidden = true;
   map.easeTo({ pitch: 0, bearing: 0, zoom: 14.5, duration: 600 }); showTab('jazda');
   if (wake) { wake.release().catch(() => {}); wake = null; }
   stopBgGps(); laEnd(); if (NKA) NKA.allowSleep().catch(() => {});
@@ -648,27 +669,8 @@ function updateHud() {
   ev.sort((x, y) => x.at - y.at);
   const box = $('#events'); box.classList.toggle('hidden', !ev.length);
   box.innerHTML = ev.slice(0, 3).map(e => `<div><b>${e.txt}</b><small>za ${fmtDist(Math.max(0, e.at - NAV.prog))}${e.sub ? ' · ' + e.sub : ''}</small></div>`).join('');
-  if (!updateHud._rb || Date.now() - updateHud._rb > 3000) { updateHud._rb = Date.now(); updateRouteBar(); updatePoiCol(); }
+  if (!updateHud._rb || Date.now() - updateHud._rb > 3000) { updateHud._rb = Date.now(); updatePoiCol(); }
   laUpdate();
-}
-function updateRouteBar() {
-  const r = S.route, el = $('#rbar'); if (!el || !r) return;
-  const prog = NAV.prog, rem = Math.max(1, r.total - prog);
-  const ev = [];
-  for (const c of r.crossings || []) if (c.at > prog) ev.push({ at: c.at, cls: 'bd', txt: c.to });
-  for (const t of r.traffic || []) if (t.mag >= 2 && r.cum[t.b] > prog) ev.push({ at: Math.max(prog, r.cum[t.a]), cls: t.mag >= 3 ? 'tr3' : 'tr2', txt: '' });
-  for (const t of r.tunnels || []) if (t.at > prog && t.len > 300) ev.push({ at: t.at, cls: 'tn', txt: '' });
-  for (const t of r.ferries || []) if (t.at > prog) ev.push({ at: t.at, cls: 'fe', txt: '' });
-  ev.sort((x, y) => x.at - y.at);
-  // pozycja na pasku: cel u góry (0 %), ja u dołu (100 %)
-  let html = '<span class="flag">🏁</span>';
-  let lastTop = -10;
-  for (const e of ev) {
-    let top = (1 - (e.at - prog) / rem) * 100; if (top < 6) top = 6; if (top - lastTop < 7) top = lastTop + 7; if (top > 90) break; lastTop = top;
-    html += `<span class="ev ${e.cls}" style="top:${top.toFixed(1)}%">${e.txt}</span>`;
-  }
-  html += '<span class="me-arrow"></span>';
-  el.innerHTML = html;
 }
 function drawProgressMarks() {
   const r = S.route, el = $('#progMarks'); if (!el || !r) return;
@@ -790,11 +792,11 @@ function showTab(t) {
   $('#sheet').classList.toggle('hidden', t !== 'trasa'); $('#veh').classList.toggle('hidden', t !== 'veh'); $('#menu').classList.toggle('hidden', t !== 'menu'); $('#poi').classList.toggle('hidden', t !== 'poi'); $('#search').classList.toggle('hidden', t !== 'search'); $('#pick').classList.add('hidden');
   $('#hud').classList.toggle('hidden', !(t === 'jazda' && S.nav));
   if (t === 'menu') { fillVoices(); if (NATIVE) $('#about').textContent = $('#about').textContent.replace(/·\s*(PWA|aplikacja natywna)/, '') + ' · aplikacja natywna'; }
-  if (t === 'menu') $('#menuVeh').textContent = `Kamper ${fmt1(S.veh.h)} m · ${fmt1(S.veh.l)} m · ${fmt1(S.veh.t)} t`;
+  if (t === 'menu') { const p = S.profiles.find(x => x.id === S.vehId) || {}; $('#menuVeh').textContent = `${p.name || 'Kamper'} · ${fmt1(S.veh.h)} m · ${fmt1(S.veh.l)} m · ${fmt1(S.veh.t)} t`; }
   $('#idle').classList.toggle('hidden', !(t === 'jazda' && !S.nav));
-  if (t === 'jazda' && !S.nav) { $('#fVehTxt').textContent = `🚐 Kamper ${fmt1(S.veh.h)} m · ${fmt1(S.veh.t)} t`; $('#fViewTxt').textContent = S.opt.d3 ? '3D' : '2D'; }
+  if (t === 'jazda' && !S.nav) { const p = S.profiles.find(x => x.id === S.vehId) || {}; $('#fVehTxt').textContent = `🚐 ${p.name || 'Kamper'} · ${fmt1(S.veh.h)} m · ${fmt1(S.veh.t)} t`; $('#fViewTxt').textContent = S.opt.d3 ? '3D' : '2D'; }
   $$('.tabs button').forEach(b => { if (b.dataset.tab === t) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
-  if (t === 'veh') fillVeh();
+  if (t === 'veh') fillVeh(S.vehId);
   if (t === 'trasa' && S.route) setTimeout(() => { fitRoute(); drawAlts(); }, 50);
   if (t === 'jazda' && S.nav) { S.follow = true; $('#btnRecenter').hidden = true; }
   if (t !== 'trasa') { altMarkers.forEach(m => m.remove()); altMarkers = []; }
@@ -870,7 +872,7 @@ document.addEventListener('change', e => {
   recalcKeepNav().then(() => { fillCountryTable($('#ccTable')); fillCountryTable($('#qCcTable')); fillRoutePanel(); });
 });
 // --- szybkie ustawienia (przełączniki działają od razu)
-const OPT_EL = { roadNow: '#roadNow', poiCol: '#poiCol', rbar: '#rbar', events: '#events', nextChip: '#nextChip' };
+const OPT_EL = { roadNow: '#roadNow', poiCol: '#poiCol', events: '#events', nextChip: '#nextChip' };
 function applyOpts() { for (const k in OPT_EL) $(OPT_EL[k]).classList.toggle('off', !S.opt[k]); }
 function fillSettings() { $$('#quick [data-opt]').forEach(i => { i.checked = !!S.opt[i.dataset.opt]; }); }
 $('#quick').addEventListener('change', e => {
@@ -953,7 +955,7 @@ function init() {
   document.body.classList.toggle('night', !!S.opt.night);
   $('#optVoice').checked = !!S.opt.voice; $('#opt3d').checked = !!S.opt.d3; $('#optRate').value = S.opt.rate || 1; $('#rateTxt').textContent = (S.opt.rate || 1).toFixed(2).replace('.', ',').replace(/0$/, '') + '×'; $('#optNight').checked = !!S.opt.night; $('#optSim').checked = !!S.opt.sim;
   $$('#modes button').forEach(x => x.setAttribute('aria-pressed', x.dataset.mode === S.mode));
-  vehLine(); fillVeh(); initMap(); $('#btnView').textContent = S.opt.d3 ? '3D' : '2D';
+  vehInit(); vehLine(); fillVeh(S.vehId); initMap(); $('#btnView').textContent = S.opt.d3 ? '3D' : '2D';
   startGps();
   // ?to=lon,lat,Nazwa – wejście z planera
   const u = new URLSearchParams(location.search);
