@@ -13,7 +13,7 @@
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800&display=swap">
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
-<link rel="stylesheet" href="style.css?v=27">
+<link rel="stylesheet" href="style.css?v=28">
 </head>
 <body>
 <div id="desk" class="desk hidden">
@@ -66,8 +66,8 @@
     <div class="row-h"><h1>Szybkie działania</h1><button type="button" class="x" data-close aria-label="Zamknij">✕</button></div>
     <div class="sec">Cel</div>
     <div class="dest"><i></i><div><b id="qDest">—</b><small id="qDestSub"></small></div></div>
-    <button type="button" class="primary warn" data-q="closed">⛔ Droga przede mną zamknięta — zrób objazd</button>
     <div class="qgrid">
+      <button type="button" data-q="closed" class="danger"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M7 12h10"/></svg>Droga zamknięta</button>
       <button type="button" data-q="report"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V5a2 2 0 0 1 2-2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M12 10v5M12 18h.01"/></svg>Zgłoś</button>
       <button type="button" data-q="route"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 L8 4 M16 4 L20 20"/><path d="M12 4v3M12 11v3M12 18v2"/></svg>Opcje trasy</button>
       <button type="button" data-q="tools"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/></svg>Dodatkowe funkcje</button>
@@ -338,6 +338,6 @@
 <script src="../assets/config.js"></script>
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <script src="https://unpkg.com/pmtiles@4.3.2/dist/pmtiles.js"></script>
-<script src="app.js?v=46"></script>
+<script src="app.js?v=47"></script>
 </body>
 </html>
