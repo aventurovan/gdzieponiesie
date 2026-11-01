@@ -157,7 +157,7 @@ function h32(x, y) { let h = (x * 374761393 + y * 668265263) | 0; h = (h ^ (h >>
 function pointInRing(p, ring) { let inside = false; for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) { const xi = ring[i][0], yi = ring[i][1], xj = ring[j][0], yj = ring[j][1]; if (((yi > p[1]) !== (yj > p[1])) && (p[0] < (xj - xi) * (p[1] - yi) / (yj - yi) + xi)) inside = !inside; } return inside; }
 function pointInPoly(p, poly) { if (!pointInRing(p, poly[0])) return false; for (let k = 1; k < poly.length; k++) if (pointInRing(p, poly[k])) return false; return true; }
 function seedTrees() {
-  if (!map.getLayer('wood-src') || !map.getSource('trees-pts') || S.opt.trees === false) return;
+  if (!map.getLayer('wood-src') || !map.getSource('trees-pts') || S.opt.trees === false || S.opt.night) { if (map.getSource('trees-pts')) map.getSource('trees-pts').setData({ type: 'FeatureCollection', features: [] }); return; }
   const z = map.getZoom(); if (z < 13.5) { map.getSource('trees-pts').setData({ type: 'FeatureCollection', features: [] }); return; }
   const feats = map.queryRenderedFeatures({ layers: ['wood-src'] }); if (!feats.length) { map.getSource('trees-pts').setData({ type: 'FeatureCollection', features: [] }); return; }
   const b = map.getBounds(); const pad = 0.004; const w = b.getWest() - pad, e = b.getEast() + pad, s = b.getSouth() - pad, n = b.getNorth() + pad;
@@ -176,7 +176,7 @@ function seedTrees() {
   map.getSource('trees-pts').setData({ type: 'FeatureCollection', features: out });
 }
 function addLayers() {
-  tuneStyle(); hookTiles(); if (S.opt.trees !== false) addTrees();
+  tuneStyle(); hookTiles(); if (S.opt.trees !== false && !S.opt.night) addTrees();
   // budynki 3D z kafelków OpenMapTiles (warstwa building, render_height)
   if (BUD3D) { map.setLayoutProperty(BUD3D, 'visibility', S.opt.d3 ? 'visible' : 'none'); try { map.setLayerZoomRange(BUD3D, 15, 24); } catch (e) {} }
   else if (!map.getLayer('bud3d') && map.getSource('openmaptiles')) {
