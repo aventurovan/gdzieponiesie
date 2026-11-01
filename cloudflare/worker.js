@@ -2022,7 +2022,7 @@ async function handleGpsCams(request, env, cors) {
 async function handleGpsSearch(url, env, cors) {
   const q = (url.searchParams.get('q') || '').trim(); if (q.length < 2) return json({ results: [] }, 200, cors);
   const lat = parseFloat(url.searchParams.get('lat')), lon = parseFloat(url.searchParams.get('lon')); const hasPos = Number.isFinite(lat) && Number.isFinite(lon);
-  const kvKey = 'gps:srch2:' + (await sha256(q.toLowerCase() + '|' + (hasPos ? lat.toFixed(1) + ',' + lon.toFixed(1) : ''))).slice(0, 32);
+  const kvKey = 'gps:srch3:' + (await sha256(q.toLowerCase() + '|' + (hasPos ? lat.toFixed(1) + ',' + lon.toFixed(1) : ''))).slice(0, 32);
   if (env.NK) { const hit = await env.NK.get(kvKey, 'json'); if (hit) return json({ ...hit, cached: true }, 200, cors); }
   const out = [];
   // 1) miasta z planera (szybkie, polskie nazwy)
@@ -2038,14 +2038,14 @@ async function handleGpsSearch(url, env, cors) {
       const name = pr.name || [pr.street, pr.housenumber].filter(Boolean).join(' ') || pr.city || '';
       if (!name) continue;
       const addr = [pr.street && pr.name !== pr.street ? [pr.street, pr.housenumber].filter(Boolean).join(' ') : (pr.housenumber && !pr.name ? '' : ''), pr.city || pr.town || pr.village || pr.county, pr.country].filter(Boolean).join(', ');
-      const type = pr.osm_key === 'highway' ? 'street' : pr.osm_key === 'place' ? 'city' : (pr.osm_key === 'tourism' || pr.osm_key === 'amenity' || pr.osm_key === 'shop' || pr.osm_key === 'leisure') ? 'poi' : pr.housenumber ? 'address' : 'other';
+      const type = pr.osm_key === 'highway' ? (/bus_stop|platform|stop/.test(pr.osm_value || '') ? 'transit' : 'street') : pr.osm_key === 'railway' ? 'transit' : pr.osm_key === 'place' ? 'city' : (pr.osm_key === 'tourism' || pr.osm_key === 'amenity' || pr.osm_key === 'shop' || pr.osm_key === 'leisure') ? 'poi' : pr.housenumber ? 'address' : 'other';
       const kind = pr.osm_value || '';
       out.push({ name, label: addr, lon: Math.round(flon * 1e5) / 1e5, lat: Math.round(flat * 1e5) / 1e5, type, kind, country: (pr.countrycode || '').toUpperCase() });
     }
   } catch (e) { var photonErr = String(e && e.message || e); }
   // dedup + odległość
   const seen = new Set(); const res = [];
-  for (const x of out) { const k = x.name.toLowerCase() + '|' + x.lon.toFixed(2) + ',' + x.lat.toFixed(2); if (seen.has(k)) continue; seen.add(k); if (hasPos) x.dist = Math.round(haversineKm([lon, lat], [x.lon, x.lat]) * 10) / 10; res.push(x); }
+  for (const x of out) { const k = x.type === 'street' ? 'st|' + x.name.toLowerCase() + '|' + (x.label || '').toLowerCase() : x.name.toLowerCase() + '|' + x.lon.toFixed(2) + ',' + x.lat.toFixed(2); if (seen.has(k)) continue; seen.add(k); if (hasPos) x.dist = Math.round(haversineKm([lon, lat], [x.lon, x.lat]) * 10) / 10; res.push(x); }
   if (hasPos) res.sort((a, b) => (a.type === 'city' && a.name.toLowerCase().startsWith(q.toLowerCase()) ? -1 : 0) - (b.type === 'city' && b.name.toLowerCase().startsWith(q.toLowerCase()) ? -1 : 0) || a.dist - b.dist);
   const o = { results: res.slice(0, 12), ...(typeof photonErr !== 'undefined' && photonErr ? { photonErr } : {}) };
   if (env.NK && !o.photonErr) await env.NK.put(kvKey, JSON.stringify(o), { expirationTtl: 24 * 3600 });

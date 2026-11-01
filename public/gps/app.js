@@ -240,7 +240,7 @@ function renderSearchHome() {
   L.innerHTML = html;
 }
 let suggT;
-const SRCH_ICO = { city: '🏙', street: '🛣', address: '📍', poi: '📌', other: '📍' };
+const SRCH_ICO = { city: '🏙', street: '🛣', address: '📍', poi: '📌', transit: '🚏', other: '📍' };
 async function suggest(q) {
   const ul = $('#sugg'); if (q.length < 2) { ul.classList.add('hidden'); return; }
   let j; try { const pos = S.pos ? `&lat=${S.pos.lat.toFixed(4)}&lon=${S.pos.lon.toFixed(4)}` : ''; const r = await fetch(API + '/gps/search?q=' + encodeURIComponent(q) + pos); j = await r.json(); if (!r.ok) throw new Error(j.error || r.status); } catch (e) { ul._res = []; ul.innerHTML = `<li><span class="si-t"><small>Błąd wyszukiwania: ${esc(e.message || e)}</small></span></li>`; ul.classList.remove('hidden'); return; }
