@@ -462,6 +462,7 @@ function drawAlts() {
   });
   map.getSource('alts').setData({ type: 'FeatureCollection', features: feats });
   $('#tDots').innerHTML = rs.length > 1 ? rs.map((_, i) => `<i data-alt="${i}" class="${i === S.altIdx ? 'on' : ''}"></i>`).join('') : '';
+  if (!S.nav && S.tab === 'trasa') setTimeout(fitRoute, 50);
 }
 $('#tDots').addEventListener('click', e => { const d = e.target.closest('[data-alt]'); if (d) selectAlt(+d.dataset.alt); });
 // przesunięcie palcem po dolnej karcie przełącza wariant

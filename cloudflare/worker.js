@@ -1766,8 +1766,12 @@ async function ttCalc(points, q) {
   const url = TT_URL + encodeURIComponent(locs) + '/json?' + q.toString();
   let res, data;
   const body = q._avoid && q._avoid.length ? JSON.stringify({ avoidAreas: { rectangles: q._avoid.map((a) => ({ southWestCorner: { latitude: a[0], longitude: a[1] }, northEastCorner: { latitude: a[2], longitude: a[3] } })) } }) : null;
-  try { res = await fetch(url, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal: AbortSignal.timeout(20000) } : { signal: AbortSignal.timeout(20000) }); data = await res.json(); }
-  catch (e) { return { ok: false, error: 'TomTom: ' + (e.message || 'błąd sieci') }; }
+  const opts = body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal: AbortSignal.timeout(20000) } : { signal: AbortSignal.timeout(20000) };
+  try {
+    res = await fetch(url, opts);
+    if (res.status === 429) { await new Promise((r) => setTimeout(r, 1200)); res = await fetch(url, opts); }
+    data = await res.json();
+  } catch (e) { return { ok: false, error: 'TomTom: ' + (e.message || 'błąd sieci') }; }
   if (!res.ok || !data.routes?.length) return { ok: false, error: 'TomTom ' + res.status + ': ' + (data?.detailedError?.message || data?.error?.description || 'brak trasy') };
   const segs = data.routes.map(ttParse);
   return { ok: true, seg: segs[0], alts: segs.slice(1) };
@@ -2162,7 +2166,8 @@ async function osmEngineRoute({ points, mode, dims, av, env, body }) {
   const routes = (data.features || []).map((f) => orsToRoute(f, mode, heavy));
   if (!routes.length) return { ok: false, error: 'ORS: brak trasy' };
   // TomTom: czas z korkami + odcinki korków dla głównej trasy (i alternatyw) – po punktach pośrednich co ~15 km, żeby TomTom jechał tą samą drogą
-  for (const rt of routes) {
+  for (const [ri, rt] of routes.entries()) {
+    if (ri > 0) { rt.ttTime = false; continue; } // alternatywy: czas z ORS (oszczędzamy limit 5 zapytań/s TomToma)
     try {
       const n = rt.coords.length; const wp = [rt.coords[0]]; let next = 15000; for (let i = 1; i < n - 1; i++) { if (rt.cum[i] >= next) { wp.push(rt.coords[i]); next = rt.cum[i] + 15000; } if (wp.length >= 18) break; } wp.push(rt.coords[n - 1]);
       const q = new URLSearchParams({ key: String(env.TOMTOM_KEY).trim(), travelMode: 'car', traffic: 'true', computeTravelTimeFor: 'all', routeType: 'fastest', maxAlternatives: '0', routeRepresentation: 'polyline' }); q.append('sectionType', 'traffic'); q.append('sectionType', 'tunnel');
