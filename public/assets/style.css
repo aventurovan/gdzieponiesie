@@ -562,3 +562,17 @@ input,select,textarea{font-size:max(16px,1em)}
 .share-menu button{display:flex;flex-direction:column;align-items:flex-start;gap:1px;border:0;background:none;color:var(--ink);padding:10px 12px;border-radius:10px;text-align:left;cursor:pointer}
 .share-menu button:hover{background:var(--tile)}
 .share-menu small{color:var(--mut);font-size:12.5px}
+
+/* przyciski pod kafelkami: „Nawiguj w Azimo” na całą szerokość, pod nim trzy równe */
+.actions{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.actions #azimoBtn{grid-column:1/-1}
+.actions .btn{min-height:46px;height:auto;padding:0 10px;font-size:14.5px;gap:7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;width:100%}
+.actions .btn svg{flex:none}
+.actions #printBtn2{flex:initial;width:100%;padding:0 10px}
+.actions .pr-l{display:inline!important}
+@media (max-width:360px){.actions .btn{font-size:13.5px;gap:5px;padding:0 6px}}
+.btn{white-space:nowrap}
+@media (max-width:520px){
+  .actions .btn.ghost{flex-direction:column;gap:3px;min-height:56px;padding:6px 4px;font-size:12.5px;font-weight:700}
+  .actions .btn.ghost svg{width:20px;height:20px}
+}

@@ -1355,7 +1355,7 @@ function renderExtras(){
   // przyciski
   $('#actions').innerHTML = `<button class="btn" id="azimoBtn" title="Otwórz trasę w nawigacji Azimo"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 L21 21 L12 16 L3 21 Z" fill="currentColor"/></svg>Nawiguj w Azimo</button>
     <button class="btn ghost" id="shareBtn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7M16 6l-4-4-4 4M12 2v13"/></svg>Udostępnij</button>
-    <button class="btn ghost" id="saveBtn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-6-4-6 4z"/></svg>Zapisz trasę</button>
+    <button class="btn ghost" id="saveBtn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-6-4-6 4z"/></svg>Zapisz</button>
     <button class="btn ghost" id="printBtn2" aria-label="Drukuj plan"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9V3h12v6M6 18H4v-7h16v7h-2M6 14h12v7H6z"/></svg><span class="pr-l">Drukuj</span></button>`;
   // noclegi – osobna zakładka
   const n = nights();
