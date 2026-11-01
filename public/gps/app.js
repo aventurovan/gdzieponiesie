@@ -779,7 +779,7 @@ function startNav() {
   S.nav = true; S.follow = true; NAV.idx = 0; NAV.prog = 0; NAV.offCount = 0; NAV.stepI = 0; NAV.said = {};
   showTab('jazda'); $('#hud').classList.remove('hidden'); altMarkers.forEach(m => m.remove()); altMarkers = []; if (map.getSource('alts')) map.getSource('alts').setData({ type: 'FeatureCollection', features: [] });
   speak('Rozpoczynam nawigację.'); keepAwake(); if (NBG) startBgGps(); setTimeout(laStart, 800);
-  MK.zoom = 16; NAV.zoomT = 16.5; map.jumpTo({ pitch: S.opt.d3 ? 60 : 0, zoom: 16 });
+  MK.zoom = 16.5; NAV.zoomT = 17; map.jumpTo({ pitch: S.opt.d3 ? 60 : 0, zoom: 16.5 });
   if (S.opt.sim) startSim(); else startGps();
   updateHud(); updatePoiCol(); applyOpts(); autoNight();
 }
@@ -875,8 +875,8 @@ function navStep(f) {
   NAV.lastProg = NAV.prog; NAV.onRoute = sn.off <= 35; NAV.fixT = performance.now(); NAV.speed = NAV.speed ? NAV.speed + ((f.speed || 0) - NAV.speed) * 0.5 : (f.speed || 0);
   if (!NAV.onRoute) { NAV.zoomT = 16; }
   else {
-    const kmh = NAV.speed * 3.6; let zoom = kmh > 90 ? 15.6 : kmh > 50 ? 16.3 : 17;
-    const cs = currentStep(); if (cs && cs.dist < 600 && cs.s.t !== 10) zoom = Math.max(zoom, cs.dist < 250 ? 17.8 : 17.2);
+    const kmh = NAV.speed * 3.6; let zoom = kmh > 90 ? 16.2 : kmh > 50 ? 16.9 : 17.5;
+    const cs = currentStep(); if (cs && cs.dist < 600 && cs.s.t !== 10) zoom = Math.max(zoom, cs.dist < 250 ? 18.2 : 17.7);
     NAV.zoomT = zoom;
     // widok skrzyżowania: tuż przed skrętem kamera z góry (2D), potem wraca do 3D
     NAV.junction = !!(S.opt.junction && cs && cs.dist < 160 && [0, 1, 2, 3, 7, 8, 9].includes(cs.s.t));
