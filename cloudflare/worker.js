@@ -2022,15 +2022,16 @@ async function handleGpsCams(request, env, cors) {
 async function handleGpsSearch(url, env, cors) {
   const q = (url.searchParams.get('q') || '').trim(); if (q.length < 2) return json({ results: [] }, 200, cors);
   const lat = parseFloat(url.searchParams.get('lat')), lon = parseFloat(url.searchParams.get('lon')); const hasPos = Number.isFinite(lat) && Number.isFinite(lon);
-  const kvKey = 'gps:srch:' + (await sha256(q.toLowerCase() + '|' + (hasPos ? lat.toFixed(1) + ',' + lon.toFixed(1) : ''))).slice(0, 32);
+  const kvKey = 'gps:srch2:' + (await sha256(q.toLowerCase() + '|' + (hasPos ? lat.toFixed(1) + ',' + lon.toFixed(1) : ''))).slice(0, 32);
   if (env.NK) { const hit = await env.NK.get(kvKey, 'json'); if (hit) return json({ ...hit, cached: true }, 200, cors); }
   const out = [];
   // 1) miasta z planera (szybkie, polskie nazwy)
   try { for (const c of searchCities(q).slice(0, 4)) out.push({ name: c.name, label: c.label, lon: c.lon, lat: c.lat, type: 'city', country: c.country }); } catch (e) {}
   // 2) Photon: ulice, adresy, miejsca
   try {
-    const p = new URLSearchParams({ q, limit: '10', lang: 'pl' }); if (hasPos) { p.set('lat', lat.toFixed(4)); p.set('lon', lon.toFixed(4)); p.set('zoom', '10'); p.set('location_bias_scale', '0.3'); }
+    const p = new URLSearchParams({ q, limit: '10' }); if (hasPos) { p.set('lat', lat.toFixed(4)); p.set('lon', lon.toFixed(4)); p.set('zoom', '10'); p.set('location_bias_scale', '0.3'); }
     const r = await fetch('https://photon.komoot.io/api/?' + p.toString(), { headers: { 'User-Agent': 'Azimo/1.0 (gdzieponiesie.pl)' }, signal: AbortSignal.timeout(6000) });
+    if (!r.ok) throw new Error('HTTP ' + r.status + ' ' + (await r.text()).slice(0, 120));
     const j = await r.json();
     for (const f of j.features || []) {
       const pr = f.properties || {}; const [flon, flat] = f.geometry.coordinates;
