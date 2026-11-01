@@ -221,8 +221,11 @@ const TRAFFIC_COLOR = m => m >= 3 ? '#D92D20' : m === 2 ? '#F2A33A' : '#F2C230';
 function fitRoute() {
   const r = S.route; if (!r || !r.bbox) return;
   const bb = (S.routes || [r]).reduce((b, x) => [Math.min(b[0], x.bbox[0]), Math.min(b[1], x.bbox[1]), Math.max(b[2], x.bbox[2]), Math.max(b[3], x.bbox[3])], r.bbox.slice());
-  const top = $('#sheet .top'), bot = $('#tBottom');
-  map.fitBounds([[bb[0], bb[1]], [bb[2], bb[3]]], { padding: { top: (top && top.offsetHeight ? top.offsetHeight : 240) + 40, bottom: (bot && bot.offsetHeight ? bot.offsetHeight : 190) + 40, left: 40, right: 40 }, pitch: 0, bearing: 0, duration: 600 });
+  const top = $('#sheet .top'), bot = $('#tBottom'); const H = map.getContainer().clientHeight || window.innerHeight, W = map.getContainer().clientWidth || window.innerWidth;
+  let pt = (top && top.offsetHeight ? top.offsetHeight : 240) + 30, pb = (bot && bot.offsetHeight ? bot.offsetHeight : 190) + 30;
+  // marginesy nie mogą przekroczyć wysokości mapy (np. w trakcie chowania klawiatury) – wtedy skaluj
+  if (pt + pb > H - 80) { const k = (H - 80) / (pt + pb); pt = Math.max(10, pt * k); pb = Math.max(10, pb * k); }
+  try { map.fitBounds([[bb[0], bb[1]], [bb[2], bb[3]]], { padding: { top: pt, bottom: pb, left: Math.min(40, W / 8), right: Math.min(40, W / 8) }, pitch: 0, bearing: 0, duration: 600, maxZoom: 16 }); return true; } catch (e) { return false; }
 }
 function drawRoute() {
   if (!map.getSource('route')) return;
@@ -417,7 +420,7 @@ async function computeRoute(fromPos) {
   S.routes = fromPos ? [j] : [j, ...(j.alts || []).map(alt => ({ ...j, ...alt, alts: undefined, total: alt.cum[alt.cum.length - 1] }))];
   delete j.alts; S.altIdx = 0; S.route = j;
   if (!fromPos) { renderSummary(); drawRoute(); drawAlts(); $('#btnGo').classList.remove('hidden'); $('#tOffline').classList.remove('hidden'); }
-  if (S.fitAfter) { S.fitAfter = false; [150, 600, 1200].forEach(t => setTimeout(() => { if (S.tab === 'trasa') fitRoute(); }, t)); }
+  if (S.fitAfter) { S.fitAfter = false; [100, 400, 800, 1400, 2200].forEach(t => setTimeout(() => { if (S.tab === 'trasa') fitRoute(); }, t)); }
   if (j.restrCheck === 'pending') checkRestrictions(j, fromPos);
   return j;
 }
