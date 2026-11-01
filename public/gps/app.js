@@ -92,6 +92,9 @@ function initMap() {
   window.addEventListener('orientationchange', () => setTimeout(kick, 300));
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') setTimeout(kick, 200); });
   if (window.visualViewport) window.visualViewport.addEventListener('resize', () => setTimeout(kick, 50));
+  // drzewa: przeliczaj po ruchu mapy (z opóźnieniem), też w jeździe
+  let treeT = null; const reseed = () => { clearTimeout(treeT); treeT = setTimeout(() => { if (Date.now() - TREES.last > 400) { TREES.last = Date.now(); seedTrees(); } }, S.nav ? 700 : 250); };
+  map.on('moveend', reseed); map.on('idle', () => { if (!treeT) reseed(); });
   map.on('resize', () => { if (S.tab === 'trasa' && S.route && document.activeElement && document.activeElement.tagName !== 'INPUT') fitRoute(); });
   // długie przytrzymanie na mapie: dodaj punkt pośredni / nawiguj tutaj
   let lpT = null, lpPt = null;
@@ -128,19 +131,49 @@ function tuneStyle() {
     } catch (e) {}
   }
 }
-// lasy jako drzewka (wzór na poligonach wood/forest od zoomu 13)
+// lasy jako pionowe drzewka 3D: punkty losowane w poligonach lasu w widoku, ikony „billboard” (zawsze stojące)
+const TREES = { icons: {}, busy: false, last: 0, seedCache: new Map() };
+function treeIcons() {
+  const suf = S.opt.night ? '-dark' : ''; const names = ['tree-pine', 'tree-leaf0', 'tree-leaf1', 'tree-leaf2'];
+  return Promise.all(names.map(n => new Promise(res => { const key = n + suf; if (map.hasImage(key)) return res(key); const img = new Image(); img.onload = () => { try { map.addImage(key, img, { pixelRatio: 2 }); } catch (e) {} res(key); }; img.onerror = () => res(null); img.src = 'icons/' + key + '.png?v=1'; })));
+}
 function addTrees() {
   if (!map.getSource('openmaptiles')) return;
-  const name = S.opt.night ? 'trees-dark' : 'trees';
-  const put = () => {
+  if (!map.getSource('trees-pts')) map.addSource('trees-pts', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+  if (!map.getLayer('wood-src')) map.addLayer({ id: 'wood-src', type: 'fill', source: 'openmaptiles', 'source-layer': 'landcover', minzoom: 13, filter: ['in', ['get', 'class'], ['literal', ['wood', 'forest']]], paint: { 'fill-opacity': 0 } });
+  treeIcons().then(() => {
     if (map.getLayer('trees')) map.removeLayer('trees');
-    const before = (map.getStyle().layers.find(l => /^(waterway|road|highway|transportation|bridge|tunnel)/.test(l.id)) || {}).id;
-    map.addLayer({ id: 'trees', type: 'fill', source: 'openmaptiles', 'source-layer': 'landcover', minzoom: 13,
-      filter: ['in', ['get', 'class'], ['literal', ['wood', 'forest']]], paint: { 'fill-pattern': name, 'fill-opacity': ['interpolate', ['linear'], ['zoom'], 13, 0.55, 15, 0.95] } }, before);
-    if (map.getLayer('bud3d')) { try { map.moveLayer('trees', 'bud3d'); } catch (e) {} }
-  };
-  if (map.hasImage(name)) { put(); return; }
-  const img = new Image(); img.onload = () => { try { map.addImage(name, img, { pixelRatio: 2 }); put(); } catch (e) {} }; img.src = 'icons/' + name + '.png?v=1';
+    const suf = S.opt.night ? '-dark' : '';
+    map.addLayer({ id: 'trees', type: 'symbol', source: 'trees-pts', minzoom: 13.5, layout: {
+      'icon-image': ['concat', ['get', 'k'], suf], 'icon-size': ['interpolate', ['linear'], ['zoom'], 13.5, 0.22, 15, 0.45, 17, 0.75],
+      'icon-anchor': 'bottom', 'icon-allow-overlap': true, 'icon-ignore-placement': true, 'icon-pitch-alignment': 'viewport', 'icon-rotation-alignment': 'viewport', 'symbol-sort-key': ['get', 's'] },
+      paint: { 'icon-opacity': ['interpolate', ['linear'], ['zoom'], 13.5, 0.6, 14.5, 1] } });
+    if (map.getLayer('bud3d')) { try { map.moveLayer('trees'); } catch (e) {} }
+    seedTrees();
+  });
+}
+// deterministyczny „losowy” rozkład: siatka ~55 m z przesunięciem z hasza, żeby drzewa nie skakały przy ruchu mapy
+function h32(x, y) { let h = (x * 374761393 + y * 668265263) | 0; h = (h ^ (h >>> 13)) * 1274126177; return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
+function pointInRing(p, ring) { let inside = false; for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) { const xi = ring[i][0], yi = ring[i][1], xj = ring[j][0], yj = ring[j][1]; if (((yi > p[1]) !== (yj > p[1])) && (p[0] < (xj - xi) * (p[1] - yi) / (yj - yi) + xi)) inside = !inside; } return inside; }
+function pointInPoly(p, poly) { if (!pointInRing(p, poly[0])) return false; for (let k = 1; k < poly.length; k++) if (pointInRing(p, poly[k])) return false; return true; }
+function seedTrees() {
+  if (!map.getLayer('wood-src') || !map.getSource('trees-pts') || S.opt.trees === false) return;
+  const z = map.getZoom(); if (z < 13.5) { map.getSource('trees-pts').setData({ type: 'FeatureCollection', features: [] }); return; }
+  const feats = map.queryRenderedFeatures({ layers: ['wood-src'] }); if (!feats.length) { map.getSource('trees-pts').setData({ type: 'FeatureCollection', features: [] }); return; }
+  const b = map.getBounds(); const pad = 0.004; const w = b.getWest() - pad, e = b.getEast() + pad, s = b.getSouth() - pad, n = b.getNorth() + pad;
+  const stepM = z >= 16 ? 35 : z >= 15 ? 50 : 70; const dLat = stepM / 111320, dLon = dLat / Math.cos(((s + n) / 2) * Math.PI / 180);
+  const out = []; const MAX = 1400; const polys = [];
+  for (const f of feats) { const g = f.geometry; if (g.type === 'Polygon') polys.push(g.coordinates); else if (g.type === 'MultiPolygon') for (const p of g.coordinates) polys.push(p); }
+  const i0 = Math.floor(s / dLat), i1 = Math.ceil(n / dLat), j0 = Math.floor(w / dLon), j1 = Math.ceil(e / dLon);
+  outer: for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) {
+    const r1 = h32(i, j), r2 = h32(j, i); if (r1 < 0.35) continue; // gęstość ~65 %
+    const lat = (i + r2) * dLat, lon = (j + h32(i + 7, j + 3)) * dLon; if (lon < w || lon > e || lat < s || lat > n) continue;
+    let ok = false; for (const p of polys) { if (pointInPoly([lon, lat], p)) { ok = true; break; } } if (!ok) continue;
+    const k = r1 > 0.72 ? 'tree-leaf' + Math.floor(h32(i + 1, j) * 3) : 'tree-pine';
+    out.push({ type: 'Feature', properties: { k, s: -lat }, geometry: { type: 'Point', coordinates: [lon, lat] } });
+    if (out.length >= MAX) break outer;
+  }
+  map.getSource('trees-pts').setData({ type: 'FeatureCollection', features: out });
 }
 function addLayers() {
   tuneStyle(); hookTiles(); if (S.opt.trees !== false) addTrees();
@@ -1117,7 +1150,7 @@ document.addEventListener('change', e => {
   if (k === 'd3') { setView3d(i.checked); return; }
   if (k === 'night') { setNight(i.checked); return; }
   S.opt[k] = i.checked; store.set('opt', S.opt); applyOpts(); if (k === 'autoNight') autoNight(true);
-  if (k === 'trees') { if (i.checked) addTrees(); else if (map.getLayer('trees')) map.removeLayer('trees'); }
+  if (k === 'trees') { if (i.checked) addTrees(); else { if (map.getLayer('trees')) map.removeLayer('trees'); if (map.getSource('trees-pts')) map.getSource('trees-pts').setData({ type: 'FeatureCollection', features: [] }); } }
 });
 // --- punkty pośrednie
 let viaT;
