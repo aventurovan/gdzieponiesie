@@ -683,9 +683,9 @@ $('#poiChips').addEventListener('click', e => { const b = e.target.closest('butt
 async function recalcKeepNav() {
   if (!S.nav || !S.pos) { if (S.route) computeRoute(); return; }
   $('#manRoad').textContent = 'Przeliczam trasę…';
-  const j = await computeRoute({ lon: S.pos.lon, lat: S.pos.lat }); if (!j) return;
+  const j = await computeRoute({ lon: S.pos.lon, lat: S.pos.lat }); if (!j) { speak('Nie udało się przeliczyć trasy.'); updateHud(); return; }
   NAV.idx = 0; NAV.prog = 0; NAV.stepI = 0; NAV.said = {}; NAV.lastReroute = Date.now();
-  drawRoute(); drawProgressMarks(); loadPoi(); loadLimits(); loadLanes(); loadBorders(); loadCams(); updateHud(); speak('Trasa przeliczona.');
+  drawRoute(); drawProgressMarks(); loadPoi(); loadLimits(); loadLanes(); loadBorders(); loadCams(); updateHud(); speak(j.ttError ? 'Trasa przeliczona zapasowym silnikiem.' : 'Trasa przeliczona.');
 }
 
 function fillRouteOpts(busy) {

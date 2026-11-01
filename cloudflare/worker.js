@@ -1743,6 +1743,8 @@ function ttQuery({ mode, dims, av, env, alts = 0, avoidAreas = [] }) {
   });
   if (truck) { q.set('vehicleHeight', String(dims.height)); q.set('vehicleWidth', String(dims.width)); q.set('vehicleLength', String(dims.length)); q.set('vehicleWeight', String(Math.round(dims.weight * 1000))); q.set('vehicleCommercial', 'false'); q.set('vehicleMaxSpeed', '110'); }
   if (avoidAreas.length) q.set('avoidAreas', avoidAreas.slice(0, 10).map((a) => `${a[0].toFixed(5)},${a[1].toFixed(5)}:${a[2].toFixed(5)},${a[3].toFixed(5)}`).join('|'));
+  // uwaga: z avoidAreas TomTom nie liczy alternatyw
+  if (avoidAreas.length) q.set('maxAlternatives', '0');
   for (const s of ['traffic', 'tollRoad', 'tollVignette', 'country', 'tunnel', 'motorway', 'ferry']) q.append('sectionType', s);
   const avoid = new Set();
   if (av.highways === true) avoid.add('motorways');
@@ -1828,7 +1830,8 @@ async function tomtomGpsRoute({ points, mode, dims, av, env, byCountry, avoidPts
   const kvKey = 'gps:tt:' + (await sha256(JSON.stringify({ points, mode, dims, av, byCountry: byCountry || null, avoidPts: avoidPts || null }))).slice(0, 32);
   if (env.NK) { const hit = await env.NK.get(kvKey, 'json'); if (hit) return { ok: true, out: { ...hit, cached: true }, cached: true }; }
   // strefy omijane podane przez klienta (po sprawdzeniu ograniczeń w /gps/restr)
-  const avoidAreas = (Array.isArray(avoidPts) ? avoidPts : []).filter(isPoint).slice(0, 10).map(([lon, lat]) => { const d = 0.0007; return [lat + d, lon - d, lat - d, lon + d]; });
+  // prostokąty TomTom: SW:NE; ~150 m wokół punktu
+  const avoidAreas = (Array.isArray(avoidPts) ? avoidPts : []).filter(isPoint).slice(0, 10).map(([lon, lat]) => { const d = 0.0013, dl = d / Math.cos(lat * Math.PI / 180); return [lat - d, lon - dl, lat + d, lon + dl]; });
   const first = await ttCalc(points, ttQuery({ mode, dims, av, env, alts: 2, avoidAreas }));
   if (!first.ok) return first;
   let out = ttMerge([first.seg], mode);
