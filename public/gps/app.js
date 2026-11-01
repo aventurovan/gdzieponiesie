@@ -34,7 +34,7 @@ async function laEnd() { if (!NLA) return; LA.on = false; try { await NLA.end();
 const S = {
   veh: store.get('veh', { h: 3.1, l: 6.36, w: 2.05, t: 3.5 }),
   profiles: store.get('profiles', null), vehId: store.get('vehId', null),
-  opt: Object.assign({ voice: true, d3: true, night: false, sim: false, roadNow: true, poiCol: true, events: true, nextChip: true, autoNight: false, cams: true, limits: true, lanes: true, forceOffline: false, junction: true }, store.get('opt', {})),
+  opt: Object.assign({ voice: true, d3: true, night: false, sim: false, roadNow: true, poiCol: true, events: true, nextChip: true, autoNight: false, cams: true, limits: true, lanes: true, forceOffline: false, junction: true, trees: true }, store.get('opt', {})),
   via: [], avoid: store.get('avoid', { highways: false, tolls: false }), avoidCC: store.get('avoidCC', {}),
   mode: store.get('mode', 'fast'),
   from: null, to: null,          // {name, lon, lat} | null = bieżąca pozycja
@@ -128,8 +128,22 @@ function tuneStyle() {
     } catch (e) {}
   }
 }
+// lasy jako drzewka (wzór na poligonach wood/forest od zoomu 13)
+function addTrees() {
+  if (!map.getSource('openmaptiles')) return;
+  const name = S.opt.night ? 'trees-dark' : 'trees';
+  const put = () => {
+    if (map.getLayer('trees')) map.removeLayer('trees');
+    const before = (map.getStyle().layers.find(l => /^(waterway|road|highway|transportation|bridge|tunnel)/.test(l.id)) || {}).id;
+    map.addLayer({ id: 'trees', type: 'fill', source: 'openmaptiles', 'source-layer': 'landcover', minzoom: 13,
+      filter: ['in', ['get', 'class'], ['literal', ['wood', 'forest']]], paint: { 'fill-pattern': name, 'fill-opacity': ['interpolate', ['linear'], ['zoom'], 13, 0.55, 15, 0.95] } }, before);
+    if (map.getLayer('bud3d')) { try { map.moveLayer('trees', 'bud3d'); } catch (e) {} }
+  };
+  if (map.hasImage(name)) { put(); return; }
+  const img = new Image(); img.onload = () => { try { map.addImage(name, img, { pixelRatio: 2 }); put(); } catch (e) {} }; img.src = 'icons/' + name + '.png?v=1';
+}
 function addLayers() {
-  tuneStyle(); hookTiles();
+  tuneStyle(); hookTiles(); if (S.opt.trees !== false) addTrees();
   // budynki 3D z kafelków OpenMapTiles (warstwa building, render_height)
   if (BUD3D) { map.setLayoutProperty(BUD3D, 'visibility', S.opt.d3 ? 'visible' : 'none'); try { map.setLayerZoomRange(BUD3D, 15, 24); } catch (e) {} }
   else if (!map.getLayer('bud3d') && map.getSource('openmaptiles')) {
@@ -1103,6 +1117,7 @@ document.addEventListener('change', e => {
   if (k === 'd3') { setView3d(i.checked); return; }
   if (k === 'night') { setNight(i.checked); return; }
   S.opt[k] = i.checked; store.set('opt', S.opt); applyOpts(); if (k === 'autoNight') autoNight(true);
+  if (k === 'trees') { if (i.checked) addTrees(); else if (map.getLayer('trees')) map.removeLayer('trees'); }
 });
 // --- punkty pośrednie
 let viaT;
