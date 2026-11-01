@@ -202,6 +202,7 @@ const FAV = { get: () => store.get('fav', []), set: (f) => store.set('fav', f),
   toggle: (p) => { const f = FAV.get(); const i = f.findIndex(x => Math.abs(x.lon - p.lon) < 1e-4 && Math.abs(x.lat - p.lat) < 1e-4); if (i >= 0) f.splice(i, 1); else f.push({ name: p.name, label: p.label || '', lon: p.lon, lat: p.lat }); FAV.set(f); } };
 let SF = { field: 'to', cat: null, results: [] };
 function setField(field, pt) {
+  S.avoidPts = [];
   if (field === 'from') { S.from = pt; $('#from').textContent = pt ? pt.name : 'Bieżąca pozycja'; $('#from').classList.toggle('empty', !pt); }
   else if (field === 'to') { S.to = pt; $('#to').textContent = pt ? pt.name : 'Dokąd jedziemy?'; $('#to').classList.toggle('empty', !pt); }
   else if (field === 'via' && pt) { S.via.push(pt); renderViaChips(); }
@@ -354,7 +355,7 @@ async function computeRoute(fromPos) {
   if (!S.to) { msg.textContent = 'Wybierz cel z listy podpowiedzi.'; return null; }
   $('#btnRoute').disabled = true; msg.textContent = 'Liczę trasę…';
   const body = { from: [from.lon, from.lat], to: [S.to.lon, S.to.lat], via: S.via.map(v => [v.lon, v.lat]), mode: S.mode,
-    camper: { height: S.veh.h, width: S.veh.w, length: S.veh.l, weight: S.veh.t }, avoid: { highways: !!S.avoid.highways, tolls: !!S.avoid.tolls }, avoidByCountry: S.avoidCC };
+    camper: { height: S.veh.h, width: S.veh.w, length: S.veh.l, weight: S.veh.t }, avoid: { highways: !!S.avoid.highways, tolls: !!S.avoid.tolls }, avoidByCountry: S.avoidCC, avoidPts: S.avoidPts || [] };
   let j;
   try {
     const r = await fetch(API + '/gps/route', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -366,7 +367,23 @@ async function computeRoute(fromPos) {
   S.routes = fromPos ? [j] : [j, ...(j.alts || []).map(alt => ({ ...j, ...alt, alts: undefined, total: alt.cum[alt.cum.length - 1] }))];
   delete j.alts; S.altIdx = 0; S.route = j;
   if (!fromPos) { renderSummary(); drawRoute(); drawAlts(); $('#btnGo').classList.remove('hidden'); $('#tOffline').classList.remove('hidden'); }
+  if (j.restrCheck === 'pending') checkRestrictions(j, fromPos);
   return j;
+}
+// sprawdzenie wiaduktów/limitów w tle; gdy coś koliduje – przeliczenie z pominięciem tych miejsc
+async function checkRestrictions(r, fromPos) {
+  r.restrCheck = 'checking'; const badge = $('#restrBadge'); if (badge && !S.nav) { badge.textContent = 'sprawdzam ograniczenia…'; badge.className = 'tag'; }
+  let viol = [];
+  try { const j = await (await fetch(API + '/gps/restr', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ coords: r.coords.filter((_, i) => i % Math.max(1, Math.ceil(r.coords.length / 300)) === 0), camper: { height: S.veh.h, width: S.veh.w, weight: S.veh.t } }) })).json(); viol = j.restrictions || []; } catch (e) {}
+  if (S.route !== r) return;
+  const known = new Set((S.avoidPts || []).map(p => p.join(',')));
+  const fresh = viol.filter(v => !known.has(v.lon + ',' + v.lat));
+  if (fresh.length && (S.avoidPts || []).length < 10) {
+    S.avoidPts = [...(S.avoidPts || []), ...fresh.slice(0, 10 - (S.avoidPts || []).length).map(v => [v.lon, v.lat])];
+    if (S.nav) recalcKeepNav(); else computeRoute(fromPos); return;
+  }
+  r.restrictions = viol; r.restrCheck = 'done'; r.avoided = (S.avoidPts || []).length;
+  if (!S.nav) renderSummary(false); else updateHud();
 }
 function selectAlt(i) {
   if (!S.routes || !S.routes[i]) return;
@@ -404,7 +421,7 @@ function renderSummary(reload = true) {
   const bordersTxt = (r.borders || []).length ? r.borders.map(b => `<span class="tag ${b.wait > 30 ? 'bad' : ''}">🛂 ${b.from}→${b.to}${b.name ? ' ' + esc(b.name) : ''}: ${b.wait != null ? 'kolejka ~' + b.wait + ' min' : 'brak danych'}</span>`).join('') + '<span class="tag" style="opacity:.7">Data by <a href="https://nakordoni.eu" style="color:#5B8CFF">nakordoni.eu</a></span>' : '';
   $('#tSum').innerHTML = `<div class="l1"><b>${hm(r.sec + waitS)}</b><i>•</i><span>${hhmm(eta)}${eta.getDate() !== new Date().getDate() ? ' jutro' : ''}</span><i>•</i><span>${Math.round(r.km)} km</span></div>
     <div class="l2">${r.engine === 'tomtom' ? (trafficAhead(0).min > 0 ? '<span class="bad">🚗 +' + trafficAhead(0).min + ' min korki</span>' : '<span class="ok">🚗 Brak opóźnień</span>') : '<span>ORS</span>'}
-    <span class="tag">${(r.path || []).join(' › ')}</span>${tunnelsTxt}${r.avoided ? '<span class="tag">ominięto ' + r.avoided + ' ' + (r.avoided === 1 ? 'ograniczenie' : 'ograniczeń') + ' (wysokość/masa)</span>' : ''}${(r.restrictions || []).length ? '<span class="tag bad">⚠ na trasie: ' + r.restrictions.map(x => x.maxheight ? x.maxheight.toFixed(1).replace('.', ',') + ' m' : x.maxweight ? x.maxweight + ' t' : x.maxwidth + ' m szer.').join(', ') + '</span>' : ''}${bordersTxt}${r.ttError ? '<span class="bad">TomTom: ' + esc(r.ttError) + '</span>' : ''}</div>`;
+    <span class="tag">${(r.path || []).join(' › ')}</span>${tunnelsTxt}<span id="restrBadge" class="tag ${(r.restrictions || []).length ? 'bad' : ''}">${r.restrCheck === 'pending' || r.restrCheck === 'checking' ? 'sprawdzam ograniczenia…' : (r.restrictions || []).length ? '⚠ na trasie: ' + r.restrictions.map(x => x.maxheight ? x.maxheight.toFixed(1).replace('.', ',') + ' m' : x.maxweight ? x.maxweight + ' t' : x.maxwidth + ' m szer.').join(', ') : r.avoided ? 'ominięto ' + r.avoided + ' ' + (r.avoided === 1 ? 'ograniczenie' : 'ograniczeń') : r.restrCheck === 'truck' ? 'tryb ciężarowy' : '✓ bez ograniczeń wysokości/masy'}</span>${bordersTxt}${r.ttError ? '<span class="bad">TomTom: ' + esc(r.ttError) + '</span>' : ''}</div>`;
   $('#tOptsTxt').textContent = ({ fast: 'Szybka', main: 'Główne drogi', notoll: 'Bez opłat', eco: 'Ekonomiczna' })[S.mode] + ' · Unikaj';
   drawProgressMarks(); fillCountryTable($('#rCcTable')); fillRouteOpts();
   loadPoi(); loadLimits();

@@ -240,6 +240,13 @@ export default {
         if (origin && !ALLOWED_ORIGINS.includes(origin)) return json({ error: 'Ta strona nie ma dostępu do API.' }, 403, cors);
         return await handleGpsSearch(url, env, cors);
       }
+      if (url.pathname === '/gps/restr' && request.method === 'POST') {
+        if (!ALLOWED_ORIGINS.includes(origin)) return json({ error: 'Ta strona nie ma dostępu do API.' }, 403, cors);
+        let b; try { b = await request.json(); } catch { return json({ error: 'Niepoprawny JSON.' }, 400, cors); }
+        const coords = (Array.isArray(b.coords) ? b.coords : []).filter(isPoint); if (coords.length < 2) return json({ restrictions: [] }, 200, cors);
+        const c = b.camper || {}; const dims = { height: clampNum(c.height, 2, 4.5, 3.1), width: clampNum(c.width, 1.8, 2.6, 2.1), weight: clampNum(c.weight, 1, 7.5, 3.5) };
+        return json({ restrictions: await osmRestrictions(coords, dims, env) }, 200, cors);
+      }
       if (url.pathname === '/gps/cams' && request.method === 'POST') {
         if (!ALLOWED_ORIGINS.includes(origin)) return json({ error: 'Ta strona nie ma dostępu do API.' }, 403, cors);
         return await handleGpsCams(request, env, cors);
@@ -1609,7 +1616,7 @@ async function handleGpsRoute(request, env, cors) {
   // 1) TomTom – trasa z korkami, limitami prędkości, tunelami; 2) ORS jako zapas
   let ttError = null;
   if (env.TOMTOM_KEY && body.engine !== 'ors') {
-    const tt = await tomtomGpsRoute({ points, mode, dims, av, env, byCountry: body.avoidByCountry });
+    const tt = await tomtomGpsRoute({ points, mode, dims, av, env, byCountry: body.avoidByCountry, avoidPts: body.avoidPts });
     if (tt.ok) return json(tt.out, 200, cors, { 'X-Cache': tt.cached ? 'HIT' : 'MISS' });
     ttError = tt.error;
     await logEvent(env, { code: 'GP-TT', path: '/gps/route', detail: tt.error });
@@ -1799,23 +1806,15 @@ function ttMerge(segs, mode) {
   };
 }
 // trasa: zwykła, albo – gdy są ustawienia per kraj – liczona odcinkami między granicami z różnymi „unikaj”
-async function tomtomGpsRoute({ points, mode, dims, av, env, byCountry }) {
-  const kvKey = 'gps:tt:' + (await sha256(JSON.stringify({ points, mode, dims, av, byCountry: byCountry || null }))).slice(0, 32);
+async function tomtomGpsRoute({ points, mode, dims, av, env, byCountry, avoidPts }) {
+  const kvKey = 'gps:tt:' + (await sha256(JSON.stringify({ points, mode, dims, av, byCountry: byCountry || null, avoidPts: avoidPts || null }))).slice(0, 32);
   if (env.NK) { const hit = await env.NK.get(kvKey, 'json'); if (hit) return { ok: true, out: { ...hit, cached: true }, cached: true }; }
-  let avoidAreas = [], restrictions = [], first = null;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    first = await ttCalc(points, ttQuery({ mode, dims, av, env, alts: 2, avoidAreas }));
-    if (!first.ok) return first;
-    if (dims.weight > 3.5) break; // tryb ciężarowy pilnuje sam
-    const viol = await osmRestrictions(first.seg.coords, dims, env);
-    const fresh = viol.filter((v) => !avoidAreas.some((a) => v.lat >= a[2] && v.lat <= a[0] && v.lon >= a[1] && v.lon <= a[3]));
-    restrictions = viol;
-    if (!fresh.length) break;
-    for (const v of fresh.slice(0, 10 - avoidAreas.length)) { const d = 0.0007; avoidAreas.push([v.lat + d, v.lon - d, v.lat - d, v.lon + d]); }
-    if (avoidAreas.length >= 10) { first = await ttCalc(points, ttQuery({ mode, dims, av, env, alts: 2, avoidAreas })); if (!first.ok) return first; restrictions = await osmRestrictions(first.seg.coords, dims, env); break; }
-  }
+  // strefy omijane podane przez klienta (po sprawdzeniu ograniczeń w /gps/restr)
+  const avoidAreas = (Array.isArray(avoidPts) ? avoidPts : []).filter(isPoint).slice(0, 10).map(([lon, lat]) => { const d = 0.0007; return [lat + d, lon - d, lat - d, lon + d]; });
+  const first = await ttCalc(points, ttQuery({ mode, dims, av, env, alts: 2, avoidAreas }));
+  if (!first.ok) return first;
   let out = ttMerge([first.seg], mode);
-  out.restrictions = restrictions; out.avoided = avoidAreas.length;
+  out.avoided = avoidAreas.length; out.restrCheck = dims.weight <= 3.5 ? 'pending' : 'truck';
   out.alts = (first.alts || []).map((s) => { const o = ttMerge([s], mode); return { km: o.km, sec: o.sec, delay: o.delay, coords: o.coords, cum: o.cum, steps: o.steps, path: o.path, crossings: o.crossings, traffic: o.traffic, tunnels: o.tunnels, ferries: o.ferries, tolls: o.tolls, bbox: o.bbox }; });
   const bc = byCountry && typeof byCountry === 'object' ? byCountry : null;
   const relevant = bc && out.path.some((cc) => bc[cc] && (bc[cc].tolls || bc[cc].highways));
@@ -1850,20 +1849,13 @@ async function osmRestrictions(coords, dims, env) {
   const kvKey = 'gps:restr:' + (await sha256(JSON.stringify(pts))).slice(0, 32);
   let ways = env.NK ? await env.NK.get(kvKey, 'json') : null;
   if (!ways) {
-    ways = [];
-    const chunks = []; for (let i = 0; i < pts.length - 1; i += 24) chunks.push(pts.slice(i, i + 26));
-    const run = async (chunk, k) => {
-      const line = chunk.map(([x, y]) => `${y.toFixed(4)},${x.toFixed(4)}`).join(',');
-      const ql = `[out:json][timeout:20];(way(around:12,${line})["maxheight"];way(around:12,${line})["maxweight"];way(around:12,${line})["maxwidth"];node(around:12,${line})["maxheight"];node(around:12,${line})["barrier"="height_restrictor"];);out tags center 200;`;
-      const eps = [...OVERPASS.slice(k % OVERPASS.length), ...OVERPASS.slice(0, k % OVERPASS.length)];
-      for (const ep of eps) {
-        try { const r = await fetch(ep, { method: 'POST', body: 'data=' + encodeURIComponent(ql), headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, signal: AbortSignal.timeout(20000) }); if (!r.ok) continue; const d = await r.json();
-          for (const el of d.elements || []) { const t = el.tags || {}; const lat = el.lat ?? el.center?.lat, lon = el.lon ?? el.center?.lon; if (lat == null) continue; ways.push({ lat, lon, h: parseM(t.maxheight), w: parseM(t.maxweight), wd: parseM(t.maxwidth), name: t.name || '' }); }
-          return; } catch (e) {}
-      }
-    };
-    for (let i = 0; i < chunks.length; i += 4) await Promise.all(chunks.slice(i, i + 4).map((c, j) => run(c, i + j)));
-    if (env.NK) await env.NK.put(kvKey, JSON.stringify(ways), { expirationTtl: 14 * 24 * 3600 });
+    ways = null;
+    // jedno zapytanie na całą trasę (wąski korytarz 12 m jest tani), krótki limit; kilka serwerów równolegle – pierwszy wygrywa
+    const line = pts.map(([x, y]) => `${y.toFixed(4)},${x.toFixed(4)}`).join(',');
+    const ql = `[out:json][timeout:8];(way(around:12,${line})["maxheight"];way(around:12,${line})["maxweight"];way(around:12,${line})["maxwidth"];node(around:12,${line})["maxheight"];node(around:12,${line})["barrier"="height_restrictor"];);out tags center 300;`;
+    const one = async (ep) => { const r = await fetch(ep, { method: 'POST', body: 'data=' + encodeURIComponent(ql), headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, signal: AbortSignal.timeout(9000) }); if (!r.ok) throw new Error('' + r.status); return r.json(); };
+    try { const d = await Promise.any(OVERPASS.slice(0, 3).map(one)); ways = []; for (const el of d.elements || []) { const t = el.tags || {}; const lat = el.lat ?? el.center?.lat, lon = el.lon ?? el.center?.lon; if (lat == null) continue; ways.push({ lat, lon, h: parseM(t.maxheight), w: parseM(t.maxweight), wd: parseM(t.maxwidth), name: t.name || '' }); } } catch (e) { ways = []; }
+    if (env.NK && ways.length !== undefined) await env.NK.put(kvKey, JSON.stringify(ways), { expirationTtl: 14 * 24 * 3600 });
   }
   const H = dims.height + 0.1, W = dims.weight, WD = dims.width;
   return ways.filter((x) => (x.h && x.h < H) || (x.w && x.w < W) || (x.wd && x.wd < WD)).map((x) => ({ lat: Math.round(x.lat * 1e5) / 1e5, lon: Math.round(x.lon * 1e5) / 1e5, maxheight: x.h, maxweight: x.w, maxwidth: x.wd, name: x.name }));
