@@ -1707,15 +1707,17 @@ const TT_MANEUVER = {
   ENTER_MOTORWAY: 6, ENTER_FREEWAY: 6, ENTER_HIGHWAY: 6, FOLLOW: 6, SWITCH_PARALLEL_ROAD: 13, SWITCH_MAIN_ROAD: 12,
   TAKE_FERRY: 6, WAYPOINT_LEFT: 6, WAYPOINT_RIGHT: 6, WAYPOINT_REACHED: 6,
 };
-function ttQuery({ mode, dims, av, env, alts = 0 }) {
-  // „bez opłat”: opłaty jak dla pojazdu do 3,5 t zna tylko tryb osobowy (truck widzi e-TOLL dla ciężarówek)
+function ttQuery({ mode, dims, av, env, alts = 0, avoidAreas = [] }) {
+  // kamper do 3,5 t jedzie jak osobowy (zakazy „dla ciężarowych” go nie dotyczą); ograniczenia wysokości/masy sprawdzamy sami z OSM
   const noToll = av.tolls === true || mode === 'notoll';
+  const truck = dims.weight > 3.5 && !noToll;
   const q = new URLSearchParams({
-    key: String(env.TOMTOM_KEY).trim(), travelMode: noToll ? 'car' : 'truck', traffic: 'true', computeTravelTimeFor: 'all',
+    key: String(env.TOMTOM_KEY).trim(), travelMode: truck ? 'truck' : 'car', traffic: 'true', computeTravelTimeFor: 'all',
     routeType: mode === 'eco' ? 'eco' : mode === 'short' ? 'shortest' : 'fastest',
     instructionsType: 'text', language: 'pl-PL', maxAlternatives: String(alts),
   });
-  if (!noToll) { q.set('vehicleHeight', String(dims.height)); q.set('vehicleWidth', String(dims.width)); q.set('vehicleLength', String(dims.length)); q.set('vehicleWeight', String(Math.round(dims.weight * 1000))); q.set('vehicleCommercial', 'false'); q.set('vehicleMaxSpeed', '110'); }
+  if (truck) { q.set('vehicleHeight', String(dims.height)); q.set('vehicleWidth', String(dims.width)); q.set('vehicleLength', String(dims.length)); q.set('vehicleWeight', String(Math.round(dims.weight * 1000))); q.set('vehicleCommercial', 'false'); q.set('vehicleMaxSpeed', '110'); }
+  if (avoidAreas.length) q.set('avoidAreas', avoidAreas.slice(0, 10).map((a) => `${a[0].toFixed(5)},${a[1].toFixed(5)}:${a[2].toFixed(5)},${a[3].toFixed(5)}`).join('|'));
   for (const s of ['traffic', 'tollRoad', 'tollVignette', 'country', 'tunnel', 'motorway', 'ferry']) q.append('sectionType', s);
   const avoid = new Set();
   if (av.highways === true) avoid.add('motorways');
@@ -1800,9 +1802,20 @@ function ttMerge(segs, mode) {
 async function tomtomGpsRoute({ points, mode, dims, av, env, byCountry }) {
   const kvKey = 'gps:tt:' + (await sha256(JSON.stringify({ points, mode, dims, av, byCountry: byCountry || null }))).slice(0, 32);
   if (env.NK) { const hit = await env.NK.get(kvKey, 'json'); if (hit) return { ok: true, out: { ...hit, cached: true }, cached: true }; }
-  const first = await ttCalc(points, ttQuery({ mode, dims, av, env, alts: 2 }));
-  if (!first.ok) return first;
+  let avoidAreas = [], restrictions = [], first = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    first = await ttCalc(points, ttQuery({ mode, dims, av, env, alts: 2, avoidAreas }));
+    if (!first.ok) return first;
+    if (dims.weight > 3.5) break; // tryb ciężarowy pilnuje sam
+    const viol = await osmRestrictions(first.seg.coords, dims, env);
+    const fresh = viol.filter((v) => !avoidAreas.some((a) => v.lat >= a[2] && v.lat <= a[0] && v.lon >= a[1] && v.lon <= a[3]));
+    restrictions = viol;
+    if (!fresh.length) break;
+    for (const v of fresh.slice(0, 10 - avoidAreas.length)) { const d = 0.0007; avoidAreas.push([v.lat + d, v.lon - d, v.lat - d, v.lon + d]); }
+    if (avoidAreas.length >= 10) { first = await ttCalc(points, ttQuery({ mode, dims, av, env, alts: 2, avoidAreas })); if (!first.ok) return first; restrictions = await osmRestrictions(first.seg.coords, dims, env); break; }
+  }
   let out = ttMerge([first.seg], mode);
+  out.restrictions = restrictions; out.avoided = avoidAreas.length;
   out.alts = (first.alts || []).map((s) => { const o = ttMerge([s], mode); return { km: o.km, sec: o.sec, delay: o.delay, coords: o.coords, cum: o.cum, steps: o.steps, path: o.path, crossings: o.crossings, traffic: o.traffic, tunnels: o.tunnels, ferries: o.ferries, tolls: o.tolls, bbox: o.bbox }; });
   const bc = byCountry && typeof byCountry === 'object' ? byCountry : null;
   const relevant = bc && out.path.some((cc) => bc[cc] && (bc[cc].tolls || bc[cc].highways));
@@ -1827,6 +1840,33 @@ async function tomtomGpsRoute({ points, mode, dims, av, env, byCountry }) {
   }
   if (env.NK) await env.NK.put(kvKey, JSON.stringify(out), { expirationTtl: 600 });
   return { ok: true, out };
+}
+
+// ---- Ograniczenia wysokości/masy/szerokości wzdłuż trasy (OSM maxheight/maxweight/maxwidth) ----
+const parseM = (s) => { if (!s) return null; const m = String(s).replace(',', '.').match(/([\d.]+)\s*(m|ft|'|t|lbs)?/i); if (!m) return null; let v = parseFloat(m[1]); if (/ft|'/.test(m[2] || '')) v *= 0.3048; if (/lbs/i.test(m[2] || '')) v *= 0.000453592; return v; };
+async function osmRestrictions(coords, dims, env) {
+  const step = Math.max(1, Math.ceil(coords.length / 300));
+  const pts = coords.filter((_, i) => i % step === 0 || i === coords.length - 1);
+  const kvKey = 'gps:restr:' + (await sha256(JSON.stringify(pts))).slice(0, 32);
+  let ways = env.NK ? await env.NK.get(kvKey, 'json') : null;
+  if (!ways) {
+    ways = [];
+    const chunks = []; for (let i = 0; i < pts.length - 1; i += 24) chunks.push(pts.slice(i, i + 26));
+    const run = async (chunk, k) => {
+      const line = chunk.map(([x, y]) => `${y.toFixed(4)},${x.toFixed(4)}`).join(',');
+      const ql = `[out:json][timeout:20];(way(around:12,${line})["maxheight"];way(around:12,${line})["maxweight"];way(around:12,${line})["maxwidth"];node(around:12,${line})["maxheight"];node(around:12,${line})["barrier"="height_restrictor"];);out tags center 200;`;
+      const eps = [...OVERPASS.slice(k % OVERPASS.length), ...OVERPASS.slice(0, k % OVERPASS.length)];
+      for (const ep of eps) {
+        try { const r = await fetch(ep, { method: 'POST', body: 'data=' + encodeURIComponent(ql), headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, signal: AbortSignal.timeout(20000) }); if (!r.ok) continue; const d = await r.json();
+          for (const el of d.elements || []) { const t = el.tags || {}; const lat = el.lat ?? el.center?.lat, lon = el.lon ?? el.center?.lon; if (lat == null) continue; ways.push({ lat, lon, h: parseM(t.maxheight), w: parseM(t.maxweight), wd: parseM(t.maxwidth), name: t.name || '' }); }
+          return; } catch (e) {}
+      }
+    };
+    for (let i = 0; i < chunks.length; i += 4) await Promise.all(chunks.slice(i, i + 4).map((c, j) => run(c, i + j)));
+    if (env.NK) await env.NK.put(kvKey, JSON.stringify(ways), { expirationTtl: 14 * 24 * 3600 });
+  }
+  const H = dims.height + 0.1, W = dims.weight, WD = dims.width;
+  return ways.filter((x) => (x.h && x.h < H) || (x.w && x.w < W) || (x.wd && x.wd < WD)).map((x) => ({ lat: Math.round(x.lat * 1e5) / 1e5, lon: Math.round(x.lon * 1e5) / 1e5, maxheight: x.h, maxweight: x.w, maxwidth: x.wd, name: x.name }));
 }
 
 // ---- POI przy trasie (OSM Overpass): kempingi, zrzuty, woda, stacje (LPG) ----
