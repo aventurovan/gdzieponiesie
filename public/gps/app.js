@@ -404,7 +404,7 @@ async function computeRoute(fromPos) {
   if (!S.to) { msg.textContent = 'Wybierz cel z listy podpowiedzi.'; return null; }
   $('#btnRoute').disabled = true; msg.textContent = 'Liczę trasę…';
   const body = { from: [from.lon, from.lat], to: [S.to.lon, S.to.lat], via: S.via.map(v => [v.lon, v.lat]), mode: S.mode,
-    camper: { height: S.veh.h, width: S.veh.w, length: S.veh.l, weight: S.veh.t }, avoid: { highways: !!S.avoid.highways, tolls: !!S.avoid.tolls }, avoidByCountry: S.avoidCC, avoidPts: S.avoidPts || [] };
+    camper: { height: S.veh.h, width: S.veh.w, length: S.veh.l, weight: S.veh.t }, avoid: { highways: !!S.avoid.highways, tolls: !!S.avoid.tolls }, avoidByCountry: S.avoidCC, avoidPts: S.avoidPts || [], engine: S.opt.engine || 'osm' };
   let j;
   try {
     const r = await fetch(API + '/gps/route', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -469,7 +469,7 @@ function renderSummary(reload = true) {
   $('#tSum').classList.remove('hidden');
   const bordersTxt = (r.borders || []).length ? r.borders.map(b => `<span class="tag ${b.wait > 30 ? 'bad' : ''}">🛂 ${b.from}→${b.to}${b.name ? ' ' + esc(b.name) : ''}: ${b.wait != null ? 'kolejka ~' + b.wait + ' min' : 'brak danych'}</span>`).join('') + '<span class="tag" style="opacity:.7">Data by <a href="https://nakordoni.eu" style="color:#5B8CFF">nakordoni.eu</a></span>' : '';
   $('#tSum').innerHTML = `<div class="l1"><b>${hm(r.sec + waitS)}</b><i>•</i><span>${hhmm(eta)}${eta.getDate() !== new Date().getDate() ? ' jutro' : ''}</span><i>•</i><span>${Math.round(r.km)} km</span></div>
-    <div class="l2">${r.engine === 'tomtom' ? (trafficAhead(0).min > 0 ? '<span class="bad">🚗 +' + trafficAhead(0).min + ' min korki</span>' : '<span class="ok">🚗 Brak opóźnień</span>') : '<span>ORS</span>'}
+    <div class="l2">${(r.engine === 'tomtom' || (r.engine === 'osm' && r.ttTime)) ? (trafficAhead(0).min > 0 ? '<span class="bad">🚗 +' + trafficAhead(0).min + ' min korki</span>' : '<span class="ok">🚗 Brak opóźnień</span>') : '<span class="tag">bez korków (' + (r.engine === 'osm' ? 'TomTom niedostępny' : 'ORS') + ')</span>'}${r.note ? '<span class="tag bad">' + esc(r.note) + '</span>' : ''}
     <span class="tag">${(r.path || []).join(' › ')}</span>${tunnelsTxt}<span id="restrBadge" class="tag ${(r.restrictions || []).length ? 'bad' : ''}">${r.restrCheck === 'pending' || r.restrCheck === 'checking' ? 'sprawdzam ograniczenia…' : (r.restrictions || []).length ? '⚠ na trasie: ' + r.restrictions.map(x => x.maxheight ? x.maxheight.toFixed(1).replace('.', ',') + ' m' : x.maxweight ? x.maxweight + ' t' : x.maxwidth + ' m szer.').join(', ') : r.avoided ? 'ominięto ' + r.avoided + ' ' + (r.avoided === 1 ? 'ograniczenie' : 'ograniczeń') : r.restrCheck === 'truck' ? 'tryb ciężarowy' : '✓ bez ograniczeń wysokości/masy'}</span>${bordersTxt}${r.ttError ? '<span class="bad">TomTom: ' + esc(r.ttError) + '</span>' : ''}</div>`;
   $('#tOptsTxt').textContent = ({ fast: 'Szybka', main: 'Główne drogi', notoll: 'Bez opłat', eco: 'Ekonomiczna' })[S.mode] + ' · Unikaj';
   drawProgressMarks(); fillCountryTable($('#rCcTable')); fillRouteOpts();
@@ -740,7 +740,7 @@ function fillRouteOpts(busy) {
   $('#rAvoidMoto').checked = !!S.avoid.highways; $('#rAvoidToll').checked = !!S.avoid.tolls;
   const r = S.route;
   $('#rSum').innerHTML = busy ? '<b style="color:#8b93a5">Liczę…</b>' : r ? `<b>${hm(r.sec + waitAhead(0))}</b><i>•</i><span>${Math.round(r.km)} km</span><i>•</i><span>${hhmm(new Date(Date.now() + (r.sec + waitAhead(0)) * 1000))}</span>${r.delay > 60 ? '<em>+' + Math.round(r.delay / 60) + ' min korki</em>' : ''}` : '';
-  $('#rNote').textContent = r && r.byCountry ? 'Trasa liczona odcinkami między granicami.' : '';
+  $('#rNote').textContent = r && r.byCountry ? 'Trasa liczona odcinkami między granicami.' : (r && r.note ? r.note : '');
   fillCountryTable($('#rCcTable'));
   if (!$('#ropts').classList.contains('hidden') && r) fitRouteHalf();
 }
@@ -1069,6 +1069,7 @@ function showTab(t) {
 $('#btnView').addEventListener('click', () => setView3d(!S.opt.d3));
 $('#opt3d').addEventListener('change', e => setView3d(e.target.checked));
 $('#optNight').addEventListener('change', e => setNight(e.target.checked));
+$('#optEngine').addEventListener('change', e => { S.opt.engine = e.target.value; store.set('opt', S.opt); S.avoidPts = []; if (S.to && !S.nav) computeRoute(); });
 
 $('#optVoice').addEventListener('change', e => { S.opt.voice = e.target.checked; store.set('opt', S.opt); });
 $('#optSim').addEventListener('change', e => { S.opt.sim = e.target.checked; store.set('opt', S.opt); if (S.nav) { if (S.opt.sim) startSim(); else stopSim(); } });
@@ -1171,7 +1172,7 @@ function fillSteps() {
 function fillData() {
   const r = S.route; if (!r) return;
   const tollKm = (r.tolls || []).reduce((s, [a, b]) => s + (r.cum[b] - r.cum[a]), 0) / 1000;
-  const rows = [['Dystans', Math.round(r.km) + ' km'], ['Limity prędkości', (r.limits || []).length ? r.limits.length + ' odcinków (' + (r.limitsSrc || '?') + ')' : 'brak danych'], ['Ograniczenia', (r.restrictions || []).length ? r.restrictions.length + ' na trasie!' : (r.avoided ? 'ominięto ' + r.avoided : 'brak na trasie')], ['Czas jazdy', hm(r.sec)], ['Korki', r.delay > 60 ? '+' + Math.round(r.delay / 60) + ' min' : 'brak'], ['Kraje', (r.path || []).map(c => KRAJ[c] || c).join(', ')], ['Granice', (r.crossings || []).map(c => c.from + '→' + c.to).join(', ') || '—'], ['Odcinki płatne', Math.round(tollKm) + ' km'], ['Tunele', (r.tunnels || []).length], ['Promy', (r.ferries || []).length], ['Silnik', r.engine === 'tomtom' ? (r.profile === 'truck' && S.veh.t > 3.5 ? 'TomTom (ciężarowy)' : 'TomTom osobowy + kontrola wysokości/masy z OSM') : 'openrouteservice'], ['Profil', `${fmt1(S.veh.h)} m · ${fmt1(S.veh.l)} m · ${fmt1(S.veh.t)} t`]];
+  const rows = [['Dystans', Math.round(r.km) + ' km'], ['Limity prędkości', (r.limits || []).length ? r.limits.length + ' odcinków (' + (r.limitsSrc || '?') + ')' : 'brak danych'], ['Ograniczenia', (r.restrictions || []).length ? r.restrictions.length + ' na trasie!' : (r.avoided ? 'ominięto ' + r.avoided : 'brak na trasie')], ['Czas jazdy', hm(r.sec)], ['Korki', r.delay > 60 ? '+' + Math.round(r.delay / 60) + ' min' : 'brak'], ['Kraje', (r.path || []).map(c => KRAJ[c] || c).join(', ')], ['Granice', (r.crossings || []).map(c => c.from + '→' + c.to).join(', ') || '—'], ['Odcinki płatne', Math.round(tollKm) + ' km'], ['Tunele', (r.tunnels || []).length], ['Promy', (r.ferries || []).length], ['Silnik', r.engine === 'osm' ? 'OSM (trasa na mapie) + korki TomTom' : r.engine === 'tomtom' ? (r.profile === 'truck' && S.veh.t > 3.5 ? 'TomTom (ciężarowy)' : 'TomTom osobowy + kontrola wysokości/masy z OSM') : 'openrouteservice'], ['Profil', `${fmt1(S.veh.h)} m · ${fmt1(S.veh.l)} m · ${fmt1(S.veh.t)} t`]];
   $('#qData').innerHTML = rows.map(([k, v]) => `<div class="kv"><span>${k}</span><b>${esc(String(v))}</b></div>`).join('');
 }
 function exportGpx() {
@@ -1389,7 +1390,7 @@ function isDesktop() {
 function init() {
   if (isDesktop()) { $('#desk').classList.remove('hidden'); $('#sheet').classList.add('hidden'); return; }
   document.body.classList.toggle('night', !!S.opt.night);
-  $('#optVoice').checked = !!S.opt.voice; $('#opt3d').checked = !!S.opt.d3; $('#optRate').value = S.opt.rate || 1; $('#rateTxt').textContent = (S.opt.rate || 1).toFixed(2).replace('.', ',').replace(/0$/, '') + '×'; $('#optNight').checked = !!S.opt.night; $('#optSim').checked = !!S.opt.sim;
+  $('#optVoice').checked = !!S.opt.voice; $('#opt3d').checked = !!S.opt.d3; $('#optEngine').value = S.opt.engine || 'osm'; $('#optRate').value = S.opt.rate || 1; $('#rateTxt').textContent = (S.opt.rate || 1).toFixed(2).replace('.', ',').replace(/0$/, '') + '×'; $('#optNight').checked = !!S.opt.night; $('#optSim').checked = !!S.opt.sim;
   $$('#modes button').forEach(x => x.setAttribute('aria-pressed', x.dataset.mode === S.mode));
   vehInit(); vehLine(); fillVeh(S.vehId); initMap(); $('#btnView').textContent = S.opt.d3 ? '3D' : '2D';
   startGps();

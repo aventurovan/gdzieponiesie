@@ -1631,8 +1631,14 @@ async function handleGpsRoute(request, env, cors) {
   const av = body.avoid || {};
   const avoidCountries = Array.isArray(av.countries) ? [...new Set(av.countries)].filter((k) => ISO_TO_ID[k]).sort().slice(0, 10) : [];
 
-  // 1) TomTom – trasa z korkami, limitami prędkości, tunelami; 2) ORS jako zapas
+  // silnik: 'osm' (domyślnie) = geometria i manewry z ORS na danych OSM (leży na mapie), korki/czas z TomTom nałożone po pozycji;
+  // 'tomtom' = wszystko z TomTom; 'ors' = sam ORS
   let ttError = null;
+  if (env.TOMTOM_KEY && env.ORS_API_KEY && (body.engine || 'osm') === 'osm') {
+    const r = await osmEngineRoute({ points, mode, dims, av, env, body });
+    if (r.ok) return json(r.out, 200, cors);
+    ttError = r.error; // dalej zwykły TomTom
+  }
   if (env.TOMTOM_KEY && body.engine !== 'ors') {
     const tt = await tomtomGpsRoute({ points, mode, dims, av, env, byCountry: body.avoidByCountry, avoidPts: body.avoidPts });
     if (tt.ok) return json(tt.out, 200, cors, { 'X-Cache': tt.cached ? 'HIT' : 'MISS' });
@@ -2132,4 +2138,60 @@ async function handleOsmLimits(coords, env, cors) {
   const out = { ways: [...ways.values()], errors };
   if (env.NK && !errors) await env.NK.put(kvKey, JSON.stringify(out), { expirationTtl: 14 * 24 * 3600 });
   return json(out, 200, cors);
+}
+
+// ---- Silnik „osm”: ORS (car ≤3,5 t / hgv >3,5 t) daje geometrię i manewry zgodne z mapą; TomTom daje czas z korkami i odcinki korków ----
+async function osmEngineRoute({ points, mode, dims, av, env, body }) {
+  const avoidPolys = (Array.isArray(body.avoidPts) ? body.avoidPts : []).filter(isPoint).slice(0, 10).map(([lon, lat]) => { const d = 0.0013, dl = d / Math.cos(lat * Math.PI / 180); return [[lon - dl, lat - d], [lon + dl, lat - d], [lon + dl, lat + d], [lon - dl, lat + d], [lon - dl, lat - d]]; });
+  const heavy = dims.weight > 3.5;
+  const options = heavy ? { vehicle_type: 'hgv', profile_params: { restrictions: dims } } : {};
+  const features = []; if (av.highways === true) features.push('highways'); if (av.tolls === true || mode === 'notoll') features.push('tollways');
+  if (features.length) options.avoid_features = features;
+  if (avoidPolys.length) options.avoid_polygons = { type: 'MultiPolygon', coordinates: avoidPolys.map((p) => [p]) };
+  const bc = body.avoidByCountry && typeof body.avoidByCountry === 'object' ? body.avoidByCountry : null;
+  const avoidCountries = bc ? Object.keys(bc).filter((k) => bc[k] && bc[k].highways && ISO_TO_ID[k]) : [];
+  const payload = { coordinates: points, radiuses: points.map(() => 2000), preference: mode === 'eco' || mode === 'main' ? 'recommended' : 'fastest', instructions: true, instructions_format: 'text', language: 'pl', units: 'm', extra_info: ['countryinfo', 'tollways'], ...(Object.keys(options).length ? { options } : {}) };
+  if (points.length === 2 && !avoidPolys.length) payload.alternative_routes = { target_count: 3, share_factor: 0.6, weight_factor: 1.6 };
+  const kvKey = 'gps:osm:' + (await sha256(JSON.stringify(payload) + heavy)).slice(0, 32);
+  let data = env.NK ? await env.NK.get(kvKey, 'json') : null;
+  if (!data) {
+    const r = await orsRoute(payload, env, heavy);
+    if (!r.ok) return { ok: false, error: 'ORS ' + (r.orsStatus || r.status) + ': ' + (r.error || '') };
+    data = r.data; if (env.NK) await env.NK.put(kvKey, JSON.stringify(data), { expirationTtl: 7 * 24 * 3600 });
+  }
+  const routes = (data.features || []).map((f) => orsToRoute(f, mode, heavy));
+  if (!routes.length) return { ok: false, error: 'ORS: brak trasy' };
+  // TomTom: czas z korkami + odcinki korków dla głównej trasy (i alternatyw) – po punktach pośrednich co ~15 km, żeby TomTom jechał tą samą drogą
+  for (const rt of routes) {
+    try {
+      const n = rt.coords.length; const wp = [rt.coords[0]]; let next = 15000; for (let i = 1; i < n - 1; i++) { if (rt.cum[i] >= next) { wp.push(rt.coords[i]); next = rt.cum[i] + 15000; } if (wp.length >= 18) break; } wp.push(rt.coords[n - 1]);
+      const q = new URLSearchParams({ key: String(env.TOMTOM_KEY).trim(), travelMode: 'car', traffic: 'true', computeTravelTimeFor: 'all', routeType: 'fastest', maxAlternatives: '0', routeRepresentation: 'polyline' }); q.append('sectionType', 'traffic'); q.append('sectionType', 'tunnel');
+      const tt = await ttCalc(wp, q);
+      if (tt.ok) {
+        const seg = tt.seg; rt.sec = Math.round(seg.sec); rt.secNoTraffic = Math.round(seg.secNo); rt.delay = seg.delay || 0;
+        // odcinki korków TomToma → indeksy naszej geometrii (najbliższy punkt), tylko gdy leżą blisko
+        const samp = rt.coords.map((c, i) => [c, i]).filter((_, i) => i % Math.max(1, Math.ceil(n / 1500)) === 0);
+        const near = (p) => { let best = Infinity, bi = -1; for (const [c, i] of samp) { const d = haversineKm(c, p) * 1000; if (d < best) { best = d; bi = i; } } return best < 60 ? bi : -1; };
+        rt.traffic = []; for (const t of seg.traffic || []) { const a = near(seg.coords[t.a]), b = near(seg.coords[t.b]); if (a >= 0 && b > a) rt.traffic.push({ a, b, delay: t.delay, mag: t.mag, kmh: t.kmh }); }
+        rt.tunnels = []; for (const t of seg.tunnels || []) { const a = near(seg.coords[t.a]), b = near(seg.coords[t.b]); if (a >= 0 && b > a) rt.tunnels.push({ a, b, at: Math.round(rt.cum[a]), len: Math.round(rt.cum[b] - rt.cum[a]), cat: t.cat }); }
+        rt.ttTime = true;
+      } else rt.ttError = tt.error;
+    } catch (e) { rt.ttError = String(e && e.message || e); }
+  }
+  const out = routes[0]; out.alts = routes.slice(1).map((o) => ({ km: o.km, sec: o.sec, delay: o.delay, coords: o.coords, cum: o.cum, steps: o.steps, path: o.path, crossings: o.crossings, traffic: o.traffic, tunnels: o.tunnels, ferries: [], tolls: o.tolls, bbox: o.bbox }));
+  out.engine = 'osm'; out.profile = heavy ? 'hgv' : 'car'; out.avoided = avoidPolys.length; out.restrCheck = heavy ? 'truck' : 'pending';
+  if (avoidCountries.length) out.note = 'ORS nie umie unikać autostrad tylko w wybranym kraju – użyj „Unikaj autostrad” globalnie.';
+  return { ok: true, out };
+}
+function orsToRoute(f, mode, heavy) {
+  const coords = f.geometry.coordinates.map(([x, y]) => [Math.round(x * 1e5) / 1e5, Math.round(y * 1e5) / 1e5]);
+  const p = f.properties; const n = Math.max(coords.length - 1, 0);
+  const countryAt = new Array(n).fill('?');
+  for (const [a, b, id] of p.extras?.countryinfo?.values ?? []) { const code = COUNTRIES[id] || '#' + id; for (let i = a; i < b && i < n; i++) countryAt[i] = code; }
+  const cum = new Array(coords.length).fill(0); const path = []; let prev = null; const crossings = [];
+  for (let i = 0; i < n; i++) { cum[i + 1] = cum[i] + haversineKm(coords[i], coords[i + 1]) * 1000; const cc = countryAt[i]; if (cc !== '?' && cc[0] !== '#' && cc !== prev) { if (prev) crossings.push({ from: prev, to: cc, at: Math.round(cum[i]), idx: i }); path.push(cc); prev = cc; } }
+  const steps = [];
+  for (const seg of p.segments || []) for (const s of seg.steps || []) steps.push({ t: s.type, i: s.instruction, n: s.name && s.name !== '-' ? s.name : '', d: Math.round(s.distance), s: Math.round(s.duration * (heavy ? 0.78 : 1.1)), wp: s.way_points, ...(s.exit_number ? { exit: s.exit_number } : {}) });
+  const tf = heavy ? 0.78 : 1.1;
+  return { km: Math.round((p.summary?.distance ?? 0) / 100) / 10, sec: Math.round((p.summary?.duration ?? 0) * tf), coords, cum: cum.map(Math.round), steps, path, crossings, tolls: [], traffic: [], limits: [], tunnels: [], ferries: [], mode, delay: 0, bbox: f.bbox || [Math.min(...coords.map((c) => c[0])), Math.min(...coords.map((c) => c[1])), Math.max(...coords.map((c) => c[0])), Math.max(...coords.map((c) => c[1]))] };
 }
