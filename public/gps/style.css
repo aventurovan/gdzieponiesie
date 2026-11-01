@@ -383,3 +383,10 @@ body.night #map{background:#1C2029}
 .pk>div{flex:1;min-width:0}.pk b{display:block;font-size:15px;font-weight:700;color:#fff}.pk small{display:block;font-size:12px;font-weight:600;color:#8b93a5}
 .pk .bar{height:6px;border-radius:3px;background:#2E3647;overflow:hidden;margin-top:6px}.pk .bar i{display:block;height:100%;background:var(--blue)}
 .pk .mini.ok{background:#1E8A4C;color:#fff}
+
+.sugg li{display:flex;align-items:center;gap:10px}
+.sugg .si-ic{width:24px;text-align:center;flex:none;font-size:16px}
+.sugg .si-t{flex:1;min-width:0;display:flex;flex-direction:column}
+.sugg .si-t b{font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sugg .si-t small{font-size:12px;font-weight:600;color:#8b93a5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sugg .si-d{flex:none;font-size:12px;font-weight:700;color:#5B8CFF}

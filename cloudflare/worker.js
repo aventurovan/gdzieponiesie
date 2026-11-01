@@ -236,6 +236,10 @@ export default {
         if (!ALLOWED_ORIGINS.includes(origin) && !ALLOWED_ORIGINS.includes('https://' + (request.headers.get('Referer') || '').split('/')[2])) return json({ error: 'Ta strona nie ma dostępu do API.' }, 403, cors);
         return await handleTtMap(request, url, env, cors);
       }
+      if (url.pathname === '/gps/search' && request.method === 'GET') {
+        if (!ALLOWED_ORIGINS.includes(origin)) return json({ error: 'Ta strona nie ma dostępu do API.' }, 403, cors);
+        return await handleGpsSearch(url, env, cors);
+      }
       if (url.pathname === '/gps/cams' && request.method === 'POST') {
         if (!ALLOWED_ORIGINS.includes(origin)) return json({ error: 'Ta strona nie ma dostępu do API.' }, 403, cors);
         return await handleGpsCams(request, env, cors);
@@ -2012,4 +2016,37 @@ async function handleGpsCams(request, env, cors) {
   const out = { cams: [...cams.values()], sections: [...sections.values()], errors };
   if (env.NK && !errors) await env.NK.put(kvKey, JSON.stringify(out), { expirationTtl: 14 * 24 * 3600 });
   return json(out, 200, cors);
+}
+
+// ---- Wyszukiwanie miejsc i adresów: Photon (OSM) + miasta planera; wyniki ważone odległością ----
+async function handleGpsSearch(url, env, cors) {
+  const q = (url.searchParams.get('q') || '').trim(); if (q.length < 2) return json({ results: [] }, 200, cors);
+  const lat = parseFloat(url.searchParams.get('lat')), lon = parseFloat(url.searchParams.get('lon')); const hasPos = Number.isFinite(lat) && Number.isFinite(lon);
+  const kvKey = 'gps:srch:' + (await sha256(q.toLowerCase() + '|' + (hasPos ? lat.toFixed(1) + ',' + lon.toFixed(1) : ''))).slice(0, 32);
+  if (env.NK) { const hit = await env.NK.get(kvKey, 'json'); if (hit) return json({ ...hit, cached: true }, 200, cors); }
+  const out = [];
+  // 1) miasta z planera (szybkie, polskie nazwy)
+  try { for (const c of searchCities(q).slice(0, 4)) out.push({ name: c.name, label: c.label, lon: c.lon, lat: c.lat, type: 'city', country: c.country }); } catch (e) {}
+  // 2) Photon: ulice, adresy, miejsca
+  try {
+    const p = new URLSearchParams({ q, limit: '10', lang: 'pl' }); if (hasPos) { p.set('lat', lat.toFixed(4)); p.set('lon', lon.toFixed(4)); p.set('zoom', '10'); p.set('location_bias_scale', '0.3'); }
+    const r = await fetch('https://photon.komoot.io/api/?' + p.toString(), { headers: { 'User-Agent': 'Azimo/1.0 (gdzieponiesie.pl)' }, signal: AbortSignal.timeout(6000) });
+    const j = await r.json();
+    for (const f of j.features || []) {
+      const pr = f.properties || {}; const [flon, flat] = f.geometry.coordinates;
+      const name = pr.name || [pr.street, pr.housenumber].filter(Boolean).join(' ') || pr.city || '';
+      if (!name) continue;
+      const addr = [pr.street && pr.name !== pr.street ? [pr.street, pr.housenumber].filter(Boolean).join(' ') : (pr.housenumber && !pr.name ? '' : ''), pr.city || pr.town || pr.village || pr.county, pr.country].filter(Boolean).join(', ');
+      const type = pr.osm_key === 'highway' ? 'street' : pr.osm_key === 'place' ? 'city' : (pr.osm_key === 'tourism' || pr.osm_key === 'amenity' || pr.osm_key === 'shop' || pr.osm_key === 'leisure') ? 'poi' : pr.housenumber ? 'address' : 'other';
+      const kind = pr.osm_value || '';
+      out.push({ name, label: addr, lon: Math.round(flon * 1e5) / 1e5, lat: Math.round(flat * 1e5) / 1e5, type, kind, country: (pr.countrycode || '').toUpperCase() });
+    }
+  } catch (e) {}
+  // dedup + odległość
+  const seen = new Set(); const res = [];
+  for (const x of out) { const k = x.name.toLowerCase() + '|' + x.lon.toFixed(2) + ',' + x.lat.toFixed(2); if (seen.has(k)) continue; seen.add(k); if (hasPos) x.dist = Math.round(haversineKm([lon, lat], [x.lon, x.lat]) * 10) / 10; res.push(x); }
+  if (hasPos) res.sort((a, b) => (a.type === 'city' && a.name.toLowerCase().startsWith(q.toLowerCase()) ? -1 : 0) - (b.type === 'city' && b.name.toLowerCase().startsWith(q.toLowerCase()) ? -1 : 0) || a.dist - b.dist);
+  const o = { results: res.slice(0, 12) };
+  if (env.NK) await env.NK.put(kvKey, JSON.stringify(o), { expirationTtl: 24 * 3600 });
+  return json(o, 200, cors);
 }

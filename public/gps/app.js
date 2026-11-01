@@ -240,16 +240,19 @@ function renderSearchHome() {
   L.innerHTML = html;
 }
 let suggT;
+const SRCH_ICO = { city: '🏙', street: '🛣', address: '📍', poi: '📌', other: '📍' };
 async function suggest(q) {
   const ul = $('#sugg'); if (q.length < 2) { ul.classList.add('hidden'); return; }
-  let j; try { j = await (await fetch(API + '/geocode?q=' + encodeURIComponent(q))).json(); } catch (e) { return; }
+  let j; try { const pos = S.pos ? `&lat=${S.pos.lat.toFixed(4)}&lon=${S.pos.lon.toFixed(4)}` : ''; j = await (await fetch(API + '/gps/search?q=' + encodeURIComponent(q) + pos)).json(); } catch (e) { return; }
   if ($('#sInput').value.trim() !== q) return;
-  ul._res = j.results || []; ul.innerHTML = ul._res.slice(0, 8).map((x, i) => `<li data-i="${i}">${esc(x.label || x.name)}</li>`).join(''); ul.classList.toggle('hidden', !ul.innerHTML);
+  ul._res = j.results || [];
+  ul.innerHTML = ul._res.map((x, i) => `<li data-i="${i}"><span class="si-ic">${SRCH_ICO[x.type] || '📍'}</span><span class="si-t"><b>${esc(x.name)}</b>${x.label ? '<small>' + esc(x.label) + '</small>' : ''}</span>${x.dist != null ? '<small class="si-d">' + (x.dist < 10 ? x.dist.toFixed(1).replace('.', ',') : Math.round(x.dist)) + ' km</small>' : ''}</li>`).join('');
+  ul.classList.toggle('hidden', !ul.innerHTML);
 }
 $('#sInput').addEventListener('input', () => { const q = $('#sInput').value.trim(); $('#sClear').hidden = !q; clearTimeout(suggT); suggT = setTimeout(() => suggest(q), 250); });
 $('#sClear').addEventListener('click', () => { $('#sInput').value = ''; $('#sClear').hidden = true; $('#sugg').classList.add('hidden'); $('#sInput').focus(); });
 $('#sBack').addEventListener('click', closeSearch);
-$('#sugg').addEventListener('click', e => { const li = e.target.closest('li'); if (!li) return; const x = $('#sugg')._res[+li.dataset.i]; pick({ name: x.name, label: x.label || '', lon: x.lon, lat: x.lat }); });
+$('#sugg').addEventListener('click', e => { const li = e.target.closest('li'); if (!li) return; const x = $('#sugg')._res[+li.dataset.i]; pick({ name: x.name + (x.type === 'street' && x.label ? ', ' + x.label.split(',')[0] : ''), label: x.label || '', lon: x.lon, lat: x.lat }); });
 $('#sList').addEventListener('click', async e => {
   const st = e.target.closest('[data-star]'); if (st) { const row = st.closest('[data-pt]'); if (row) { FAV.toggle(JSON.parse(row.dataset.pt)); SF.cat ? renderCat() : renderSearchHome(); } return; }
   const row = e.target.closest('.si, .sh button'); if (!row) return;
@@ -1024,8 +1027,8 @@ document.addEventListener('change', e => {
 let viaT;
 $('#viaInput').addEventListener('input', () => { clearTimeout(viaT); viaT = setTimeout(async () => {
   const q = $('#viaInput').value.trim(); const ul = $('#viaSugg'); if (q.length < 2) { ul.classList.add('hidden'); return; }
-  let j; try { j = await (await fetch(API + '/geocode?q=' + encodeURIComponent(q))).json(); } catch (e) { return; }
-  ul._res = j.results || []; ul.innerHTML = ul._res.slice(0, 6).map((x, i) => `<li data-i="${i}">${esc(x.label || x.name)}</li>`).join(''); ul.classList.toggle('hidden', !ul.innerHTML);
+  let j; try { const pos = S.pos ? `&lat=${S.pos.lat.toFixed(4)}&lon=${S.pos.lon.toFixed(4)}` : ''; j = await (await fetch(API + '/gps/search?q=' + encodeURIComponent(q) + pos)).json(); } catch (e) { return; }
+  ul._res = j.results || []; ul.innerHTML = ul._res.slice(0, 8).map((x, i) => `<li data-i="${i}"><span class="si-ic">${SRCH_ICO[x.type] || '📍'}</span><span class="si-t"><b>${esc(x.name)}</b>${x.label ? '<small>' + esc(x.label) + '</small>' : ''}</span></li>`).join(''); ul.classList.toggle('hidden', !ul.innerHTML);
 }, 250); });
 $('#viaSugg').addEventListener('click', e => { const li = e.target.closest('li'); if (!li) return; const x = $('#viaSugg')._res[+li.dataset.i]; S.via.push({ name: x.name, lon: x.lon, lat: x.lat }); $('#viaInput').value = ''; $('#viaSugg').classList.add('hidden'); fillVia(); recalcKeepNav(); });
 function fillVia() { $('#viaList').innerHTML = S.via.length ? S.via.map((v, i) => `<div class="via"><b>${esc(v.name)}</b><button type="button" data-rm="${i}">Usuń</button></div>`).join('') : '<div class="via" style="color:#8b93a5">Brak punktów pośrednich</div>'; }
