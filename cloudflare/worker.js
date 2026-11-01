@@ -237,7 +237,7 @@ export default {
         return await handleTtMap(request, url, env, cors);
       }
       if (url.pathname === '/gps/search' && request.method === 'GET') {
-        if (!ALLOWED_ORIGINS.includes(origin)) return json({ error: 'Ta strona nie ma dostępu do API.' }, 403, cors);
+        if (origin && !ALLOWED_ORIGINS.includes(origin)) return json({ error: 'Ta strona nie ma dostępu do API.' }, 403, cors);
         return await handleGpsSearch(url, env, cors);
       }
       if (url.pathname === '/gps/cams' && request.method === 'POST') {
@@ -2041,12 +2041,12 @@ async function handleGpsSearch(url, env, cors) {
       const kind = pr.osm_value || '';
       out.push({ name, label: addr, lon: Math.round(flon * 1e5) / 1e5, lat: Math.round(flat * 1e5) / 1e5, type, kind, country: (pr.countrycode || '').toUpperCase() });
     }
-  } catch (e) {}
+  } catch (e) { var photonErr = String(e && e.message || e); }
   // dedup + odległość
   const seen = new Set(); const res = [];
   for (const x of out) { const k = x.name.toLowerCase() + '|' + x.lon.toFixed(2) + ',' + x.lat.toFixed(2); if (seen.has(k)) continue; seen.add(k); if (hasPos) x.dist = Math.round(haversineKm([lon, lat], [x.lon, x.lat]) * 10) / 10; res.push(x); }
   if (hasPos) res.sort((a, b) => (a.type === 'city' && a.name.toLowerCase().startsWith(q.toLowerCase()) ? -1 : 0) - (b.type === 'city' && b.name.toLowerCase().startsWith(q.toLowerCase()) ? -1 : 0) || a.dist - b.dist);
-  const o = { results: res.slice(0, 12) };
-  if (env.NK) await env.NK.put(kvKey, JSON.stringify(o), { expirationTtl: 24 * 3600 });
+  const o = { results: res.slice(0, 12), ...(typeof photonErr !== 'undefined' && photonErr ? { photonErr } : {}) };
+  if (env.NK && !o.photonErr) await env.NK.put(kvKey, JSON.stringify(o), { expirationTtl: 24 * 3600 });
   return json(o, 200, cors);
 }

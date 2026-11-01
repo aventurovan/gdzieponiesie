@@ -243,9 +243,10 @@ let suggT;
 const SRCH_ICO = { city: '🏙', street: '🛣', address: '📍', poi: '📌', other: '📍' };
 async function suggest(q) {
   const ul = $('#sugg'); if (q.length < 2) { ul.classList.add('hidden'); return; }
-  let j; try { const pos = S.pos ? `&lat=${S.pos.lat.toFixed(4)}&lon=${S.pos.lon.toFixed(4)}` : ''; j = await (await fetch(API + '/gps/search?q=' + encodeURIComponent(q) + pos)).json(); } catch (e) { return; }
+  let j; try { const pos = S.pos ? `&lat=${S.pos.lat.toFixed(4)}&lon=${S.pos.lon.toFixed(4)}` : ''; const r = await fetch(API + '/gps/search?q=' + encodeURIComponent(q) + pos); j = await r.json(); if (!r.ok) throw new Error(j.error || r.status); } catch (e) { ul._res = []; ul.innerHTML = `<li><span class="si-t"><small>Błąd wyszukiwania: ${esc(e.message || e)}</small></span></li>`; ul.classList.remove('hidden'); return; }
   if ($('#sInput').value.trim() !== q) return;
   ul._res = j.results || [];
+  if (!ul._res.length) { ul.innerHTML = `<li><span class="si-t"><small>Brak wyników${j.photonErr ? ' (Photon: ' + esc(j.photonErr) + ')' : ''}</small></span></li>`; ul.classList.remove('hidden'); return; }
   ul.innerHTML = ul._res.map((x, i) => `<li data-i="${i}"><span class="si-ic">${SRCH_ICO[x.type] || '📍'}</span><span class="si-t"><b>${esc(x.name)}</b>${x.label ? '<small>' + esc(x.label) + '</small>' : ''}</span>${x.dist != null ? '<small class="si-d">' + (x.dist < 10 ? x.dist.toFixed(1).replace('.', ',') : Math.round(x.dist)) + ' km</small>' : ''}</li>`).join('');
   ul.classList.toggle('hidden', !ul.innerHTML);
 }
