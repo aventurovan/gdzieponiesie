@@ -1641,6 +1641,8 @@ async function handleGpsRoute(request, env, cors) {
   } else if (!env.TOMTOM_KEY) ttError = 'brak TOMTOM_KEY w Workerze';
   if (!env.ORS_API_KEY) return json({ error: 'Worker nie ma sekretu ORS_API_KEY.' }, 500, cors);
   const options = { vehicle_type: 'hgv', profile_params: { restrictions: dims } };
+  const avoidPolys = (Array.isArray(body.avoidPts) ? body.avoidPts : []).filter(isPoint).slice(0, 10).map(([lon, lat]) => { const d = 0.0013, dl = d / Math.cos(lat * Math.PI / 180); return [[lon - dl, lat - d], [lon + dl, lat - d], [lon + dl, lat + d], [lon - dl, lat + d], [lon - dl, lat - d]]; });
+  if (avoidPolys.length) options.avoid_polygons = { type: 'MultiPolygon', coordinates: avoidPolys.map((p) => [p]) };
   const features = [];
   if (av.highways === true) features.push('highways');
   if (av.tolls === true || m.notoll) features.push('tollways');
@@ -1742,9 +1744,8 @@ function ttQuery({ mode, dims, av, env, alts = 0, avoidAreas = [] }) {
     instructionsType: 'text', language: 'pl-PL', maxAlternatives: String(alts),
   });
   if (truck) { q.set('vehicleHeight', String(dims.height)); q.set('vehicleWidth', String(dims.width)); q.set('vehicleLength', String(dims.length)); q.set('vehicleWeight', String(Math.round(dims.weight * 1000))); q.set('vehicleCommercial', 'false'); q.set('vehicleMaxSpeed', '110'); }
-  if (avoidAreas.length) q.set('avoidAreas', avoidAreas.slice(0, 10).map((a) => `${a[0].toFixed(5)},${a[1].toFixed(5)}:${a[2].toFixed(5)},${a[3].toFixed(5)}`).join('|'));
-  // uwaga: z avoidAreas TomTom nie liczy alternatyw
-  if (avoidAreas.length) q.set('maxAlternatives', '0');
+  // strefy omijane idą w treści POST (GET ich nie obsługuje); z nimi bez alternatyw
+  if (avoidAreas.length) { q.set('maxAlternatives', '0'); q._avoid = avoidAreas.slice(0, 10); }
   for (const s of ['traffic', 'tollRoad', 'tollVignette', 'country', 'tunnel', 'motorway', 'ferry']) q.append('sectionType', s);
   const avoid = new Set();
   if (av.highways === true) avoid.add('motorways');
@@ -1758,7 +1759,8 @@ async function ttCalc(points, q) {
   const locs = points.map(([lon, lat]) => `${lat},${lon}`).join(':');
   const url = TT_URL + encodeURIComponent(locs) + '/json?' + q.toString();
   let res, data;
-  try { res = await fetch(url, { signal: AbortSignal.timeout(20000) }); data = await res.json(); }
+  const body = q._avoid && q._avoid.length ? JSON.stringify({ avoidAreas: { rectangles: q._avoid.map((a) => ({ southWestCorner: { latitude: a[0], longitude: a[1] }, northEastCorner: { latitude: a[2], longitude: a[3] } })) } }) : null;
+  try { res = await fetch(url, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal: AbortSignal.timeout(20000) } : { signal: AbortSignal.timeout(20000) }); data = await res.json(); }
   catch (e) { return { ok: false, error: 'TomTom: ' + (e.message || 'błąd sieci') }; }
   if (!res.ok || !data.routes?.length) return { ok: false, error: 'TomTom ' + res.status + ': ' + (data?.detailedError?.message || data?.error?.description || 'brak trasy') };
   const segs = data.routes.map(ttParse);
