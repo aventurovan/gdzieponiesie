@@ -240,6 +240,18 @@ export default {
         if (origin && !ALLOWED_ORIGINS.includes(origin)) return json({ error: 'Ta strona nie ma dostępu do API.' }, 403, cors);
         return await handleGpsSearch(url, env, cors);
       }
+      if (url.pathname === '/gps/report' && request.method === 'POST') {
+        if (!ALLOWED_ORIGINS.includes(origin)) return json({ error: 'Ta strona nie ma dostępu do API.' }, 403, cors);
+        let b; try { b = await request.json(); } catch { return json({ error: 'Niepoprawny JSON.' }, 400, cors); }
+        const rep = { t: new Date().toISOString(), type: String(b.type || '').slice(0, 40), note: String(b.note || '').slice(0, 300), lat: b.lat, lon: b.lon, road: String(b.road || '').slice(0, 80), speed: b.speed, limit: b.limit, to: String(b.to || '').slice(0, 80), ver: String(b.ver || '').slice(0, 40), ua: (request.headers.get('User-Agent') || '').slice(0, 60) };
+        if (env.NK) { const list = (await env.NK.get('gps:reports', 'json')) || []; list.unshift(rep); await env.NK.put('gps:reports', JSON.stringify(list.slice(0, 300))); }
+        await logEvent(env, { code: 'GP-REPORT', path: '/gps/report', detail: rep.type + ' ' + rep.note });
+        return json({ ok: true }, 200, cors);
+      }
+      if (url.pathname === '/gps/reports' && request.method === 'GET') {
+        const list = env.NK ? ((await env.NK.get('gps:reports', 'json')) || []) : [];
+        return json({ count: list.length, reports: list }, 200, cors, { 'Cache-Control': 'no-store' });
+      }
       if (url.pathname === '/gps/osmlimits' && request.method === 'POST') {
         if (!ALLOWED_ORIGINS.includes(origin)) return json({ error: 'Ta strona nie ma dostępu do API.' }, 403, cors);
         let b; try { b = await request.json(); } catch { return json({ error: 'Niepoprawny JSON.' }, 400, cors); }

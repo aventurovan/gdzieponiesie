@@ -577,6 +577,35 @@ async function longPress(ll) {
     else goTo({ ...pt, kind: 'camp' }); });
 }
 
+/* ---------- zgłoszenia + „droga zamknięta” ---------- */
+function reportCtx() {
+  const r = S.route; const cs = r && S.nav ? currentStep() : null; const lim = r && (r.limits || []).find(l => NAV.idx >= l.a && NAV.idx < l.b);
+  return { lat: S.pos ? +S.pos.lat.toFixed(5) : null, lon: S.pos ? +S.pos.lon.toFixed(5) : null, road: $('#roadNow').textContent || (cs ? cs.s.n : ''), speed: S.pos ? Math.round((S.pos.speed || 0) * 3.6) : null, limit: lim ? lim.kmh : null, to: S.to ? S.to.name : '', ver: ($('#about').textContent.match(/Azimo · [\d.]+/) || [''])[0] + (NATIVE ? ' IPA' : ' PWA') };
+}
+async function sendReport(type, note) {
+  try { await fetch(API + '/gps/report', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type, note: note || '', ...reportCtx() }) }); return true; } catch (e) { return false; }
+}
+$('#repList').addEventListener('click', async e => {
+  const b = e.target.closest('[data-rep]'); if (!b) return; const type = b.dataset.rep;
+  if (type === 'closed') { $('#quick').classList.add('hidden'); roadClosed(); return; }
+  let note = '';
+  if (type === 'other' || type === 'route_bad' || type === 'limit_wrong') { note = prompt(type === 'limit_wrong' ? 'Jaki limit jest na drodze? (np. 70)' : 'Opisz krótko') || ''; if (type !== 'other' && !note && type === 'limit_wrong') return; }
+  $('#repStatus').textContent = 'Wysyłam…';
+  const ok = await sendReport(type, note);
+  $('#repStatus').textContent = ok ? '✓ Zgłoszono. Dzięki!' : 'Nie udało się wysłać (brak sieci?) — spróbuj później.';
+  speak(ok ? 'Zgłoszenie zapisane.' : 'Nie udało się wysłać zgłoszenia.');
+  if (ok) setTimeout(() => { if (!$('#quick').classList.contains('hidden')) qPanel('main'); }, 1200);
+});
+// droga zamknięta: strefa omijana ~250 m przed nami na trasie i natychmiastowe przeliczenie
+function roadClosed() {
+  const r = S.route; if (!r || !S.nav) { speak('Najpierw uruchom nawigację.'); return; }
+  const q = routePointAt(Math.min(r.total - 10, NAV.prog + 250));
+  S.avoidPts = [...(S.avoidPts || []).slice(-8), q.p];
+  speak('Szukam objazdu.'); $('#manRoad').textContent = 'Objazd…';
+  sendReport('closed', 'objazd od ' + fmtDist(NAV.prog));
+  recalcKeepNav();
+}
+
 /* ---------- POI przy trasie ---------- */
 let PRICES = null;
 async function loadPrices() { if (PRICES) return PRICES; try { const r = await fetch(API + '/prices'); PRICES = (await r.json()).prices || {}; } catch (e) { PRICES = {}; } return PRICES; }
@@ -1005,6 +1034,8 @@ $('#quick').addEventListener('click', e => {
   else if (q === 'share') shareRoute();
   else if (q === 'steps') { fillSteps(); qPanel('steps'); }
   else if (q === 'gpx') exportGpx();
+  else if (q === 'report') { $('#repStatus').textContent = ''; qPanel('report'); }
+  else if (q === 'closed') { $('#quick').classList.add('hidden'); roadClosed(); }
   else if (q === 'saveroute') { saveRouteNamed(); }
   else if (q === 'data') { fillData(); qPanel('data'); }
   else if (q === 'poi') { $('#quick').classList.add('hidden'); S.openedFrom = 'jazda'; showTab('poi'); }
