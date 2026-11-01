@@ -1627,6 +1627,7 @@ async function handleGpsRoute(request, env, cors) {
     width: clampNum(c.width, 1.8, 2.6, 2.1),
     length: clampNum(c.length, 4, 12, 6.4),
     weight: clampNum(c.weight, 1, 7.5, 3.5),
+    maxSpeed: Math.round(clampNum(c.maxSpeed, 50, 140, 0)) || 0,
   };
   const av = body.avoid || {};
   const avoidCountries = Array.isArray(av.countries) ? [...new Set(av.countries)].filter((k) => ISO_TO_ID[k]).sort().slice(0, 10) : [];
@@ -1749,7 +1750,8 @@ function ttQuery({ mode, dims, av, env, alts = 0, avoidAreas = [] }) {
     routeType: mode === 'eco' ? 'eco' : mode === 'short' ? 'shortest' : 'fastest',
     instructionsType: 'text', language: 'pl-PL', maxAlternatives: String(alts),
   });
-  if (truck) { q.set('vehicleHeight', String(dims.height)); q.set('vehicleWidth', String(dims.width)); q.set('vehicleLength', String(dims.length)); q.set('vehicleWeight', String(Math.round(dims.weight * 1000))); q.set('vehicleCommercial', 'false'); q.set('vehicleMaxSpeed', '110'); }
+  if (truck) { q.set('vehicleHeight', String(dims.height)); q.set('vehicleWidth', String(dims.width)); q.set('vehicleLength', String(dims.length)); q.set('vehicleWeight', String(Math.round(dims.weight * 1000))); q.set('vehicleCommercial', 'false'); q.set('vehicleMaxSpeed', String(dims.maxSpeed || 110)); }
+  if (!truck && dims.maxSpeed) q.set('vehicleMaxSpeed', String(dims.maxSpeed));
   // strefy omijane idą w treści POST (GET ich nie obsługuje); z nimi bez alternatyw
   if (avoidAreas.length) { q.set('maxAlternatives', '0'); q._avoid = avoidAreas.slice(0, 10); }
   for (const s of ['traffic', 'tollRoad', 'tollVignette', 'country', 'tunnel', 'motorway', 'ferry']) q.append('sectionType', s);
@@ -2163,7 +2165,7 @@ async function osmEngineRoute({ points, mode, dims, av, env, body }) {
     if (!r.ok) return { ok: false, error: 'ORS ' + (r.orsStatus || r.status) + ': ' + (r.error || '') };
     data = r.data; if (env.NK) await env.NK.put(kvKey, JSON.stringify(data), { expirationTtl: 7 * 24 * 3600 });
   }
-  const routes = (data.features || []).map((f) => orsToRoute(f, mode, heavy));
+  const routes = (data.features || []).map((f) => orsToRoute(f, mode, heavy, dims.maxSpeed));
   if (!routes.length) return { ok: false, error: 'ORS: brak trasy' };
   // TomTom: czas z korkami + odcinki korków dla głównej trasy (i alternatyw) – po punktach pośrednich co ~15 km, żeby TomTom jechał tą samą drogą
   for (const [ri, rt] of routes.entries()) {
@@ -2171,9 +2173,11 @@ async function osmEngineRoute({ points, mode, dims, av, env, body }) {
     try {
       const n = rt.coords.length; const wp = [rt.coords[0]]; let next = 15000; for (let i = 1; i < n - 1; i++) { if (rt.cum[i] >= next) { wp.push(rt.coords[i]); next = rt.cum[i] + 15000; } if (wp.length >= 18) break; } wp.push(rt.coords[n - 1]);
       const q = new URLSearchParams({ key: String(env.TOMTOM_KEY).trim(), travelMode: 'car', traffic: 'true', computeTravelTimeFor: 'all', routeType: 'fastest', maxAlternatives: '0', routeRepresentation: 'polyline' }); q.append('sectionType', 'traffic'); q.append('sectionType', 'tunnel');
+      if (dims.maxSpeed) q.set('vehicleMaxSpeed', String(dims.maxSpeed));
+      const orsSec = rt.sec;
       const tt = await ttCalc(wp, q);
       if (tt.ok) {
-        const seg = tt.seg; rt.sec = Math.round(seg.sec); rt.secNoTraffic = Math.round(seg.secNo); rt.delay = seg.delay || 0;
+        const seg = tt.seg; rt.delay = seg.delay || 0; rt.sec = Math.round(Math.max(seg.sec, dims.maxSpeed ? orsSec + rt.delay : 0)); rt.secNoTraffic = Math.round(Math.max(seg.secNo, dims.maxSpeed ? orsSec : 0));
         // odcinki korków TomToma → indeksy naszej geometrii (najbliższy punkt), tylko gdy leżą blisko
         const samp = rt.coords.map((c, i) => [c, i]).filter((_, i) => i % Math.max(1, Math.ceil(n / 1500)) === 0);
         const near = (p) => { let best = Infinity, bi = -1; for (const [c, i] of samp) { const d = haversineKm(c, p) * 1000; if (d < best) { best = d; bi = i; } } return best < 60 ? bi : -1; };
@@ -2188,7 +2192,7 @@ async function osmEngineRoute({ points, mode, dims, av, env, body }) {
   if (avoidCountries.length) out.note = 'ORS nie umie unikać autostrad tylko w wybranym kraju – użyj „Unikaj autostrad” globalnie.';
   return { ok: true, out };
 }
-function orsToRoute(f, mode, heavy) {
+function orsToRoute(f, mode, heavy, vmax = 0) {
   const coords = f.geometry.coordinates.map(([x, y]) => [Math.round(x * 1e5) / 1e5, Math.round(y * 1e5) / 1e5]);
   const p = f.properties; const n = Math.max(coords.length - 1, 0);
   const countryAt = new Array(n).fill('?');
@@ -2198,5 +2202,8 @@ function orsToRoute(f, mode, heavy) {
   const steps = [];
   for (const seg of p.segments || []) for (const s of seg.steps || []) steps.push({ t: s.type, i: s.instruction, n: s.name && s.name !== '-' ? s.name : '', d: Math.round(s.distance), s: Math.round(s.duration * (heavy ? 0.78 : 1.1)), wp: s.way_points, ...(s.exit_number ? { exit: s.exit_number } : {}) });
   const tf = heavy ? 0.78 : 1.1;
-  return { km: Math.round((p.summary?.distance ?? 0) / 100) / 10, sec: Math.round((p.summary?.duration ?? 0) * tf), coords, cum: cum.map(Math.round), steps, path, crossings, tolls: [], traffic: [], limits: [], tunnels: [], ferries: [], mode, delay: 0, bbox: f.bbox || [Math.min(...coords.map((c) => c[0])), Math.min(...coords.map((c) => c[1])), Math.max(...coords.map((c) => c[0])), Math.max(...coords.map((c) => c[1]))] };
+  let sec = Math.round((p.summary?.duration ?? 0) * tf);
+  // prędkość podróżna kampera: żaden krok nie szybciej niż vmax
+  if (vmax) { const v = vmax / 3.6; let s2 = 0; for (const st of steps) { st.s = Math.max(st.s, Math.round(st.d / v)); s2 += st.s; } sec = Math.max(sec, s2); }
+  return { km: Math.round((p.summary?.distance ?? 0) / 100) / 10, sec, coords, cum: cum.map(Math.round), steps, path, crossings, tolls: [], traffic: [], limits: [], tunnels: [], ferries: [], mode, delay: 0, bbox: f.bbox || [Math.min(...coords.map((c) => c[0])), Math.min(...coords.map((c) => c[1])), Math.max(...coords.map((c) => c[0])), Math.max(...coords.map((c) => c[1]))] };
 }

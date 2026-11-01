@@ -363,25 +363,26 @@ $('#viaChips').addEventListener('click', e => { const b = e.target.closest('[dat
 /* ---------- pojazd: kilka profili ---------- */
 function vehInit() {
   if (!S.profiles || !S.profiles.length) { S.profiles = [{ id: 'p1', name: 'Kamper', ...S.veh }]; S.vehId = 'p1'; store.set('profiles', S.profiles); store.set('vehId', S.vehId); }
-  const cur = S.profiles.find(p => p.id === S.vehId) || S.profiles[0]; S.vehId = cur.id; S.veh = { h: cur.h, l: cur.l, w: cur.w, t: cur.t }; store.set('veh', S.veh);
+  const cur = S.profiles.find(p => p.id === S.vehId) || S.profiles[0]; S.vehId = cur.id; S.veh = { h: cur.h, l: cur.l, w: cur.w, t: cur.t, v: cur.v || 100 }; store.set('veh', S.veh);
 }
-function vehLine() { const p = S.profiles.find(x => x.id === S.vehId) || {}; $('#tVehTxt').textContent = `${p.name || 'Kamper'} · ${fmt1(S.veh.h)} m · ${fmt1(S.veh.t)} t`; }
+function vehLine() { const p = S.profiles.find(x => x.id === S.vehId) || {}; $('#tVehTxt').textContent = `${p.name || 'Kamper'} · ${fmt1(S.veh.h)} m · ${S.veh.v || 100} km/h`; }
 const fmt1 = n => String(Math.round(n * 100) / 100).replace('.', ',');
 const num = s => parseFloat(String(s).replace(',', '.'));
 let vehEdit = null; // id edytowanego profilu
 function renderVehList() {
-  $('#vehList').innerHTML = S.profiles.map(p => `<div class="vp${p.id === S.vehId ? ' on' : ''}" data-vid="${p.id}"><i></i><div><b>${esc(p.name)}</b><small>${fmt1(p.h)} m · ${fmt1(p.l)} m · ${fmt1(p.w)} m · ${fmt1(p.t)} t</small></div></div>`).join('');
+  $('#vehList').innerHTML = S.profiles.map(p => `<div class="vp${p.id === S.vehId ? ' on' : ''}" data-vid="${p.id}"><i></i><div><b>${esc(p.name)}</b><small>${fmt1(p.h)} m · ${fmt1(p.l)} m · ${fmt1(p.w)} m · ${fmt1(p.t)} t · ${p.v || 100} km/h</small></div></div>`).join('');
 }
 function fillVeh(id) {
   vehEdit = id || S.vehId; const p = S.profiles.find(x => x.id === vehEdit) || S.profiles[0];
-  $('#vName').value = p.name; $('#vH').value = fmt1(p.h); $('#vL').value = fmt1(p.l); $('#vW').value = fmt1(p.w); $('#vT').value = fmt1(p.t);
+  $('#vName').value = p.name; $('#vH').value = fmt1(p.h); $('#vL').value = fmt1(p.l); $('#vW').value = fmt1(p.w); $('#vT').value = fmt1(p.t); $('#vV').value = p.v || 100;
   $('#btnVehDel').disabled = S.profiles.length < 2; renderVehList();
 }
 $('#vehList').addEventListener('click', e => { const r = e.target.closest('[data-vid]'); if (!r) return; S.vehId = r.dataset.vid; store.set('vehId', S.vehId); vehInit(); vehLine(); fillVeh(S.vehId); S.route = null; $('#btnGo').classList.add('hidden'); });
 $('#vehAdd').addEventListener('click', () => { const id = 'p' + Date.now(); S.profiles.push({ id, name: 'Nowy profil', ...S.veh }); store.set('profiles', S.profiles); fillVeh(id); $('#vName').focus(); $('#vName').select(); });
 $('#btnVehSave').addEventListener('click', () => {
-  const v = { h: num($('#vH').value), l: num($('#vL').value), w: num($('#vW').value), t: num($('#vT').value) };
-  if (![v.h, v.l, v.w, v.t].every(Number.isFinite)) return alert('Wpisz liczby, np. 3,10');
+  const v = { h: num($('#vH').value), l: num($('#vL').value), w: num($('#vW').value), t: num($('#vT').value), v: Math.round(num($('#vV').value)) };
+  if (![v.h, v.l, v.w, v.t, v.v].every(Number.isFinite)) return alert('Wpisz liczby, np. 3,10');
+  if (v.v < 50 || v.v > 140) return alert('Prędkość podróżna: 50–140 km/h');
   const p = S.profiles.find(x => x.id === vehEdit); if (!p) return;
   Object.assign(p, v, { name: ($('#vName').value.trim() || 'Kamper') }); S.vehId = p.id; store.set('profiles', S.profiles); store.set('vehId', S.vehId);
   vehInit(); vehLine(); S.route = null; $('#btnGo').classList.add('hidden'); showTab(S.nav ? 'jazda' : (S.openedFrom === 'trasa' ? 'trasa' : 'jazda')); S.openedFrom = null; if (S.to && !S.nav) computeRoute();
@@ -408,7 +409,7 @@ async function computeRoute(fromPos) {
   if (!S.to) { msg.textContent = 'Wybierz cel z listy podpowiedzi.'; return null; }
   $('#btnRoute').disabled = true; msg.textContent = 'Liczę trasę…';
   const body = { from: [from.lon, from.lat], to: [S.to.lon, S.to.lat], via: S.via.map(v => [v.lon, v.lat]), mode: S.mode,
-    camper: { height: S.veh.h, width: S.veh.w, length: S.veh.l, weight: S.veh.t }, avoid: { highways: !!S.avoid.highways, tolls: !!S.avoid.tolls }, avoidByCountry: S.avoidCC, avoidPts: S.avoidPts || [], engine: S.opt.engine || 'osm' };
+    camper: { height: S.veh.h, width: S.veh.w, length: S.veh.l, weight: S.veh.t, maxSpeed: S.veh.v || 100 }, avoid: { highways: !!S.avoid.highways, tolls: !!S.avoid.tolls }, avoidByCountry: S.avoidCC, avoidPts: S.avoidPts || [], engine: S.opt.engine || 'osm' };
   let j;
   try {
     const r = await fetch(API + '/gps/route', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
