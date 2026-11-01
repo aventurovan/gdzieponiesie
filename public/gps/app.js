@@ -95,7 +95,7 @@ function initMap() {
   // drzewa: przeliczaj po ruchu mapy (z opóźnieniem), też w jeździe
   let treeT = null; const reseed = () => { clearTimeout(treeT); treeT = setTimeout(() => { if (Date.now() - TREES.last > 400) { TREES.last = Date.now(); seedTrees(); } }, S.nav ? 700 : 250); };
   map.on('moveend', reseed); map.on('idle', () => { if (!treeT) reseed(); });
-  map.on('resize', () => { if (S.tab === 'trasa' && S.route && document.activeElement && document.activeElement.tagName !== 'INPUT') fitRoute(); });
+  map.on('resize', () => { if (S.tab === 'trasa' && S.route && !(document.activeElement && document.activeElement.tagName === 'INPUT')) setTimeout(fitRoute, 100); });
   // długie przytrzymanie na mapie: dodaj punkt pośredni / nawiguj tutaj
   let lpT = null, lpPt = null;
   map.on('touchstart', e => { if (e.originalEvent.touches.length !== 1) return; lpPt = e.lngLat; clearTimeout(lpT); lpT = setTimeout(() => { if (lpPt) longPress(lpPt); }, 650); });
@@ -221,7 +221,8 @@ const TRAFFIC_COLOR = m => m >= 3 ? '#D92D20' : m === 2 ? '#F2A33A' : '#F2C230';
 function fitRoute() {
   const r = S.route; if (!r || !r.bbox) return;
   const bb = (S.routes || [r]).reduce((b, x) => [Math.min(b[0], x.bbox[0]), Math.min(b[1], x.bbox[1]), Math.max(b[2], x.bbox[2]), Math.max(b[3], x.bbox[3])], r.bbox.slice());
-  map.fitBounds([[bb[0], bb[1]], [bb[2], bb[3]]], { padding: { top: ($('#sheet .top')?.offsetHeight || 230) + 40, bottom: ($('#tBottom')?.offsetHeight || 180) + 40, left: 40, right: 40 }, pitch: 0, bearing: 0, duration: 600 });
+  const top = $('#sheet .top'), bot = $('#tBottom');
+  map.fitBounds([[bb[0], bb[1]], [bb[2], bb[3]]], { padding: { top: (top && top.offsetHeight ? top.offsetHeight : 240) + 40, bottom: (bot && bot.offsetHeight ? bot.offsetHeight : 190) + 40, left: 40, right: 40 }, pitch: 0, bearing: 0, duration: 600 });
 }
 function drawRoute() {
   if (!map.getSource('route')) return;
@@ -266,7 +267,7 @@ function openSearch(field) {
   renderSearchHome(); showTab('search'); setTimeout(() => $('#sInput').focus(), 80);
 }
 function closeSearch() { $('#sInput').blur(); showTab('trasa'); }
-function pick(pt) { setField(SF.field, pt); closeSearch(); }
+function pick(pt) { closeSearch(); setField(SF.field, pt); S.fitAfter = true; }
 const ICO_PIN = '<svg viewBox="0 0 24 24" width="24" height="24" fill="#D92D20"><path d="M12 22s-7-6.6-7-12a7 7 0 0 1 14 0c0 5.4-7 12-7 12z"/><circle cx="12" cy="10" r="2.5" fill="#fff"/></svg>';
 const ICO_NAV = '<svg viewBox="0 0 24 24" width="24" height="24" fill="#5B8CFF"><path d="M12 2 L21 21 L12 16 L3 21 Z"/></svg>';
 const ICO_HOME = '<svg viewBox="0 0 24 24" width="24" height="24" fill="#fff"><path d="M3 11 L12 3 L21 11 V21 H14 V15 H10 V21 H3 Z"/></svg>';
@@ -307,7 +308,7 @@ $('#sugg').addEventListener('click', e => { const li = e.target.closest('li'); i
 $('#sList').addEventListener('click', async e => {
   const st = e.target.closest('[data-star]'); if (st) { const row = st.closest('[data-pt]'); if (row) { FAV.toggle(JSON.parse(row.dataset.pt)); SF.cat ? renderCat() : renderSearchHome(); } return; }
   const row = e.target.closest('.si, .sh button'); if (!row) return;
-  if (row.dataset.rt != null) { const rt = RT.get()[+row.dataset.rt]; if (rt) { $('#sInput').blur(); loadRouteNamed(rt); } return; }
+  if (row.dataset.rt != null) { const rt = RT.get()[+row.dataset.rt]; if (rt) { $('#sInput').blur(); S.fitAfter = true; loadRouteNamed(rt); } return; }
   const act = row.dataset.act;
   if (act === 'map') { startPick(); return; }
   if (act === 'gps') { if (!S.pos) { startGps(); return; } pick({ name: 'Bieżąca pozycja', lon: S.pos.lon, lat: S.pos.lat }); return; }
@@ -416,6 +417,7 @@ async function computeRoute(fromPos) {
   S.routes = fromPos ? [j] : [j, ...(j.alts || []).map(alt => ({ ...j, ...alt, alts: undefined, total: alt.cum[alt.cum.length - 1] }))];
   delete j.alts; S.altIdx = 0; S.route = j;
   if (!fromPos) { renderSummary(); drawRoute(); drawAlts(); $('#btnGo').classList.remove('hidden'); $('#tOffline').classList.remove('hidden'); }
+  if (S.fitAfter) { S.fitAfter = false; [150, 600, 1200].forEach(t => setTimeout(() => { if (S.tab === 'trasa') fitRoute(); }, t)); }
   if (j.restrCheck === 'pending') checkRestrictions(j, fromPos);
   return j;
 }
