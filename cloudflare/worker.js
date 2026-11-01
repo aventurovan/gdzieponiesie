@@ -736,7 +736,7 @@ async function handleRoute(request, env, cors) {
   if (cached) {
     route = await cached.json();
     hit = true;
-  } else if (env.NK && (route = await env.NK.get(kvKey, 'json'))) {
+  } else if (env.NK && (route = await cGet(kvKey))) {
     // KV jest wspólny dla wszystkich serwerowni Cloudflare – ta sama trasa nie idzie drugi raz do ORS
     hit = true;
     await caches.default.put(cacheKey, new Response(JSON.stringify(route), { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'max-age=' + CACHE_SECONDS } }));
@@ -763,7 +763,7 @@ async function handleRoute(request, env, cors) {
     await caches.default.put(cacheKey, new Response(JSON.stringify(route), {
       headers: { 'Content-Type': 'application/json', 'Cache-Control': 'max-age=' + CACHE_SECONDS },
     }));
-    if (env.NK) await env.NK.put(kvKey, JSON.stringify(route), { expirationTtl: ROUTE_KV_SECONDS });
+    if (env.NK) await cPut(kvKey, route, ROUTE_KV_SECONDS);
   }
 
   const [fx, fuelData] = await Promise.all([getFx(), getFuelPrices(Object.keys(route.countries), env)]);
@@ -1331,11 +1331,16 @@ async function handlePrices(env, cors) {
 //       GP-30x wyszukiwanie miejscowości, GP-500 błąd Workera.
 const LOG_MAX = 300;
 let logWrites = 0, logHour = 0;
+// pamięć podręczna w izolacie Workera zamiast KV (KV free: 1000 zapisów/dzień; Cache API nie działa na workers.dev)
+const MEMC = new Map(); const MEMC_MAX = 120;
+function cGet(k) { const e = MEMC.get(k); if (!e) return null; if (e.exp < Date.now()) { MEMC.delete(k); return null; } MEMC.delete(k); MEMC.set(k, e); return e.v; }
+function cPut(k, v, ttl) { if (MEMC.size >= MEMC_MAX) MEMC.delete(MEMC.keys().next().value); MEMC.set(k, { v, exp: Date.now() + (Number(ttl) || 600) * 1000 }); }
+
 async function logEvent(env, entry) {
   if (!env.NK) return;
   const h = Math.floor(Date.now() / 3600e3);
   if (h !== logHour) { logHour = h; logWrites = 0; }
-  if (++logWrites > 40) return;                 // limit zapisów na instancję i godzinę (KV ma dzienny limit zapisów)
+  if (++logWrites > 6) return;                 // limit zapisów na instancję i godzinę (KV ma dzienny limit zapisów)
   try {
     const list = (await env.NK.get('log', 'json')) || [];
     list.unshift({ t: new Date().toISOString(), ...entry });
@@ -1669,7 +1674,7 @@ async function handleGpsRoute(request, env, cors) {
   };
   const kvKey = 'gps:' + (await sha256(JSON.stringify(payload))).slice(0, 32);
   if (env.NK) {
-    const hit = await env.NK.get(kvKey, 'json');
+    const hit = await cGet(kvKey);
     if (hit) return json({ ...hit, cached: true }, 200, cors, { 'X-Cache': 'HIT' });
   }
 
@@ -1725,7 +1730,7 @@ async function handleGpsRoute(request, env, cors) {
     coords, cum: cum.map(Math.round), steps, path, crossings, tolls, profile, mode, engine: 'ors', ttError,
     bbox: f.bbox || null,
   };
-  if (env.NK) await env.NK.put(kvKey, JSON.stringify(out), { expirationTtl: GPS_KV_SECONDS });
+  if (env.NK) await cPut(kvKey, out, GPS_KV_SECONDS);
   return json(out, 200, cors);
 }
 
@@ -1842,7 +1847,7 @@ function ttMerge(segs, mode) {
 // trasa: zwykła, albo – gdy są ustawienia per kraj – liczona odcinkami między granicami z różnymi „unikaj”
 async function tomtomGpsRoute({ points, mode, dims, av, env, byCountry, avoidPts }) {
   const kvKey = 'gps:tt:' + (await sha256(JSON.stringify({ points, mode, dims, av, byCountry: byCountry || null, avoidPts: avoidPts || null }))).slice(0, 32);
-  if (env.NK) { const hit = await env.NK.get(kvKey, 'json'); if (hit) return { ok: true, out: { ...hit, cached: true }, cached: true }; }
+  if (env.NK) { const hit = await cGet(kvKey); if (hit) return { ok: true, out: { ...hit, cached: true }, cached: true }; }
   // strefy omijane podane przez klienta (po sprawdzeniu ograniczeń w /gps/restr)
   // prostokąty TomTom: SW:NE; ~150 m wokół punktu
   const avoidAreas = (Array.isArray(avoidPts) ? avoidPts : []).filter(isPoint).slice(0, 10).map(([lon, lat]) => { const d = 0.0013, dl = d / Math.cos(lat * Math.PI / 180); return [lat - d, lon - dl, lat + d, lon + dl]; });
@@ -1872,7 +1877,7 @@ async function tomtomGpsRoute({ points, mode, dims, av, env, byCountry, avoidPts
     if (changed && segs.length) { out = ttMerge(segs, mode); out.alts = []; }
     out.byCountry = bc;
   }
-  if (env.NK) await env.NK.put(kvKey, JSON.stringify(out), { expirationTtl: 600 });
+  if (env.NK) await cPut(kvKey, out, 600);
   return { ok: true, out };
 }
 
@@ -1882,7 +1887,7 @@ async function osmRestrictions(coords, dims, env) {
   const step = Math.max(1, Math.ceil(coords.length / 300));
   const pts = coords.filter((_, i) => i % step === 0 || i === coords.length - 1);
   const kvKey = 'gps:restr:' + (await sha256(JSON.stringify(pts))).slice(0, 32);
-  let ways = env.NK ? await env.NK.get(kvKey, 'json') : null;
+  let ways = env.NK ? await cGet(kvKey) : null;
   if (!ways) {
     ways = null;
     // jedno zapytanie na całą trasę (wąski korytarz 12 m jest tani), krótki limit; kilka serwerów równolegle – pierwszy wygrywa
@@ -1890,7 +1895,7 @@ async function osmRestrictions(coords, dims, env) {
     const ql = `[out:json][timeout:8];(way(around:12,${line})["maxheight"];way(around:12,${line})["maxweight"];way(around:12,${line})["maxwidth"];node(around:12,${line})["maxheight"];node(around:12,${line})["barrier"="height_restrictor"];);out tags center 300;`;
     const one = async (ep) => { const r = await fetch(ep, { method: 'POST', body: 'data=' + encodeURIComponent(ql), headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, signal: AbortSignal.timeout(9000) }); if (!r.ok) throw new Error('' + r.status); return r.json(); };
     try { const d = await Promise.any(OVERPASS.slice(0, 3).map(one)); ways = []; for (const el of d.elements || []) { const t = el.tags || {}; const lat = el.lat ?? el.center?.lat, lon = el.lon ?? el.center?.lon; if (lat == null) continue; ways.push({ lat, lon, h: parseM(t.maxheight), w: parseM(t.maxweight), wd: parseM(t.maxwidth), name: t.name || '' }); } } catch (e) { ways = []; }
-    if (env.NK && ways.length !== undefined) await env.NK.put(kvKey, JSON.stringify(ways), { expirationTtl: 14 * 24 * 3600 });
+    if (env.NK && ways.length !== undefined) await cPut(kvKey, ways, 14 * 24 * 3600);
   }
   const H = dims.height + 0.1, W = dims.weight, WD = dims.width;
   return ways.filter((x) => (x.h && x.h < H) || (x.w && x.w < W) || (x.wd && x.wd < WD)).map((x) => ({ lat: Math.round(x.lat * 1e5) / 1e5, lon: Math.round(x.lon * 1e5) / 1e5, maxheight: x.h, maxweight: x.w, maxwidth: x.wd, name: x.name }));
@@ -1908,7 +1913,7 @@ async function handleGpsPoi(request, env, cors) {
   const chunks = [];
   for (let i = 0; i < coords.length - 1; i += 18) chunks.push(coords.slice(i, i + 20));
   const kvAll = 'gps:poi:' + (await sha256(JSON.stringify(coords) + '|' + radius)).slice(0, 32);
-  if (env.NK) { const hit = await env.NK.get(kvAll, 'json'); if (hit) return json({ ...hit, cached: true }, 200, cors); }
+  if (env.NK) { const hit = await cGet(kvAll); if (hit) return json({ ...hit, cached: true }, 200, cors); }
   const q = (line) => `[out:json][timeout:20];(
     nwr["tourism"~"^(camp_site|caravan_site)$"](around:${radius},${line});
     nwr["amenity"="sanitary_dump_station"](around:${radius},${line});
@@ -1920,7 +1925,7 @@ async function handleGpsPoi(request, env, cors) {
   const run = async (chunk, k) => {
     const line = chunk.map(([x, y]) => `${y.toFixed(4)},${x.toFixed(4)}`).join(',');
     const ck = 'gps:poic:' + (await sha256(line + '|' + radius)).slice(0, 32);
-    if (env.NK) { const hit = await env.NK.get(ck, 'json'); if (hit) { for (const it of hit) byId.set(it.id, it); return; } }
+    if (env.NK) { const hit = await cGet(ck); if (hit) { for (const it of hit) byId.set(it.id, it); return; } }
     const eps = [...OVERPASS.slice(k % OVERPASS.length), ...OVERPASS.slice(0, k % OVERPASS.length)];
     for (const ep of eps) {
       try {
@@ -1936,7 +1941,7 @@ async function handleGpsPoi(request, env, cors) {
             h24: t.opening_hours === '24/7', hours: t.opening_hours || '', fee: t.fee || '', web: t.website || t['contact:website'] || '',
             water: t.drinking_water === 'yes' ? true : undefined, dump: t['sanitary_dump_station'] === 'yes' || kind === 'dump' ? true : undefined, motorhome: t.motorhome === 'yes' ? true : undefined });
         }
-        if (env.NK) await env.NK.put(ck, JSON.stringify(items), { expirationTtl: 3 * 24 * 3600 });
+        if (env.NK) await cPut(ck, items, 3 * 24 * 3600);
         for (const it of items) byId.set(it.id, it);
         return;
       } catch (e) { lastErr = 'Overpass: ' + (e.message || 'błąd'); }
@@ -1948,7 +1953,7 @@ async function handleGpsPoi(request, env, cors) {
   const items = [...byId.values()];
   if (!items.length && errors) { await logEvent(env, { code: 'GP-POI', path: '/gps/poi', detail: lastErr }); return json({ error: lastErr || 'Overpass nie odpowiada' }, 502, cors); }
   const out = { items, count: items.length, radius, chunks: chunks.length, errors, updated: new Date().toISOString() };
-  if (env.NK && !errors) await env.NK.put(kvAll, JSON.stringify(out), { expirationTtl: 24 * 3600 });
+  if (env.NK && !errors) await cPut(kvAll, out, 24 * 3600);
   return json(out, 200, cors);
 }
 
@@ -1965,7 +1970,7 @@ async function handleGpsLimits(request, env, cors) {
   const pts = (Array.isArray(body.coords) ? body.coords : []).filter(isPoint).slice(0, 1200);
   if (pts.length < 2) return json({ error: 'Brak trasy.' }, 400, cors);
   const kvKey = 'gps:lim:' + (await sha256(JSON.stringify(pts))).slice(0, 32);
-  if (env.NK) { const hit = await env.NK.get(kvKey, 'json'); if (hit) return json({ ...hit, cached: true }, 200, cors); }
+  if (env.NK) { const hit = await cGet(kvKey); if (hit) return json({ ...hit, cached: true }, 200, cors); }
   const segs = []; let calls = 0, errors = 0, lastErr = '';
   for (let i = 0; i < pts.length - 1; i += 99) {
     const chunk = pts.slice(i, i + 100); if (chunk.length < 2) break;
@@ -1985,7 +1990,7 @@ async function handleGpsLimits(request, env, cors) {
     } catch (e) { errors++; lastErr = e.message; }
   }
   const out = { segs, calls, errors, lastErr: errors ? lastErr : undefined };
-  if (env.NK && segs.length) await env.NK.put(kvKey, JSON.stringify(out), { expirationTtl: 7 * 24 * 3600 });
+  if (env.NK && segs.length) await cPut(kvKey, out, 7 * 24 * 3600);
   return json(out, 200, cors);
 }
 
@@ -2023,7 +2028,7 @@ async function handleGpsLanes(request, env, cors) {
   const pts = (Array.isArray(body.points) ? body.points : []).filter(isPoint).slice(0, 80);
   if (!pts.length) return json({ lanes: [] }, 200, cors);
   const kvKey = 'gps:lanes:' + (await sha256(JSON.stringify(pts))).slice(0, 32);
-  if (env.NK) { const hit = await env.NK.get(kvKey, 'json'); if (hit) return json({ ...hit, cached: true }, 200, cors); }
+  if (env.NK) { const hit = await cGet(kvKey); if (hit) return json({ ...hit, cached: true }, 200, cors); }
   // jedno zapytanie: dla każdego punktu drogi z turn:lanes w promieniu 45 m, w osobnych zbiorach
   const parts = pts.map(([lon, lat], i) => `way(around:45,${lat.toFixed(5)},${lon.toFixed(5)})["turn:lanes"]->.w${i}; .w${i} out tags center;`).join('\n');
   const ql = `[out:json][timeout:25];\n${parts}`;
@@ -2040,7 +2045,7 @@ async function handleGpsLanes(request, env, cors) {
     return best && bd < 400 ? { l: best.tags['turn:lanes'], name: best.tags.name || best.tags.ref || '' } : null;
   });
   const out = { lanes };
-  if (env.NK) await env.NK.put(kvKey, JSON.stringify(out), { expirationTtl: 30 * 24 * 3600 });
+  if (env.NK) await cPut(kvKey, out, 30 * 24 * 3600);
   return json(out, 200, cors);
 }
 
@@ -2050,7 +2055,7 @@ async function handleGpsCams(request, env, cors) {
   const coords = Array.isArray(body.coords) ? body.coords.filter(isPoint) : [];
   if (coords.length < 2) return json({ cams: [] }, 200, cors);
   const kvKey = 'gps:cams3:' + (await sha256(JSON.stringify(coords))).slice(0, 32);
-  if (env.NK) { const hit = await env.NK.get(kvKey, 'json'); if (hit) return json({ ...hit, cached: true }, 200, cors); }
+  if (env.NK) { const hit = await cGet(kvKey); if (hit) return json({ ...hit, cached: true }, 200, cors); }
   const chunks = []; for (let i = 0; i < coords.length - 1; i += 24) chunks.push(coords.slice(i, i + 26));
   const cams = new Map(), sections = new Map(); let errors = 0;
   const run = async (chunk, k) => {
@@ -2082,7 +2087,7 @@ async function handleGpsCams(request, env, cors) {
   };
   for (let i = 0; i < chunks.length; i += 4) await Promise.all(chunks.slice(i, i + 4).map((c, j) => run(c, i + j)));
   const out = { cams: [...cams.values()], sections: [...sections.values()], errors };
-  if (env.NK && !errors) await env.NK.put(kvKey, JSON.stringify(out), { expirationTtl: 14 * 24 * 3600 });
+  if (env.NK && !errors) await cPut(kvKey, out, 14 * 24 * 3600);
   return json(out, 200, cors);
 }
 
@@ -2091,7 +2096,7 @@ async function handleGpsSearch(url, env, cors) {
   const q = (url.searchParams.get('q') || '').trim(); if (q.length < 2) return json({ results: [] }, 200, cors);
   const lat = parseFloat(url.searchParams.get('lat')), lon = parseFloat(url.searchParams.get('lon')); const hasPos = Number.isFinite(lat) && Number.isFinite(lon);
   const kvKey = 'gps:srch3:' + (await sha256(q.toLowerCase() + '|' + (hasPos ? lat.toFixed(1) + ',' + lon.toFixed(1) : ''))).slice(0, 32);
-  if (env.NK) { const hit = await env.NK.get(kvKey, 'json'); if (hit) return json({ ...hit, cached: true }, 200, cors); }
+  if (env.NK) { const hit = await cGet(kvKey); if (hit) return json({ ...hit, cached: true }, 200, cors); }
   const out = [];
   // 1) miasta z planera (szybkie, polskie nazwy)
   try { for (const c of searchCities(q).slice(0, 4)) out.push({ name: c.name, label: c.label, lon: c.lon, lat: c.lat, type: 'city', country: c.country }); } catch (e) {}
@@ -2116,7 +2121,7 @@ async function handleGpsSearch(url, env, cors) {
   for (const x of out) { const k = x.type === 'street' ? 'st|' + x.name.toLowerCase() + '|' + (x.label || '').toLowerCase() : x.name.toLowerCase() + '|' + x.lon.toFixed(2) + ',' + x.lat.toFixed(2); if (seen.has(k)) continue; seen.add(k); if (hasPos) x.dist = Math.round(haversineKm([lon, lat], [x.lon, x.lat]) * 10) / 10; res.push(x); }
   if (hasPos) res.sort((a, b) => (a.type === 'city' && a.name.toLowerCase().startsWith(q.toLowerCase()) ? -1 : 0) - (b.type === 'city' && b.name.toLowerCase().startsWith(q.toLowerCase()) ? -1 : 0) || a.dist - b.dist);
   const o = { results: res.slice(0, 12), ...(typeof photonErr !== 'undefined' && photonErr ? { photonErr } : {}) };
-  if (env.NK && !o.photonErr) await env.NK.put(kvKey, JSON.stringify(o), { expirationTtl: 24 * 3600 });
+  if (env.NK && !o.photonErr) await cPut(kvKey, o, 24 * 3600);
   return json(o, 200, cors);
 }
 
@@ -2124,7 +2129,7 @@ async function handleGpsSearch(url, env, cors) {
 const parseKmh = (s) => { if (!s) return 0; const m = String(s).match(/(\d+)\s*(mph)?/i); if (!m) return ({ 'PL:urban': 50, 'PL:rural': 90, 'PL:motorway': 140, 'PL:expressway': 120, 'DE:urban': 50, 'DE:rural': 100, 'CZ:urban': 50, 'CZ:rural': 90, 'SK:urban': 50, 'SK:rural': 90, 'AT:urban': 50, 'AT:rural': 100, 'HU:urban': 50, 'HU:rural': 90 })[String(s)] || 0; return m[2] ? Math.round(parseInt(m[1]) * 1.609) : parseInt(m[1]); };
 async function handleOsmLimits(coords, env, cors) {
   const kvKey = 'gps:osmlim:' + (await sha256(JSON.stringify(coords))).slice(0, 32);
-  if (env.NK) { const hit = await env.NK.get(kvKey, 'json'); if (hit) return json({ ...hit, cached: true }, 200, cors); }
+  if (env.NK) { const hit = await cGet(kvKey); if (hit) return json({ ...hit, cached: true }, 200, cors); }
   const chunks = []; for (let i = 0; i < coords.length - 1; i += 40) chunks.push(coords.slice(i, i + 42));
   const ways = new Map(); let errors = 0;
   const run = async (chunk, k) => {
@@ -2142,7 +2147,7 @@ async function handleOsmLimits(coords, env, cors) {
   };
   for (let i = 0; i < chunks.length; i += 4) await Promise.all(chunks.slice(i, i + 4).map((c, j) => run(c, i + j)));
   const out = { ways: [...ways.values()], errors };
-  if (env.NK && !errors) await env.NK.put(kvKey, JSON.stringify(out), { expirationTtl: 14 * 24 * 3600 });
+  if (env.NK && !errors) await cPut(kvKey, out, 14 * 24 * 3600);
   return json(out, 200, cors);
 }
 
@@ -2159,11 +2164,11 @@ async function osmEngineRoute({ points, mode, dims, av, env, body }) {
   const payload = { coordinates: points, radiuses: points.map(() => 2000), preference: mode === 'eco' || mode === 'main' ? 'recommended' : 'fastest', instructions: true, instructions_format: 'text', language: 'pl', units: 'm', extra_info: ['countryinfo', 'tollways'], ...(Object.keys(options).length ? { options } : {}) };
   if (points.length === 2 && !avoidPolys.length) payload.alternative_routes = { target_count: 3, share_factor: 0.6, weight_factor: 1.6 };
   const kvKey = 'gps:osm:' + (await sha256(JSON.stringify(payload) + heavy)).slice(0, 32);
-  let data = env.NK ? await env.NK.get(kvKey, 'json') : null;
+  let data = env.NK ? await cGet(kvKey) : null;
   if (!data) {
     const r = await orsRoute(payload, env, heavy);
     if (!r.ok) return { ok: false, error: 'ORS ' + (r.orsStatus || r.status) + ': ' + (r.error || '') };
-    data = r.data; if (env.NK) await env.NK.put(kvKey, JSON.stringify(data), { expirationTtl: 7 * 24 * 3600 });
+    data = r.data; if (env.NK) await cPut(kvKey, data, 7 * 24 * 3600);
   }
   const routes = (data.features || []).map((f) => orsToRoute(f, mode, heavy, dims.maxSpeed));
   if (!routes.length) return { ok: false, error: 'ORS: brak trasy' };
