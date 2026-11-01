@@ -433,6 +433,25 @@ const hhmm = d => String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinu
 /* ---------- ograniczenia prędkości (TomTom Snap to Roads) ---------- */
 async function loadLimits() {
   const r = S.route; if (!r || !API) return;
+  // 1) OSM maxspeed: drogi z geometrią → odcinki trasy
+  try {
+    const step = Math.max(1, Math.ceil(r.coords.length / 500)); const coords = r.coords.filter((_, i) => i % step === 0 || i === r.coords.length - 1);
+    const j = await (await fetch(API + '/gps/osmlimits', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ coords }) })).json();
+    if (S.route !== r) return;
+    const samp = r.coords.map((c, i) => [c, i]).filter((_, i) => i % Math.max(1, Math.ceil(r.coords.length / 2500)) === 0);
+    const near = p => { let best = Infinity, bi = -1; for (const [c, i] of samp) { const d = dist(c, p); if (d < best) { best = d; bi = i; } } return best < 25 ? bi : -1; };
+    const lim = [];
+    for (const w of j.ways || []) {
+      const idx = w.g.map(near).filter(i => i >= 0); if (idx.length < 2) continue;
+      const a0 = Math.min(...idx), b0 = Math.max(...idx);
+      // kierunek jazdy względem geometrii drogi (maxspeed:forward/backward)
+      const fwd = near(w.g[0]) <= near(w.g[w.g.length - 1]);
+      const kmh = (fwd ? w.fwd : w.bwd) || w.kmh;
+      lim.push({ a: a0, b: b0 + 1, kmh });
+    }
+    if (lim.length) { lim.sort((p, q) => p.a - q.a); r.limits = lim; r.limitsSrc = 'OSM'; return; }
+  } catch (e) {}
+  // 2) TomTom Snap to Roads (zapas)
   // próbkujemy co ~300 m (maks. 1200 punktów) – Snap to Roads zwraca odcinki dróg z limitami
   const every = Math.max(300, r.total / 1200);
   const coords = []; let next = 0;
@@ -451,7 +470,7 @@ async function loadLimits() {
     lim.push({ a: Math.min(a, b), b: Math.max(a, b) + 1, kmh });
   }
   lim.sort((p, q) => p.a - q.a);
-  r.limits = lim;
+  r.limits = lim; r.limitsSrc = 'TomTom';
 }
 
 /* ---------- kolejki na granicach poza Schengen (planer / nakordoni.eu) ---------- */
@@ -514,9 +533,9 @@ function updateCams() {
   const next = r.cams.find(c => c.at > NAV.prog - 30 && !CAMS_BANNED.has(c.cc));
   const d = next ? next.at - NAV.prog : Infinity;
   if (d > 600) { box.classList.add('hidden'); return; }
-  $('#camDist').textContent = fmtDist(Math.max(0, d)); $('#camSub').textContent = (next.avg ? 'odcinkowy pomiar' : 'fotoradar') + (next.max ? ' · ' + next.max + ' km/h' : '');
+  $('#camDist').textContent = fmtDist(Math.max(0, d)); $('#camSub').textContent = (next.red ? 'kamera: czerwone światło' : next.avg ? 'odcinkowy pomiar' : 'fotoradar') + (next.max ? ' · ' + next.max + ' km/h' : '');
   box.classList.remove('hidden');
-  if (!NAV.said['cam' + next.id] && d <= 600) { NAV.said['cam' + next.id] = 1; speak((next.avg ? 'Odcinkowy pomiar prędkości' : 'Fotoradar') + (next.max ? ', ograniczenie ' + next.max : '') + ', za ' + sayDist(d) + '.'); }
+  if (!NAV.said['cam' + next.id] && d <= 600) { NAV.said['cam' + next.id] = 1; speak((next.red ? 'Kamera na czerwonym świetle' : next.avg ? 'Odcinkowy pomiar prędkości' : 'Fotoradar') + (next.max ? ', ograniczenie ' + next.max : '') + ', za ' + sayDist(d) + '.'); }
 }
 
 /* ---------- asystent pasów: OSM turn:lanes przy manewrach ---------- */
@@ -1061,7 +1080,7 @@ function fillSteps() {
 function fillData() {
   const r = S.route; if (!r) return;
   const tollKm = (r.tolls || []).reduce((s, [a, b]) => s + (r.cum[b] - r.cum[a]), 0) / 1000;
-  const rows = [['Dystans', Math.round(r.km) + ' km'], ['Ograniczenia', (r.restrictions || []).length ? r.restrictions.length + ' na trasie!' : (r.avoided ? 'ominięto ' + r.avoided : 'brak na trasie')], ['Czas jazdy', hm(r.sec)], ['Korki', r.delay > 60 ? '+' + Math.round(r.delay / 60) + ' min' : 'brak'], ['Kraje', (r.path || []).map(c => KRAJ[c] || c).join(', ')], ['Granice', (r.crossings || []).map(c => c.from + '→' + c.to).join(', ') || '—'], ['Odcinki płatne', Math.round(tollKm) + ' km'], ['Tunele', (r.tunnels || []).length], ['Promy', (r.ferries || []).length], ['Silnik', r.engine === 'tomtom' ? (r.profile === 'truck' && S.veh.t > 3.5 ? 'TomTom (ciężarowy)' : 'TomTom osobowy + kontrola wysokości/masy z OSM') : 'openrouteservice'], ['Profil', `${fmt1(S.veh.h)} m · ${fmt1(S.veh.l)} m · ${fmt1(S.veh.t)} t`]];
+  const rows = [['Dystans', Math.round(r.km) + ' km'], ['Limity prędkości', (r.limits || []).length ? r.limits.length + ' odcinków (' + (r.limitsSrc || '?') + ')' : 'brak danych'], ['Ograniczenia', (r.restrictions || []).length ? r.restrictions.length + ' na trasie!' : (r.avoided ? 'ominięto ' + r.avoided : 'brak na trasie')], ['Czas jazdy', hm(r.sec)], ['Korki', r.delay > 60 ? '+' + Math.round(r.delay / 60) + ' min' : 'brak'], ['Kraje', (r.path || []).map(c => KRAJ[c] || c).join(', ')], ['Granice', (r.crossings || []).map(c => c.from + '→' + c.to).join(', ') || '—'], ['Odcinki płatne', Math.round(tollKm) + ' km'], ['Tunele', (r.tunnels || []).length], ['Promy', (r.ferries || []).length], ['Silnik', r.engine === 'tomtom' ? (r.profile === 'truck' && S.veh.t > 3.5 ? 'TomTom (ciężarowy)' : 'TomTom osobowy + kontrola wysokości/masy z OSM') : 'openrouteservice'], ['Profil', `${fmt1(S.veh.h)} m · ${fmt1(S.veh.l)} m · ${fmt1(S.veh.t)} t`]];
   $('#qData').innerHTML = rows.map(([k, v]) => `<div class="kv"><span>${k}</span><b>${esc(String(v))}</b></div>`).join('');
 }
 function exportGpx() {
