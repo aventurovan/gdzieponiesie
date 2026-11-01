@@ -99,7 +99,9 @@ function initMap() {
   map.on('touchmove', () => { clearTimeout(lpT); lpPt = null; }); map.on('touchend', () => clearTimeout(lpT));
   map.on('contextmenu', e => longPress(e.lngLat));
   map.on('rotate', () => { const el = $('#compassIco'); if (el) el.style.transform = `rotate(${-map.getBearing()}deg)`; });
-  map.on('dragstart', () => { if (S.nav) { S.follow = false; $('#btnRecenter').hidden = false; clearTimeout(S.followT); S.followT = setTimeout(() => { S.follow = true; $('#btnRecenter').hidden = true; }, 30000); } });
+  const release = e => { if (!S.nav || !e || !e.originalEvent) return; S.follow = false; $('#btnRecenter').hidden = false; clearTimeout(S.followT); S.followT = setTimeout(() => { S.follow = true; $('#btnRecenter').hidden = true; }, 30000); };
+  ['dragstart', 'zoomstart', 'rotatestart', 'pitchstart'].forEach(ev => map.on(ev, release));
+  map.on('touchstart', e => { if (S.nav && e.originalEvent && e.originalEvent.touches && e.originalEvent.touches.length > 1) release(e); });
   map.on('load', () => { mapReady = true; if (S.route) drawRoute(); const at = document.querySelector('.maplibregl-ctrl-attrib'); if (at) at.classList.remove('maplibregl-compact-show'); });
   const el = document.createElement('div'); el.className = 'me';
   el.innerHTML = '<svg viewBox="0 0 36 36"><path d="M18 3 L31 31 L18 24 L5 31 Z" fill="#3A74FF" stroke="#fff" stroke-width="3" stroke-linejoin="round"/></svg>';
@@ -202,7 +204,7 @@ const FAV = { get: () => store.get('fav', []), set: (f) => store.set('fav', f),
   toggle: (p) => { const f = FAV.get(); const i = f.findIndex(x => Math.abs(x.lon - p.lon) < 1e-4 && Math.abs(x.lat - p.lat) < 1e-4); if (i >= 0) f.splice(i, 1); else f.push({ name: p.name, label: p.label || '', lon: p.lon, lat: p.lat }); FAV.set(f); } };
 let SF = { field: 'to', cat: null, results: [] };
 function setField(field, pt) {
-  S.avoidPts = [];
+  S.avoidPts = []; drawAvoid();
   if (field === 'from') { S.from = pt; $('#from').textContent = pt ? pt.name : 'Bieżąca pozycja'; $('#from').classList.toggle('empty', !pt); }
   else if (field === 'to') { S.to = pt; $('#to').textContent = pt ? pt.name : 'Dokąd jedziemy?'; $('#to').classList.toggle('empty', !pt); }
   else if (field === 'via' && pt) { S.via.push(pt); renderViaChips(); }
@@ -597,13 +599,23 @@ $('#repList').addEventListener('click', async e => {
   if (ok) setTimeout(() => { if (!$('#quick').classList.contains('hidden')) qPanel('main'); }, 1200);
 });
 // droga zamknięta: strefa omijana ~250 m przed nami na trasie i natychmiastowe przeliczenie
+let avoidMarkers = [];
+function drawAvoid() {
+  avoidMarkers.forEach(m => m.remove()); avoidMarkers = [];
+  for (const p of S.avoidPts || []) {
+    const el = document.createElement('div'); el.className = 'avoid-mk'; el.title = 'Strefa omijana — dotknij, aby usunąć';
+    el.addEventListener('click', e => { e.stopPropagation(); S.avoidPts = S.avoidPts.filter(x => x !== p); drawAvoid(); if (S.nav) recalcKeepNav(); else if (S.to) computeRoute(); });
+    avoidMarkers.push(new maplibregl.Marker({ element: el, anchor: 'center' }).setLngLat(p).addTo(map));
+  }
+}
 function roadClosed() {
-  const r = S.route; if (!r || !S.nav) { speak('Najpierw uruchom nawigację.'); return; }
-  const q = routePointAt(Math.min(r.total - 10, NAV.prog + 250));
-  S.avoidPts = [...(S.avoidPts || []).slice(-8), q.p];
-  speak('Szukam objazdu.'); $('#manRoad').textContent = 'Objazd…';
-  sendReport('closed', 'objazd od ' + fmtDist(NAV.prog));
-  recalcKeepNav();
+  const r = S.route; if (!r) { speak('Najpierw wyznacz trasę.'); return; }
+  const prog = S.nav ? NAV.prog : 0;
+  const q = routePointAt(Math.min(r.total - 10, prog + 250));
+  S.avoidPts = [...(S.avoidPts || []).slice(-8), q.p]; drawAvoid();
+  speak('Szukam objazdu.'); if (S.nav) $('#manRoad').textContent = 'Objazd…';
+  sendReport('closed', 'objazd od ' + fmtDist(prog));
+  if (S.nav) recalcKeepNav(); else computeRoute();
 }
 
 /* ---------- POI przy trasie ---------- */
@@ -1018,7 +1030,7 @@ $('#fVeh').addEventListener('click', () => { S.openedFrom = 'jazda'; showTab('ve
 $('#fCompass').addEventListener('click', () => map.easeTo({ bearing: 0, pitch: S.opt.d3 ? 45 : 0, duration: 400 }));
 $('#fCenter').addEventListener('click', () => { if (S.pos) map.easeTo({ center: [S.pos.lon, S.pos.lat], zoom: 15, duration: 500 }); else startGps(); });
 $('#fView').addEventListener('click', () => { setView3d(!S.opt.d3); $('#fViewTxt').textContent = S.opt.d3 ? '3D' : '2D'; map.easeTo({ pitch: S.opt.d3 ? 45 : 0, duration: 500 }); });
-$('#btnRecenter').addEventListener('click', () => { S.follow = true; $('#btnRecenter').hidden = true; });
+$('#btnRecenter').addEventListener('click', () => { S.follow = true; $('#btnRecenter').hidden = true; clearTimeout(S.followT); MK.zoom = map.getZoom(); });
 $('#bbSearch').addEventListener('click', () => { S.openedFrom = 'jazda'; showTab('poi'); });
 $('#bbMenu').addEventListener('click', openQuick);
 function qPanel(name) { $$('#quick .qp').forEach(p => p.classList.toggle('hidden', p.dataset.panel !== name)); $('#quick').scrollTop = 0; }
