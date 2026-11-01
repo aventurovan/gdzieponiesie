@@ -1074,7 +1074,7 @@ function showTab(t) {
   S.tab = t;
   $('#sheet').classList.toggle('hidden', t !== 'trasa'); $('#veh').classList.toggle('hidden', t !== 'veh'); $('#menu').classList.toggle('hidden', t !== 'menu'); $('#poi').classList.toggle('hidden', t !== 'poi'); $('#search').classList.toggle('hidden', t !== 'search'); $('#pick').classList.add('hidden');
   $('#hud').classList.toggle('hidden', !(t === 'jazda' && S.nav));
-  if (t === 'menu') { fillVoices(); fillSettings(); renderOffline(); renderPacks(); diagBridge(); if (NATIVE) { const AP = plugin('App'); (AP ? AP.getInfo() : Promise.resolve(null)).then(i => { $('#about').textContent = $('#about').textContent.replace(/\s*·\s*aplikacja natywna.*$/, '') + ' · aplikacja natywna' + (i ? ' v' + i.version + ' (build ' + i.build + ')' : ''); }).catch(() => {}); } }
+  if (t === 'menu') { fillVoices(); fillSettings(); renderOffline(); diagBridge(); if (NATIVE) { const AP = plugin('App'); (AP ? AP.getInfo() : Promise.resolve(null)).then(i => { $('#about').textContent = $('#about').textContent.replace(/\s*·\s*aplikacja natywna.*$/, '') + ' · aplikacja natywna' + (i ? ' v' + i.version + ' (build ' + i.build + ')' : ''); }).catch(() => {}); } }
   if (t === 'menu') { const p = S.profiles.find(x => x.id === S.vehId) || {}; $('#menuVeh').textContent = `${p.name || 'Kamper'} · ${fmt1(S.veh.h)} m · ${fmt1(S.veh.l)} m · ${fmt1(S.veh.t)} t`; }
   $('#idle').classList.toggle('hidden', !(t === 'jazda' && !S.nav));
   if (t === 'jazda' && !S.nav) { const p = S.profiles.find(x => x.id === S.vehId) || {}; $('#fVehTxt').textContent = `🚐 ${p.name || 'Kamper'} · ${fmt1(S.veh.h)} m · ${fmt1(S.veh.t)} t`; $('#fViewTxt').textContent = S.opt.d3 ? '3D' : '2D'; }
@@ -1355,7 +1355,8 @@ async function renderPacks() {
   el.innerHTML = list.map(p => { const i = inst[p.code]; const mb = Math.round(p.size / 1e6); return `<div class="pk" data-code="${p.code}"><div><b>${esc(p.name)}</b><small>${mb} MB · dane ${p.updated}${i ? ' · pobrano ' + new Date(i.installed).toLocaleDateString('pl-PL') + (i.updated !== p.updated ? ' · jest nowsza' : '') : ''}</small><div class="bar hidden"><i style="width:0"></i></div></div>${i ? '<button type="button" class="mini ok" data-rm>✓ Usuń</button>' : '<button type="button" class="mini" data-dl>Pobierz</button>'}</div>`; }).join('');
   $('#packsHint').textContent = PK.packs.length ? PK.packs.length + ' paczek na telefonie · razem ' + Math.round(PK.packs.reduce((s, p) => s + p.size, 0) / 1e6) + ' MB' : 'paczki do jazdy bez zasięgu · pobierane na telefon';
 }
-$('#packs').addEventListener('click', async e => {
+const PACKS_UI = !!$('#packs');
+if (PACKS_UI) $('#packs').addEventListener('click', async e => {
   const row = e.target.closest('.pk'); if (!row) return; const code = row.dataset.code; const p = [...PACKS_IDX.packs, ...PK.packs].find(x => x.code === code);
   if (e.target.closest('[data-dl]')) {
     const btn = e.target.closest('[data-dl]'); btn.disabled = true; btn.textContent = '…'; const bar = row.querySelector('.bar'); bar.classList.remove('hidden');
@@ -1364,7 +1365,7 @@ $('#packs').addEventListener('click', async e => {
     renderPacks();
   } else if (e.target.closest('[data-rm]')) { if (confirm('Usunąć paczkę ' + p.name + '?')) { await removePack(code); renderPacks(); } }
 });
-$('#packsReload').addEventListener('click', () => { PACKS_IDX = null; renderPacks(); });
+if (PACKS_UI) $('#packsReload').addEventListener('click', () => { PACKS_IDX = null; renderPacks(); });
 // protokół azimo://tiles/{z}/{x}/{y}: sieć, a bez sieci paczki z telefonu
 function tileInBbox(bb, z, x, y) { const n = 2 ** z; const lon1 = x / n * 360 - 180, lon2 = (x + 1) / n * 360 - 180; const lat1 = Math.atan(Math.sinh(Math.PI * (1 - 2 * (y + 1) / n))) * 180 / Math.PI, lat2 = Math.atan(Math.sinh(Math.PI * (1 - 2 * y / n))) * 180 / Math.PI; return lon2 >= bb[0] && lon1 <= bb[2] && lat2 >= bb[1] && lat1 <= bb[3]; }
 maplibregl.addProtocol('azimo', async (params) => {
