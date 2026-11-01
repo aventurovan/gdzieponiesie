@@ -82,7 +82,20 @@ jobs:
           # storyboard: nasz kontroler zamiast CAPBridgeViewController (rejestruje wtyczkę)
           SB=ios/App/App/Base.lproj/Main.storyboard
           sed -i '' 's/customClass="CAPBridgeViewController" customModule="Capacitor"/customClass="MyViewController" customModule="App" customModuleProvider="target"/' $SB
-          grep -c MyViewController $SB
+          echo "storyboard MyViewController: $(grep -c MyViewController $SB || true)"
+          # rejestracja wtyczki przez listę klas, którą Capacitor ładuje przy starcie (niezależnie od storyboardu)
+          CFG=ios/App/App/capacitor.config.json
+          if [ -f "$CFG" ]; then
+            python3 - "$CFG" <<'EOF'
+          import json, sys
+          p = sys.argv[1]; c = json.load(open(p))
+          lst = c.get('packageClassList') or []
+          if 'LiveActivityPlugin' not in lst: lst.append('LiveActivityPlugin')
+          c['packageClassList'] = lst
+          json.dump(c, open(p, 'w'), indent=2)
+          print('packageClassList:', lst)
+          EOF
+          else echo "brak $CFG"; ls ios/App/App; fi
 
       - name: Archiwum Xcode (bez podpisu)
         working-directory: ios-app/ios/App
