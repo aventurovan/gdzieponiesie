@@ -396,4 +396,3 @@ body.night #map{background:#1C2029}
 .qlist.rep button{display:block;width:100%;text-align:left;border:0;background:none;color:#fff;font-family:inherit;padding:12px 8px;border-bottom:1px solid #2E3647;font-size:15px}
 .qlist.rep button:last-child{border-bottom:0}
 .qlist.rep button b{font-weight:700}.qlist.rep button small{display:block;font-size:12px;color:#8b93a5;font-weight:600;margin-top:2px;padding-left:28px}
-.qgrid button.danger{background:#D92D20}
