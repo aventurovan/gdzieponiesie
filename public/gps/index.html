@@ -315,16 +315,6 @@
     <label class="sw"><span><b>Nocny automatycznie</b><small>po zmroku, wg pozycji Słońca</small></span><input type="checkbox" data-opt="autoNight"></label>
   </div>
 
-  <div class="sec">POI na mapie i po lewej</div>
-  <div class="box list">
-    <label class="sw"><span><b>⛽ Stacje paliw</b></span><input type="checkbox" data-poish="fuel"></label>
-    <label class="sw"><span><b>🅿 MOP / parkingi przy drodze</b></span><input type="checkbox" data-poish="mop"></label>
-    <label class="sw"><span><b>🚐 Parkingi dla kamperów</b></span><input type="checkbox" data-poish="parking"></label>
-    <label class="sw"><span><b>⛺ Kempingi</b><small>do 5 km od trasy</small></span><input type="checkbox" data-poish="camp"></label>
-    <label class="sw"><span><b>💧 Zrzut / woda</b><small>do 5 km od trasy</small></span><input type="checkbox" data-poish="dump"></label>
-    <label class="sw"><span><b>Ile w kolumnie po lewej</b></span><select id="optPoiN" class="sel"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></label>
-  </div>
-
   <div class="sec">Ekran jazdy</div>
   <div class="box list">
     <label class="sw"><span><b>Bieżąca ulica</b></span><input type="checkbox" data-opt="roadNow"></label>
@@ -352,6 +342,17 @@
 <!-- POI -->
 <div id="poi" class="sheet quick full hidden">
   <div class="row-h"><h1>Przy trasie</h1><button type="button" class="x" data-close aria-label="Zamknij">✕</button></div>
+  <div class="sec">Pokazuj na mapie i w kolumnie po lewej</div>
+  <div class="box list">
+    <label class="sw"><span><b>⛽ Stacje paliw</b></span><input type="checkbox" data-poish="fuel"></label>
+    <label class="sw"><span><b>🅿 MOP / parkingi przy drodze</b></span><input type="checkbox" data-poish="mop"></label>
+    <label class="sw"><span><b>🚐 Parkingi dla kamperów</b></span><input type="checkbox" data-poish="parking"></label>
+    <label class="sw"><span><b>⛺ Kempingi</b><small>do 5 km od trasy</small></span><input type="checkbox" data-poish="camp"></label>
+    <label class="sw"><span><b>💧 Zrzut / woda</b><small>do 5 km od trasy</small></span><input type="checkbox" data-poish="dump"></label>
+    <label class="sw"><span><b>Ile w kolumnie po lewej</b></span><select id="optPoiN" class="sel"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></label>
+  </div>
+
+
   <div class="chips" id="poiChips">
     <button type="button" data-f="all" aria-pressed="true">Wszystko</button><button type="button" data-f="camp">Kemping</button><button type="button" data-f="dump">Zrzut</button><button type="button" data-f="water">Woda</button><button type="button" data-f="fuel">Paliwo</button><button type="button" data-f="park">Parking</button>
   </div>
@@ -363,6 +364,6 @@
 <script src="../assets/config.js"></script>
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <script src="https://unpkg.com/pmtiles@4.3.2/dist/pmtiles.js"></script>
-<script src="app.js?v=61"></script>
+<script src="app.js?v=62"></script>
 </body>
 </html>
