@@ -34,7 +34,7 @@ async function laEnd() { if (!NLA) return; LA.on = false; try { await NLA.end();
 const S = {
   veh: store.get('veh', { h: 3.1, l: 6.36, w: 2.05, t: 3.5 }),
   profiles: store.get('profiles', null), vehId: store.get('vehId', null),
-  opt: Object.assign({ voice: true, d3: true, night: false, sim: false, roadNow: true, poiCol: true, events: true, nextChip: true, autoNight: false, cams: true, limits: true, lanes: true, forceOffline: false, junction: true, trees: true }, store.get('opt', {})),
+  opt: Object.assign({ voice: true, d3: true, night: false, sim: false, roadNow: true, poiCol: true, events: true, nextChip: true, autoNight: false, cams: true, limits: true, lanes: true, forceOffline: false, junction: true, trees: true, poiShow: { fuel: true, mop: true, parking: true, camp: false, dump: false }, poiN: 3 }, store.get('opt', {})),
   via: [], avoid: store.get('avoid', { highways: false, tolls: false }), avoidCC: store.get('avoidCC', {}),
   mode: store.get('mode', 'fast'),
   from: null, to: null,          // {name, lon, lat} | null = bieżąca pozycja
@@ -696,9 +696,11 @@ async function loadPoi() {
   drawPoi(); renderPoi(); updatePoiCol();
 }
 const POI_KIND = { camp: ['Kemping', '#1E8A4C'], caravan: ['Kemping (kampery)', '#1E8A4C'], dump: ['Zrzut / woda', '#3A74FF'], fuel: ['Stacja', '#B7791F'], mop: ['MOP', '#5A6478'], rest: ['Parking przy drodze', '#5A6478'], parking: ['Parking dla kamperów', '#5A6478'] };
+const POI_GROUP = { fuel: 'fuel', mop: 'mop', rest: 'mop', parking: 'parking', camp: 'camp', caravan: 'camp', dump: 'dump' };
+const poiOn = p => { const sh = S.opt.poiShow || {}; return !!sh[POI_GROUP[p.kind]] || (sh.dump && p.dump); };
 function drawPoi() {
   if (!map.getSource('poi') || !S.poi) return;
-  map.getSource('poi').setData({ type: 'FeatureCollection', features: S.poi.map(p => ({ type: 'Feature', properties: { id: p.id, kind: p.kind }, geometry: { type: 'Point', coordinates: [p.lon, p.lat] } })) });
+  map.getSource('poi').setData({ type: 'FeatureCollection', features: S.poi.filter(poiOn).map(p => ({ type: 'Feature', properties: { id: p.id, kind: p.kind }, geometry: { type: 'Point', coordinates: [p.lon, p.lat] } })) });
 }
 function renderPoi() {
   const list = $('#poiList'); const st = S.poiStatus || '';
@@ -1074,7 +1076,7 @@ function showTab(t) {
   S.tab = t;
   $('#sheet').classList.toggle('hidden', t !== 'trasa'); $('#veh').classList.toggle('hidden', t !== 'veh'); $('#menu').classList.toggle('hidden', t !== 'menu'); $('#poi').classList.toggle('hidden', t !== 'poi'); $('#search').classList.toggle('hidden', t !== 'search'); $('#pick').classList.add('hidden');
   $('#hud').classList.toggle('hidden', !(t === 'jazda' && S.nav));
-  if (t === 'menu') { fillVoices(); fillSettings(); renderOffline(); diagBridge(); if (NATIVE) { const AP = plugin('App'); (AP ? AP.getInfo() : Promise.resolve(null)).then(i => { $('#about').textContent = $('#about').textContent.replace(/\s*·\s*aplikacja natywna.*$/, '') + ' · aplikacja natywna' + (i ? ' v' + i.version + ' (build ' + i.build + ')' : ''); }).catch(() => {}); } }
+  if (t === 'menu') { fillVoices(); fillSettings(); fillPoiShow(); renderOffline(); diagBridge(); if (NATIVE) { const AP = plugin('App'); (AP ? AP.getInfo() : Promise.resolve(null)).then(i => { $('#about').textContent = $('#about').textContent.replace(/\s*·\s*aplikacja natywna.*$/, '') + ' · aplikacja natywna' + (i ? ' v' + i.version + ' (build ' + i.build + ')' : ''); }).catch(() => {}); } }
   if (t === 'menu') { const p = S.profiles.find(x => x.id === S.vehId) || {}; $('#menuVeh').textContent = `${p.name || 'Kamper'} · ${fmt1(S.veh.h)} m · ${fmt1(S.veh.l)} m · ${fmt1(S.veh.t)} t`; }
   $('#idle').classList.toggle('hidden', !(t === 'jazda' && !S.nav));
   if (t === 'jazda' && !S.nav) { const p = S.profiles.find(x => x.id === S.vehId) || {}; $('#fVehTxt').textContent = `🚐 ${p.name || 'Kamper'} · ${fmt1(S.veh.h)} m · ${fmt1(S.veh.t)} t`; $('#fViewTxt').textContent = S.opt.d3 ? '3D' : '2D'; }
@@ -1088,6 +1090,11 @@ function showTab(t) {
 $('#btnView').addEventListener('click', () => setView3d(!S.opt.d3));
 $('#opt3d').addEventListener('change', e => setView3d(e.target.checked));
 $('#optNight').addEventListener('change', e => setNight(e.target.checked));
+function fillPoiShow() { $$('[data-poish]').forEach(i => { i.checked = !!(S.opt.poiShow || {})[i.dataset.poish]; }); $('#optPoiN').value = String(S.opt.poiN || 3); }
+document.addEventListener('change', e => {
+  const i = e.target.closest('[data-poish]'); if (i) { S.opt.poiShow = { ...(S.opt.poiShow || {}), [i.dataset.poish]: i.checked }; store.set('opt', S.opt); fillPoiShow(); drawPoi(); updatePoiCol(); }
+  if (e.target.id === 'optPoiN') { S.opt.poiN = +e.target.value; store.set('opt', S.opt); updatePoiCol(); }
+});
 $('#optEngine').addEventListener('change', e => { S.opt.engine = e.target.value; store.set('opt', S.opt); S.avoidPts = []; if (S.to && !S.nav) computeRoute(); });
 
 $('#optVoice').addEventListener('change', e => { S.opt.voice = e.target.checked; store.set('opt', S.opt); });
@@ -1113,6 +1120,7 @@ $('#quick').addEventListener('click', e => {
   else if (q === 'share') shareRoute();
   else if (q === 'steps') { fillSteps(); qPanel('steps'); }
   else if (q === 'gpx') exportGpx();
+  else if (q === 'poishow') { fillPoiShow(); qPanel('poishow'); }
   else if (q === 'report') { $('#repStatus').textContent = ''; qPanel('report'); }
   else if (q === 'closed') { $('#quick').classList.add('hidden'); roadClosed(); }
   else if (q === 'saveroute') { saveRouteNamed(); }
@@ -1246,7 +1254,7 @@ const POI_ICON = {
 function updatePoiCol() {
   const r = S.route, el = $('#poiCol'); if (!el || !r || !S.poi) return;
   const prog = NAV.prog;
-  const items = S.poi.filter(p => p.at >= prog - 100 && p.off < 1500 && ['fuel', 'mop', 'rest', 'parking'].includes(p.kind)).slice(0, 3);
+  const items = S.poi.filter(p => p.at >= prog - 100 && p.off < (p.kind === 'camp' || p.kind === 'caravan' || p.kind === 'dump' ? 5000 : 1500) && poiOn(p)).slice(0, S.opt.poiN || 3);
   el.innerHTML = items.map(p => {
     const pr = PRICES && PRICES[p.cc]; const price = p.kind === 'fuel' && pr && pr.diesel ? `<small>${fmt1(pr.diesel)} zł</small>` : '';
     return `<div class="pc" data-id="${p.id}"><span class="ic">${POI_ICON[p.kind] || POI_ICON.camp}</span><b>${fmtDist(Math.max(0, p.at - prog))}</b>${price}</div>`;
