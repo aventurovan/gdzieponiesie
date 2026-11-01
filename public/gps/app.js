@@ -787,12 +787,18 @@ function stopNav() {
 /* płynna strzałka + kamera: jedna pętla rAF; między pozycjami GPS pozycja jest przewidywana wzdłuż trasy */
 const MK = { cur: null, curH: 0, zoom: 16.5, raf: null, last: null };
 function setMarkerTarget(p, heading) { if (!MK.cur) { MK.cur = p; MK.curH = heading; } MK.tgt = p; MK.tgtH = heading; MK.tgtT = performance.now(); if (!MK.raf) MK.raf = requestAnimationFrame(tickMarker); }
-function routePointAt(prog) {
+function routePointAt(prog, look = 18) {
   const r = S.route; let i = Math.max(0, Math.min(NAV.idx, r.cum.length - 2));
   while (i < r.cum.length - 2 && r.cum[i + 1] < prog) i++;
   while (i > 0 && r.cum[i] > prog) i--;
   const a = r.coords[i], b = r.coords[i + 1], t = Math.max(0, Math.min(1, (prog - r.cum[i]) / Math.max(1, r.cum[i + 1] - r.cum[i])));
-  return { p: [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t], h: bearing(a, b) };
+  const p = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+  // kierunek: do punktu ~18 m dalej po trasie (łagodniej na załamaniach niż kierunek odcinka)
+  let j = i, rem = look; while (j < r.cum.length - 2 && r.cum[j + 1] - prog < look) j++;
+  const t2 = Math.max(0, Math.min(1, (prog + look - r.cum[j]) / Math.max(1, r.cum[j + 1] - r.cum[j])));
+  const p2 = [r.coords[j][0] + (r.coords[j + 1][0] - r.coords[j][0]) * t2, r.coords[j][1] + (r.coords[j + 1][1] - r.coords[j][1]) * t2];
+  const h = dist(p, p2) > 1 ? bearing(p, p2) : bearing(a, b);
+  return { p, h };
 }
 function tickMarker(now) {
   MK.raf = requestAnimationFrame(tickMarker);
@@ -800,7 +806,8 @@ function tickMarker(now) {
   if (S.nav && NAV.onRoute && S.route) {
     // przewidywanie po trasie: ostatni postęp + prędkość × czas od ostatniej pozycji (maks. 2 s w przód)
     const dt = Math.min(2, Math.max(0, (now - NAV.fixT) / 1000));
-    const q = routePointAt(NAV.prog + NAV.speed * dt); p = q.p; h = NAV.speed > 1.5 ? q.h : MK.curH;
+    NAV.corr = (NAV.corr || 0) * 0.9; // wygaszanie korekty klatka po klatce
+    const q = routePointAt(Math.max(0, NAV.prog + NAV.speed * dt + NAV.corr)); p = q.p; h = NAV.speed > 1.5 ? q.h : MK.curH;
   } else if (MK.tgt) {
     // poza trasą: interpolacja do ostatniej pozycji
     const k = Math.min(1, (now - MK.tgtT) / 700);
@@ -857,7 +864,9 @@ function navStep(f) {
   if (sn.off > 60) { NAV.offCount++; } else { NAV.offCount = 0; NAV.idx = sn.idx; NAV.prog = sn.prog; }
   // przeliczenie tylko w ruchu (>8 km/h) – na postoju obok drogi nie zjadamy limitu
   if (NAV.offCount >= 5 && (f.speed || 0) > 2.2 && Date.now() - NAV.lastReroute > 20000) reroute(f);
-  NAV.onRoute = sn.off <= 35; NAV.fixT = performance.now(); NAV.speed = f.speed || 0;
+  // wygładzenie: różnicę między przewidywanym a zmierzonym postępem rozkładamy na ~0,6 s zamiast skoku
+  if (NAV.onRoute && NAV.fixT) { const pred = NAV.lastProg + NAV.speed * Math.min(2, (performance.now() - NAV.fixT) / 1000); NAV.corr = (NAV.corr || 0) + (pred - NAV.prog); }
+  NAV.lastProg = NAV.prog; NAV.onRoute = sn.off <= 35; NAV.fixT = performance.now(); NAV.speed = NAV.speed ? NAV.speed + ((f.speed || 0) - NAV.speed) * 0.5 : (f.speed || 0);
   if (!NAV.onRoute) { NAV.zoomT = 16; }
   else {
     const kmh = NAV.speed * 3.6; let zoom = kmh > 90 ? 15.6 : kmh > 50 ? 16.3 : 17;
@@ -913,7 +922,7 @@ function updateHud() {
   $('#etaKm').textContent = (rem >= 10000 ? Math.round(rem / 1000) : Math.round(rem / 100) / 10) + ' km';
   $('#etaMin').textContent = hm(remSec);
   $('#progBar').style.width = (frac * 100).toFixed(1) + '%';
-  const kmh = Math.round((S.pos && S.pos.speed || 0) * 3.6); $('#speedVal').textContent = kmh;
+  const kmh = Math.round((NAV.onRoute ? NAV.speed : (S.pos && S.pos.speed || 0)) * 3.6); $('#speedVal').textContent = kmh;
   // limit prędkości na bieżącym odcinku (TomTom speedLimit)
   const lim = (r.limits || []).find(l => NAV.idx >= l.a && NAV.idx < l.b);
   $('#limit').classList.toggle('hidden', !lim || !S.opt.limits); if (lim) $('#limitVal').textContent = lim.kmh;
@@ -1037,11 +1046,15 @@ function startSim() {
     const a = r.coords[i], b = r.coords[i + 1], t = (pr - r.cum[i]) / Math.max(1, r.cum[i + 1] - r.cum[i]);
     return { p: [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t], h: bearing(a, b) };
   };
+  let v = 0; // m/s, z płynnym przyspieszaniem i hamowaniem
   simT = setInterval(() => {
-    const now = Date.now();
-    // zwalniamy przed manewrem jak kierowca: 70 km/h, przed skrętem 30
-    const cs = currentStep(); const v = (cs && cs.dist < 150 && cs.s.t !== 6) ? 30 / 3.6 : 70 / 3.6;
-    prog += v * (now - last) / 1000; last = now;
+    const now = Date.now(); const dt = Math.min(0.5, (now - last) / 1000); last = now;
+    // cel prędkości: 70 km/h, przed skrętem/rondem hamowanie do 25, po skręcie rozpędzanie
+    const cs = currentStep(); let target = 70 / 3.6;
+    if (cs && cs.s.t !== 6 && cs.s.t !== 10) { if (cs.dist < 60) target = 25 / 3.6; else if (cs.dist < 200) target = 40 / 3.6; else if (cs.dist < 400) target = 55 / 3.6; }
+    if (r.total - prog < 150) target = 20 / 3.6;
+    const acc = target > v ? 1.6 : 2.4; v += Math.max(-acc * dt, Math.min(acc * dt, target - v));
+    prog += v * dt;
     if (prog >= r.total) { prog = r.total; }
     const q = at(prog); onFix({ lon: q.p[0], lat: q.p[1], speed: v, heading: q.h, t: now });
     if (prog >= r.total) stopSim();
