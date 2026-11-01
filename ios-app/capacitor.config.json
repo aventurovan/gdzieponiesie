@@ -19,7 +19,8 @@
     "contentInset": "never",
     "backgroundColor": "#16181D",
     "allowsLinkPreview": false,
-    "scrollEnabled": false
+    "scrollEnabled": false,
+    "limitsNavigationsToAppBoundDomains": true
   },
   "plugins": {
     "BackgroundGeolocation": {},
