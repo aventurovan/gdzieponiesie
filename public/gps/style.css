@@ -399,3 +399,7 @@ body.night #map{background:#1C2029}
 
 .avoid-mk{width:30px;height:30px;border-radius:50%;background:#D92D20;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.35);position:relative;cursor:pointer}
 .avoid-mk::after{content:"";position:absolute;left:6px;right:6px;top:50%;height:4px;margin-top:-2px;background:#fff;border-radius:2px}
+
+/* HUD: dzień D1 (80 % + rozmycie), noc N2 (granat + niebieski obrys) */
+#hud .card,#hud .pill,#hud .round,#hud .chip,#hud .events,#hud .pc,#hud .lanes,#hud .sec-box,#hud .fab,.chip-veh{background:rgba(26,29,36,.80);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);box-shadow:0 4px 14px rgba(0,0,0,.25)}
+body.night #hud .card,body.night #hud .pill,body.night #hud .round,body.night #hud .chip,body.night #hud .events,body.night #hud .pc,body.night #hud .lanes,body.night #hud .sec-box,body.night #hud .fab,body.night .chip-veh{background:#1C2740;border:1.5px solid rgba(91,140,255,.45);box-shadow:0 4px 14px rgba(0,0,0,.5);-webkit-backdrop-filter:none;backdrop-filter:none}
