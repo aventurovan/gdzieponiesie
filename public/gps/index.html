@@ -13,7 +13,7 @@
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800&display=swap">
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
-<link rel="stylesheet" href="style.css?v=31">
+<link rel="stylesheet" href="style.css?v=32">
 </head>
 <body>
 <div id="desk" class="desk hidden">
@@ -123,11 +123,11 @@
   <div class="qp hidden" data-panel="poishow">
     <div class="row-h"><h1>Pokaż POI</h1><button type="button" class="x" data-back aria-label="Wróć">‹</button></div>
     <div class="box list">
-    <label class="sw"><span><b>⛽ Stacje paliw</b></span><input type="checkbox" data-poish="fuel"></label>
-    <label class="sw"><span><b>🅿 MOP / parkingi przy drodze</b></span><input type="checkbox" data-poish="mop"></label>
-    <label class="sw"><span><b>🚐 Parkingi dla kamperów</b></span><input type="checkbox" data-poish="parking"></label>
-    <label class="sw"><span><b>⛺ Kempingi</b><small>do 5 km od trasy</small></span><input type="checkbox" data-poish="camp"></label>
-    <label class="sw"><span><b>💧 Zrzut / woda</b><small>do 5 km od trasy</small></span><input type="checkbox" data-poish="dump"></label>
+    <label class="sw"><span class="pk-row"><i class="pk-ic" style="background:#B7791F"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v16"/><path d="M3 21h14"/><path d="M15 9h3a2 2 0 0 1 2 2v5a1.5 1.5 0 0 1-3 0v-3"/></svg></i><b>Stacje paliw</b></span><input type="checkbox" data-poish="fuel"></label>
+    <label class="sw"><span class="pk-row"><i class="pk-ic" style="background:#5A6478"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 17V7h4a3 3 0 0 1 0 6H9"/></svg></i><span><b>MOP i parkingi przy drodze</b></span></span><input type="checkbox" data-poish="mop"></label>
+    <label class="sw"><span class="pk-row"><i class="pk-ic" style="background:#3A74FF"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 16V8h11l3 3h4v5z"/><circle cx="7" cy="17" r="1.6"/><circle cx="17" cy="17" r="1.6"/></svg></i><b>Parkingi dla kamperów</b></span><input type="checkbox" data-poish="parking"></label>
+    <label class="sw"><span class="pk-row"><i class="pk-ic" style="background:#1E8A4C"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20L12 4l9 16z"/><path d="M9 20l3-6 3 6"/></svg></i><span><b>Kempingi</b><small>do 5 km od trasy</small></span></span><input type="checkbox" data-poish="camp"></label>
+    <label class="sw"><span class="pk-row"><i class="pk-ic" style="background:#0EA5E9"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3S5 11 5 15a7 7 0 0 0 14 0c0-4-7-12-7-12z"/></svg></i><span><b>Zrzut nieczystości i woda</b><small>do 5 km od trasy</small></span></span><input type="checkbox" data-poish="dump"></label>
     </div>
   </div>
 
@@ -342,28 +342,29 @@
 <!-- POI -->
 <div id="poi" class="sheet quick full hidden">
   <div class="row-h"><h1>Przy trasie</h1><button type="button" class="x" data-close aria-label="Zamknij">✕</button></div>
-  <div class="sec">Pokazuj na mapie i w kolumnie po lewej</div>
+  <div class="sec">Co pokazywać na mapie i w jeździe</div>
   <div class="box list">
-    <label class="sw"><span><b>⛽ Stacje paliw</b></span><input type="checkbox" data-poish="fuel"></label>
-    <label class="sw"><span><b>🅿 MOP / parkingi przy drodze</b></span><input type="checkbox" data-poish="mop"></label>
-    <label class="sw"><span><b>🚐 Parkingi dla kamperów</b></span><input type="checkbox" data-poish="parking"></label>
-    <label class="sw"><span><b>⛺ Kempingi</b><small>do 5 km od trasy</small></span><input type="checkbox" data-poish="camp"></label>
-    <label class="sw"><span><b>💧 Zrzut / woda</b><small>do 5 km od trasy</small></span><input type="checkbox" data-poish="dump"></label>
-    <label class="sw"><span><b>Ile w kolumnie po lewej</b></span><select id="optPoiN" class="sel"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></label>
+    <label class="sw"><span class="pk-row"><i class="pk-ic" style="background:#B7791F"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v16"/><path d="M3 21h14"/><path d="M15 9h3a2 2 0 0 1 2 2v5a1.5 1.5 0 0 1-3 0v-3"/></svg></i><b>Stacje paliw</b></span><input type="checkbox" data-poish="fuel"></label>
+    <label class="sw"><span class="pk-row"><i class="pk-ic" style="background:#5A6478"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 17V7h4a3 3 0 0 1 0 6H9"/></svg></i><span><b>MOP i parkingi przy drodze</b></span></span><input type="checkbox" data-poish="mop"></label>
+    <label class="sw"><span class="pk-row"><i class="pk-ic" style="background:#3A74FF"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 16V8h11l3 3h4v5z"/><circle cx="7" cy="17" r="1.6"/><circle cx="17" cy="17" r="1.6"/></svg></i><b>Parkingi dla kamperów</b></span><input type="checkbox" data-poish="parking"></label>
+    <label class="sw"><span class="pk-row"><i class="pk-ic" style="background:#1E8A4C"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20L12 4l9 16z"/><path d="M9 20l3-6 3 6"/></svg></i><span><b>Kempingi</b><small>do 5 km od trasy</small></span></span><input type="checkbox" data-poish="camp"></label>
+    <label class="sw"><span class="pk-row"><i class="pk-ic" style="background:#0EA5E9"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3S5 11 5 15a7 7 0 0 0 14 0c0-4-7-12-7-12z"/></svg></i><span><b>Zrzut nieczystości i woda</b><small>do 5 km od trasy</small></span></span><input type="checkbox" data-poish="dump"></label>
+    <label class="sw"><span><b>Liczba miejsc w kolumnie</b><small>najbliższe przed Tobą, po lewej stronie ekranu jazdy</small></span><select id="optPoiN" class="sel"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></label>
   </div>
 
 
-  <div class="chips" id="poiChips">
+  <div class="sec">Lista miejsc przy trasie</div>
+  <div class="chips pchips" id="poiChips">
     <button type="button" data-f="all" aria-pressed="true">Wszystko</button><button type="button" data-f="camp">Kemping</button><button type="button" data-f="dump">Zrzut</button><button type="button" data-f="water">Woda</button><button type="button" data-f="fuel">Paliwo</button><button type="button" data-f="park">Parking</button>
   </div>
   <div class="row-h" style="margin-top:8px"><small id="poiStatus"></small><button type="button" class="mini" id="poiReload">Odśwież</button></div>
-  <div id="poiList" class="poi-list"><p class="note">Wyznacz trasę — pokażę kempingi, zrzuty, wodę, LPG i stacje wzdłuż niej.</p></div>
+  <div id="poiList" class="poi-list"><p class="note">Brak trasy. Wyznacz trasę, a tutaj pojawią się kempingi, zrzuty, parkingi i stacje wzdłuż niej — z odległością i ceną paliwa.</p></div>
 </div>
 
 
 <script src="../assets/config.js"></script>
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <script src="https://unpkg.com/pmtiles@4.3.2/dist/pmtiles.js"></script>
-<script src="app.js?v=62"></script>
+<script src="app.js?v=63"></script>
 </body>
 </html>

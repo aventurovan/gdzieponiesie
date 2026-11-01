@@ -705,7 +705,7 @@ function drawPoi() {
 function renderPoi() {
   const list = $('#poiList'); const st = S.poiStatus || '';
   $('#poiStatus').textContent = st === 'loading' ? 'Szukam w OSM…' : st.startsWith('error:') ? 'Błąd: ' + st.slice(6) : st.startsWith('ok:') ? st.slice(3) + ' miejsc przy trasie' : '';
-  if (!S.poi) { list.innerHTML = '<p class="note">' + (st === 'loading' ? 'Szukam kempingów, zrzutów, parkingów i stacji wzdłuż trasy…' : st.startsWith('error:') ? 'Nie udało się pobrać POI. Spróbuj „Odśwież".' : 'Wyznacz trasę — pokażę kempingi, zrzuty, wodę, LPG, parkingi i stacje wzdłuż niej.') + '</p>'; return; }
+  if (!S.poi) { list.innerHTML = '<p class="note">' + (st === 'loading' ? 'Szukam kempingów, zrzutów, parkingów i stacji wzdłuż trasy…' : st.startsWith('error:') ? 'Nie udało się pobrać POI. Spróbuj „Odśwież".' : 'Brak trasy. Wyznacz trasę, a tutaj pojawią się kempingi, zrzuty, parkingi i stacje wzdłuż niej — z odległością i ceną paliwa.') + '</p>'; return; }
   const f = S.poiFilter, prog = S.nav ? NAV.prog : 0;
   const items = S.poi.filter(p => p.at >= prog - 500 && (f === 'all' || (f === 'camp' && (p.kind === 'camp' || p.kind === 'caravan')) || (f === 'dump' && (p.kind === 'dump' || p.dump)) || (f === 'water' && (p.water || p.kind === 'dump')) || (f === 'fuel' && p.kind === 'fuel') || (f === 'park' && ['mop', 'rest', 'parking'].includes(p.kind))));
   if (!items.length) { list.innerHTML = '<p class="note">Nic takiego przy trasie.</p>'; return; }
