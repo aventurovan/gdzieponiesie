@@ -413,3 +413,7 @@ body.night #hud .card,body.night #hud .pill,body.night #hud .round,body.night #h
 .pchips button{flex:none;height:38px;padding:0 16px;border-radius:19px;border:1px solid #2E3647;background:#222A3A;color:#C9CED8;font-family:inherit;font-size:14px;font-weight:700}
 .pchips button[aria-pressed="true"]{background:#3A74FF;border-color:#3A74FF;color:#fff}
 #poi .note{font-size:14px;line-height:1.45;color:#9aa3b5}
+
+.seg3{display:flex;gap:6px;background:#222A3A;border-radius:14px;padding:4px}
+.seg3 button{flex:1;height:40px;border:0;border-radius:10px;background:none;color:#C9CED8;font-family:inherit;font-size:14px;font-weight:700}
+.seg3 button[aria-pressed="true"]{background:#3A74FF;color:#fff}

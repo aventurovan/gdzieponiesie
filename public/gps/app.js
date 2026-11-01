@@ -363,7 +363,7 @@ $('#viaChips').addEventListener('click', e => { const b = e.target.closest('[dat
 /* ---------- pojazd: kilka profili ---------- */
 function vehInit() {
   if (!S.profiles || !S.profiles.length) { S.profiles = [{ id: 'p1', name: 'Kamper', ...S.veh }]; S.vehId = 'p1'; store.set('profiles', S.profiles); store.set('vehId', S.vehId); }
-  const cur = S.profiles.find(p => p.id === S.vehId) || S.profiles[0]; S.vehId = cur.id; S.veh = { h: cur.h, l: cur.l, w: cur.w, t: cur.t, v: cur.v || 100 }; store.set('veh', S.veh);
+  const cur = S.profiles.find(p => p.id === S.vehId) || S.profiles[0]; S.vehId = cur.id; S.veh = { h: cur.h, l: cur.l, w: cur.w, t: cur.t, v: cur.v || 100, style: cur.style || 'norm', breaks: cur.breaks !== false }; store.set('veh', S.veh);
 }
 function vehLine() { const p = S.profiles.find(x => x.id === S.vehId) || {}; $('#tVehTxt').textContent = `${p.name || 'Kamper'} · ${fmt1(S.veh.h)} m · ${S.veh.v || 100} km/h`; }
 const fmt1 = n => String(Math.round(n * 100) / 100).replace('.', ',');
@@ -374,13 +374,14 @@ function renderVehList() {
 }
 function fillVeh(id) {
   vehEdit = id || S.vehId; const p = S.profiles.find(x => x.id === vehEdit) || S.profiles[0];
-  $('#vName').value = p.name; $('#vH').value = fmt1(p.h); $('#vL').value = fmt1(p.l); $('#vW').value = fmt1(p.w); $('#vT').value = fmt1(p.t); $('#vV').value = p.v || 100;
+  $('#vName').value = p.name; $('#vH').value = fmt1(p.h); $('#vL').value = fmt1(p.l); $('#vW').value = fmt1(p.w); $('#vT').value = fmt1(p.t); $('#vV').value = p.v || 100; $$('#vStyle button').forEach(b => b.setAttribute('aria-pressed', b.dataset.st === (p.style || 'norm'))); $('#vBreaks').checked = p.breaks !== false;
   $('#btnVehDel').disabled = S.profiles.length < 2; renderVehList();
 }
 $('#vehList').addEventListener('click', e => { const r = e.target.closest('[data-vid]'); if (!r) return; S.vehId = r.dataset.vid; store.set('vehId', S.vehId); vehInit(); vehLine(); fillVeh(S.vehId); S.route = null; $('#btnGo').classList.add('hidden'); });
+$('#vStyle').addEventListener('click', e => { const b = e.target.closest('[data-st]'); if (!b) return; $$('#vStyle button').forEach(x => x.setAttribute('aria-pressed', x === b)); });
 $('#vehAdd').addEventListener('click', () => { const id = 'p' + Date.now(); S.profiles.push({ id, name: 'Nowy profil', ...S.veh }); store.set('profiles', S.profiles); fillVeh(id); $('#vName').focus(); $('#vName').select(); });
 $('#btnVehSave').addEventListener('click', () => {
-  const v = { h: num($('#vH').value), l: num($('#vL').value), w: num($('#vW').value), t: num($('#vT').value), v: Math.round(num($('#vV').value)) };
+  const v = { h: num($('#vH').value), l: num($('#vL').value), w: num($('#vW').value), t: num($('#vT').value), v: Math.round(num($('#vV').value)), style: ($('#vStyle [aria-pressed="true"]') || {}).dataset?.st || 'norm', breaks: $('#vBreaks').checked };
   if (![v.h, v.l, v.w, v.t, v.v].every(Number.isFinite)) return alert('Wpisz liczby, np. 3,10');
   if (v.v < 50 || v.v > 140) return alert('Prędkość podróżna: 50–140 km/h');
   const p = S.profiles.find(x => x.id === vehEdit); if (!p) return;
@@ -419,6 +420,7 @@ async function computeRoute(fromPos) {
   j.total = j.cum[j.cum.length - 1];
   // warianty z TomTom: główna + alternatywy, każda jako pełna trasa
   S.routes = fromPos ? [j] : [j, ...(j.alts || []).map(alt => ({ ...j, ...alt, alts: undefined, total: alt.cum[alt.cum.length - 1] }))];
+  S.routes.forEach(applyStyle);
   delete j.alts; S.altIdx = 0; S.route = j;
   if (!fromPos) { renderSummary(); drawRoute(); drawAlts(); $('#btnGo').classList.remove('hidden'); $('#tOffline').classList.remove('hidden'); }
   if (S.fitAfter) { S.fitAfter = false; [100, 400, 800, 1400, 2200].forEach(t => setTimeout(() => { if (S.tab === 'trasa') fitRoute(); }, t)); }
@@ -477,12 +479,24 @@ function renderSummary(reload = true) {
   const bordersTxt = (r.borders || []).length ? r.borders.map(b => `<span class="tag ${b.wait > 30 ? 'bad' : ''}">🛂 ${b.from}→${b.to}${b.name ? ' ' + esc(b.name) : ''}: ${b.wait != null ? 'kolejka ~' + b.wait + ' min' : 'brak danych'}</span>`).join('') + '<span class="tag" style="opacity:.7">Data by <a href="https://nakordoni.eu" style="color:#5B8CFF">nakordoni.eu</a></span>' : '';
   $('#tSum').innerHTML = `<div class="l1"><b>${hm(r.sec + waitS)}</b><i>•</i><span>${hhmm(eta)}${eta.getDate() !== new Date().getDate() ? ' jutro' : ''}</span><i>•</i><span>${Math.round(r.km)} km</span></div>
     <div class="l2">${(r.engine === 'tomtom' || (r.engine === 'osm' && r.ttTime)) ? (trafficAhead(0).min > 0 ? '<span class="bad">🚗 +' + trafficAhead(0).min + ' min korki</span>' : '<span class="ok">🚗 Brak opóźnień</span>') : '<span class="tag">bez korków (' + (r.engine === 'osm' ? 'TomTom niedostępny' : 'ORS') + ')</span>'}${r.note ? '<span class="tag bad">' + esc(r.note) + '</span>' : ''}
-    <span class="tag">${(r.path || []).join(' › ')}</span>${tunnelsTxt}<span id="restrBadge" class="tag ${(r.restrictions || []).length ? 'bad' : ''}">${r.restrCheck === 'pending' || r.restrCheck === 'checking' ? 'sprawdzam ograniczenia…' : (r.restrictions || []).length ? '⚠ na trasie: ' + r.restrictions.map(x => x.maxheight ? x.maxheight.toFixed(1).replace('.', ',') + ' m' : x.maxweight ? x.maxweight + ' t' : x.maxwidth + ' m szer.').join(', ') : r.avoided ? 'ominięto ' + r.avoided + ' ' + (r.avoided === 1 ? 'ograniczenie' : 'ograniczeń') : r.restrCheck === 'truck' ? 'tryb ciężarowy' : '✓ bez ograniczeń wysokości/masy'}</span>${bordersTxt}${r.ttError ? '<span class="bad">TomTom: ' + esc(r.ttError) + '</span>' : ''}</div>`;
+    <span class="tag">${(r.path || []).join(' › ')}</span>${tunnelsTxt}${(r.styleExtra > 60 || r.breaks) ? '<span class="tag">' + [r.styleExtra > 60 ? 'styl jazdy +' + Math.round(r.styleExtra / 60) + ' min' : '', r.breaks ? 'przerwy ' + Math.round(r.breaks / 60) + ' min' : ''].filter(Boolean).join(' · ') + '</span>' : ''}<span id="restrBadge" class="tag ${(r.restrictions || []).length ? 'bad' : ''}">${r.restrCheck === 'pending' || r.restrCheck === 'checking' ? 'sprawdzam ograniczenia…' : (r.restrictions || []).length ? '⚠ na trasie: ' + r.restrictions.map(x => x.maxheight ? x.maxheight.toFixed(1).replace('.', ',') + ' m' : x.maxweight ? x.maxweight + ' t' : x.maxwidth + ' m szer.').join(', ') : r.avoided ? 'ominięto ' + r.avoided + ' ' + (r.avoided === 1 ? 'ograniczenie' : 'ograniczeń') : r.restrCheck === 'truck' ? 'tryb ciężarowy' : '✓ bez ograniczeń wysokości/masy'}</span>${bordersTxt}${r.ttError ? '<span class="bad">TomTom: ' + esc(r.ttError) + '</span>' : ''}</div>`;
   $('#tOptsTxt').textContent = ({ fast: 'Szybka', main: 'Główne drogi', notoll: 'Bez opłat', eco: 'Ekonomiczna' })[S.mode] + ' · Unikaj';
   drawProgressMarks(); fillCountryTable($('#rCcTable')); fillRouteOpts();
   loadPoi(); loadLimits();
 }
 const KRAJ = { PL: 'Polska', CZ: 'Czechy', SK: 'Słowacja', AT: 'Austria', DE: 'Niemcy', IT: 'Włochy', HU: 'Węgry', SI: 'Słowenia', HR: 'Chorwacja', FR: 'Francja', CH: 'Szwajcaria', NL: 'Holandia', BE: 'Belgia', DK: 'Dania', SE: 'Szwecja', NO: 'Norwegia', ES: 'Hiszpania', PT: 'Portugalia', LT: 'Litwa', LV: 'Łotwa', EE: 'Estonia', RO: 'Rumunia', BG: 'Bułgaria', GR: 'Grecja', RS: 'Serbia', BA: 'Bośnia', ME: 'Czarnogóra', AL: 'Albania', MK: 'Macedonia Płn.', LU: 'Luksemburg', GB: 'Wielka Brytania', IE: 'Irlandia', FI: 'Finlandia', UA: 'Ukraina' };
+// styl jazdy: wolniej poza drogami szybkimi (kroki < 85 km/h) + przerwy co 2 h jazdy
+const STYLE_F = { dyn: 1.0, norm: 1.08, calm: 1.18 };
+function applyStyle(r) {
+  if (!r || r.secRaw != null) return; r.secRaw = r.sec;
+  const st = S.veh.style || 'norm', f = STYLE_F[st] || 1;
+  let raw = 0, styled = 0;
+  for (const s of r.steps || []) { const d = s.d || (s.wp ? (r.cum[s.wp[1]] - r.cum[s.wp[0]]) : 0); const t = s.s || 0; if (!t) continue; raw += t; styled += (d / t * 3.6 >= 85 ? t : t * f); }
+  let sec = raw > 0 ? r.sec * (styled / raw) : r.sec * (1 + (f - 1) * 0.6);
+  r.styleExtra = Math.round(sec - r.sec);
+  r.breaks = S.veh.breaks !== false ? Math.floor(sec / 7200) * 900 : 0;
+  r.sec = Math.round(sec + r.breaks);
+}
 const hm = s => { const t = Math.round(s / 60), h = Math.floor(t / 60), m = t % 60; return h ? `${h}:${String(m).padStart(2, '0')} h` : `${m} min`; };
 const hhmm = d => String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
 
