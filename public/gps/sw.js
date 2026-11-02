@@ -1,8 +1,8 @@
 /* Azimo – service worker: powłoka aplikacji + kafelki/czcionki/ikony mapy do jazdy bez zasięgu */
-const SHELL = 'azimo-shell-v43';
+const SHELL = 'azimo-shell-v44';
 const TILES = 'azimo-tiles';
 const SHELL_URLS = [
-  './', 'index.html', 'app.js?v=67', 'style.css?v=33', 'manifest.webmanifest', '../assets/config.js',
+  './', 'index.html', 'app.js?v=68', 'style.css?v=33', 'manifest.webmanifest', '../assets/config.js',
   'https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js', 'https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css', 'https://unpkg.com/pmtiles@4.3.2/dist/pmtiles.js',
 ];
 

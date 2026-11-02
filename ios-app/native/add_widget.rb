@@ -9,7 +9,7 @@ app_group = project.main_group.find_subpath('App', true)
 
 # --- pliki wtyczki + atrybuty do aplikacji
 plugin_group = app_group.new_group('Native')
-%w[plugin/LiveActivityPlugin.swift plugin/MyViewController.swift NavAttributes.swift].each do |rel|
+%w[plugin/LiveActivityPlugin.swift plugin/NavVoicePlugin.swift plugin/MyViewController.swift NavAttributes.swift].each do |rel|
   ref = plugin_group.new_file(File.join(native, rel))
   app.source_build_phase.add_file_reference(ref)
 end

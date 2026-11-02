@@ -10,7 +10,8 @@ const store = {
 /* ---------- most do aplikacji natywnej (Capacitor, wersja IPA) ---------- */
 const NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
 function plugin(name) { try { const C = window.Capacitor; if (!C) return null; if (C.Plugins && C.Plugins[name]) return C.Plugins[name]; if (C.registerPlugin) return C.registerPlugin(name); } catch (e) {} return null; }
-const NTTS = NATIVE ? plugin('TextToSpeech') : null, NBG = NATIVE ? plugin('BackgroundGeolocation') : null, NKA = NATIVE ? plugin('KeepAwake') : null, NLA = NATIVE ? plugin('LiveActivity') : null;
+const hasPlugin = n => { try { const C = window.Capacitor; return !!(C && (C.isPluginAvailable ? C.isPluginAvailable(n) : (C.PluginHeaders || []).some(h => h.name === n))); } catch (e) { return false; } };
+const NVOICE = NATIVE && hasPlugin('NavVoice') ? plugin('NavVoice') : null; const NTTS = NATIVE && !NVOICE ? plugin('TextToSpeech') : null, NBG = NATIVE ? plugin('BackgroundGeolocation') : null, NKA = NATIVE ? plugin('KeepAwake') : null, NLA = NATIVE ? plugin('LiveActivity') : null;
 // Live Activity (ekran blokady / Dynamic Island) – tylko w aplikacji natywnej
 const LA = { on: false, last: 0, key: '' };
 function laPayload() {
@@ -1011,10 +1012,18 @@ function speak(t, urgent) {
   if (urgent) { VQ.length = 0; try { speechSynthesis.cancel(); } catch (e) {} vBusy = true; setTimeout(() => { vBusy = false; VQ.push(t); vNext(); }, 300); return; }
   VQ.push(t); if (!vBusy) vNext();
 }
-let nativeVoices = null;
+let nativeVoices = null, navVoices = null;
 async function vNext() {
   const t = VQ.shift(); if (!t) { vBusy = false; return; }
   vBusy = true;
+  if (NVOICE) {
+    try {
+      if (!navVoices) { try { navVoices = (await NVOICE.voices()).voices || []; } catch (e) { navVoices = []; } }
+      const pick = (S.opt.voiceName && navVoices.find(v => v.id === S.opt.voiceName)) || navVoices.find(v => v.quality === 'premium') || navVoices.find(v => v.quality === 'enhanced') || navVoices[0];
+      await NVOICE.speak({ text: t, lang: 'pl-PL', rate: S.opt.rate || 1.0, ...(pick ? { voice: pick.id } : {}) });
+    } catch (e) {}
+    vBusy = false; setTimeout(vNext, 120); return;
+  }
   if (NTTS) {
     try {
       if (!nativeVoices) { try { nativeVoices = (await NTTS.getSupportedVoices()).voices || []; } catch (e) { nativeVoices = []; } }
@@ -1037,6 +1046,14 @@ async function vNext() {
 }
 async function fillVoices() {
   const sel = $('#optVoiceName'); if (!sel) return;
+  if (NVOICE) {
+    try { navVoices = (await NVOICE.voices()).voices || []; } catch (e) { navVoices = []; }
+    const QL = { premium: 'premium', enhanced: 'rozszerzony', default: 'zwykły' };
+    sel.innerHTML = '<option value="">Automatycznie (najlepszy polski)</option>' + navVoices.map(v => `<option value="${esc(v.id)}">${esc(v.name)} (${QL[v.quality] || v.quality})${v.quality !== 'default' ? ' ★' : ''}</option>`).join('');
+    sel.value = S.opt.voiceName || '';
+    let route = ''; try { route = (await NVOICE.route()).outputs || ''; } catch (e) {}
+    $('#voiceHint').textContent = `głos natywny (nawigacyjny) · ${navVoices.length} pl · wyjście: ${route || '?'}`; return;
+  }
   if (NTTS) {
     try { nativeVoices = (await NTTS.getSupportedVoices()).voices || []; } catch (e) { nativeVoices = []; }
     const vs = nativeVoices.filter(v => /^pl/i.test(v.lang || ''));
@@ -1422,7 +1439,7 @@ function diagBridge() {
   const C = window.Capacitor; const el = $('#diag'); if (!el) return;
   let plat = '-'; try { plat = C && C.getPlatform ? C.getPlatform() : (C ? 'brak getPlatform' : '-'); } catch (e) {}
   let heads = []; try { heads = (C && C.PluginHeaders ? C.PluginHeaders : []).map(h => h.name); } catch (e) {}
-  el.textContent = `most: ${C ? 'jest' : 'brak'} · platforma: ${plat} · natywna: ${NATIVE ? 'tak' : 'nie'} · wtyczki: ${heads.length ? heads.join(', ') : '—'} · TTS:${NTTS ? '✓' : '✗'} GPS-tło:${NBG ? '✓' : '✗'} LA:${NLA ? '✓' : '✗'} · UA: ${navigator.userAgent.slice(0, 60)}`;
+  el.textContent = `most: ${C ? 'jest' : 'brak'} · platforma: ${plat} · natywna: ${NATIVE ? 'tak' : 'nie'} · wtyczki: ${heads.length ? heads.join(', ') : '—'} · Głos:${NVOICE ? 'nawig.✓' : NTTS ? 'TTS✓' : '✗'} GPS-tło:${NBG ? '✓' : '✗'} LA:${NLA ? '✓' : '✗'} · UA: ${navigator.userAgent.slice(0, 60)}`;
 }
 // komputer (mysz, brak dotyku, szeroki ekran) – tylko informacja z kodem QR; ?desk=1 wymusza pełną wersję do testów
 function isDesktop() {

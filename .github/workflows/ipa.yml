@@ -90,7 +90,8 @@ jobs:
           import json, sys
           p = sys.argv[1]; c = json.load(open(p))
           lst = c.get('packageClassList') or []
-          if 'LiveActivityPlugin' not in lst: lst.append('LiveActivityPlugin')
+          for n in ('LiveActivityPlugin', 'NavVoicePlugin'):
+              if n not in lst: lst.append(n)
           c['packageClassList'] = lst
           json.dump(c, open(p, 'w'), indent=2)
           print('packageClassList:', lst)
