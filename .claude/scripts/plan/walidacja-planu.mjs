@@ -1,0 +1,360 @@
+// Walidacja planu technicznego przed generowaniem docs/active/ (PLAN-POPRAWY P13): to, czego konsumenci zadania nie
+// naprawia w runie (faza bez kodu uznana za wykonana, E2E bez flow albo policzone dwa razy, seed bez autora, Weryfikacja,
+// ktorej scribe nie uruchomi), budzet pliku z tabeli plikow i problemy zapisu, ktorych parser nie przeczytal jednoznacznie.
+
+import { existsSync, readdirSync } from 'node:fs'
+import { join } from 'node:path'
+
+import { akcja, sprawdzBudzet } from './budzet-pliku.mjs'
+import { sprawdzCzesci } from './czesci-pr.mjs'
+import { uwagiImporterow } from './importerzy.mjs'
+import { bezOgonkow, ekranyFigmy, poleTekstowe, sciezkaOrigin } from './plan-techniczny.mjs'
+import { sprawdzMakiety } from './makiety.mjs'
+import { sciezkaWzgledna } from './przygotowanie.mjs'
+import { uwagiRejestru } from './rejestr-stalych.mjs'
+import { doWzorca, PROFIL } from '../stack/profil.mjs'
+import { uzywaSupabase as projektUzywaSupabase } from '../stack/projekt.mjs'
+
+export { PROG_ESLINT, PROG_PYTANIA } from './budzet-pliku.mjs'
+
+/**
+ * @typedef {import('./plan-techniczny.mjs').Plan} Plan
+ * @typedef {import('./plan-techniczny.mjs').Jednostka} Jednostka
+ * @typedef {{ bledy: string[], uwagi: string[] }} Wynik
+ */
+
+export const BUILDERZY = ['feature-builder-ui', 'feature-builder-data', 'feature-builder-fullstack']
+// Warianty z Figma MCP wybiera planner fazy; plan pisze bazowe nazwy, ale wariant w planie nie jest bledem.
+const DELEGACI = [...BUILDERZY, 'feature-builder-ui-figma', 'feature-builder-fullstack-figma']
+const POLA_FRONTMATTERA = ['design_md', 'figma_spec', 'figma_screens', 'operator_prep']
+const PLIK_TESTU = /(?:\.(?:test|spec)\.[cm]?[jt]sx?$|__tests__\/)/
+const { katalogSeedow, katalogRunnerow, plikFlow } = PROFIL.e2e
+const SEED = new RegExp(`^${doWzorca(katalogSeedow)}\\/[\\w.-]+-seed\\.sql$`)
+// Runner E2E (`<katalog runnerow>/<x>.sh`) w backtickach — scribe uruchomilby go bez srodowiska e2e.
+const SCIEZKA_RUNNERA = new RegExp(`^(?:\\.\\/)?(?:[\\w.-]+\\/)*${doWzorca(katalogRunnerow)}\\/[^\\s]*\\.sh$`)
+const POWLOKI = new Set(['bash', 'sh', 'zsh', 'env', 'time', 'timeout'])
+/**
+ * Pilot mobile W12 (runy 3–5): `grep -c "<flow>" <katalog runnerow>/run-all.sh` w polu Weryfikacja szedl jako „uruchamia runner”,
+ * choc grep plik tylko czyta. Runner uruchamia komenda, w ktorej jego sciezka stoi na miejscu polecenia: na poczatku albo po
+ * powloce (`bash`, `sh`, `env`, `timeout 60`), takze za `&&`, `||`, `;` i `|`. Sciezka jako argument innej komendy to odczyt.
+ * @param {string} tresc @returns {boolean}
+ */
+export function uruchamiaRunner(tresc) {
+  for (const [, komenda] of tresc.matchAll(/`([^`]+)`/g)) {
+    for (const czlon of komenda.split(/&&|\|\||;|\|/)) {
+      const tokeny = czlon.trim().split(/\s+/).filter((t) => !/^\w+=/.test(t))
+      const polecenie = tokeny.findIndex((t) => !POWLOKI.has(t) && !/^-/.test(t) && !/^\d+[smh]?$/.test(t))
+      if (polecenie !== -1 && SCIEZKA_RUNNERA.test(tokeny[polecenie])) return true
+    }
+  }
+  return false
+}
+// Tokeny, po ktorych grepy konsumentow licza i wykluczaja linie zadan (precheck, tester, scribe, completion-gate, execute=done).
+const ZNACZNIKI = /\[(?:E2E|Manual|Unit)\]|Operator:|\[P[123]\]/
+// Kategorie CLI i Grep scribe'a review-wf (bookkeeping "Weryfikacja:", pkt 3): pozycja bez nich zostaje "klasyfikacja niejasna".
+// Lista CLI rdzenia jest tez w prompcie scribe'a, komendy stacku scribe bierze z profilu (`komendyCli`) — zgodnosc pilnuje
+// kontrakt-docs-active.test.mjs.
+export const KOMENDY_CLI = ['bun', 'npm', 'npx', 'pnpm', 'yarn', 'make', 'node', 'tsc', ...PROFIL.komendyCli, 'cargo', 'pytest', 'ruff',
+  'eslint', 'supabase', 'psql', 'deno', 'curl', 'wc', 'git', 'bash', 'sh']
+const KOMENDY_GREP = ['grep', 'rg', 'ls', 'test']
+const KOMENDA = new RegExp(`\`(?:(?:${[...KOMENDY_CLI, ...KOMENDY_GREP].join('|')})(?=[\\s\`])|\\./|[^\`\\s]+\\.(?:sh|mjs)\\b)[^\`]*\``)
+
+/** @param {Plan} plan @param {string} projekt @param {Wynik} w */
+function frontmatter(plan, projekt, w) {
+  const fm = plan.frontmatter
+  for (const pole of POLA_FRONTMATTERA) if (!(pole in fm)) w.bledy.push(`frontmatter: brak pola ${pole} (ścieżka albo null)`)
+  for (const pole of ['design_md', 'figma_spec', 'operator_prep', 'origin']) {
+    if (fm[pole] && typeof fm[pole] !== 'string') w.bledy.push(`frontmatter: ${pole} — oczekiwana ścieżka albo null, jest mapa`)
+  }
+  if (typeof fm.figma_screens === 'string') w.bledy.push('frontmatter: figma_screens — oczekiwana mapa nazwa: ścieżka albo {}')
+  const istnieje = (/** @type {string} */ s) => existsSync(join(projekt, sciezkaWzgledna(s) ?? ''))
+  const spec = poleTekstowe(plan, 'figma_spec')
+  if (spec && !istnieje(spec)) w.bledy.push(`frontmatter: figma_spec ${spec} — plik nie istnieje`)
+  for (const [nazwa, s] of ekranyFigmy(plan)) if (!istnieje(s)) w.bledy.push(`frontmatter: figma_screens.${nazwa} ${s} — plik nie istnieje`)
+  const prep = poleTekstowe(plan, 'operator_prep')
+  if (prep && !istnieje(prep)) w.bledy.push(`frontmatter: operator_prep ${prep} — checklista nie istnieje`)
+  const origin = poleTekstowe(plan, 'origin')
+  const zrodlo = sciezkaOrigin(origin)
+  if (zrodlo && !existsSync(join(projekt, zrodlo))) w.uwagi.push(`frontmatter: origin ${origin} — plik nie istnieje (popraw origin)`)
+}
+
+// Decyzje startowe planu (analiza vibersi audyt-paczki-1-2, decyzja operatora 2026-11-13): sesja nie oglaszala glebokosci (0.6),
+// researchu zewnetrznego (1.3) ani klasyfikacji UI (1.6 krok A). Zrodlem prawdy sa pola frontmattera; zdanie w sesji zostaje.
+const GLEBOKOSCI = ['Lekka', 'Standardowa', 'Głęboka']
+const TAK_NIE = /^(tak|nie)$/i
+// „tak — <powod>” / „nie: <powod>”; powod to jedno zdanie, wiec wymagamy choc kilku znakow po separatorze.
+const RESEARCH = /^(tak|nie)\s*[—–:,-]\s*(\S.{4,})$/i
+
+/**
+ * @param {Plan} plan @param {Jednostka[]} jednostki
+ * @param {Wynik} w przy zadaniu w toku wywolujacy podstawia uwagi w miejsce bledow
+ */
+function decyzjeStartowe(plan, jednostki, w) {
+  const glebokosc = poleTekstowe(plan, 'glebokosc')
+  if (!glebokosc || !GLEBOKOSCI.map((g) => bezOgonkow(g).toLowerCase()).includes(bezOgonkow(glebokosc).toLowerCase())) {
+    w.bledy.push(`frontmatter: glebokosc ${glebokosc ? `„${glebokosc}”` : 'brak albo puste'} — ${GLEBOKOSCI.join(' | ')} (dev-plan 0.6)`)
+  }
+  const research = poleTekstowe(plan, 'research_zewnetrzny')
+  if (!research || !RESEARCH.test(research)) {
+    w.bledy.push(`frontmatter: research_zewnetrzny ${research ? `„${research.slice(0, 60)}”` : 'brak albo puste'} — „tak — <powód>”`
+      + ' albo „nie — <powód>”, powód jednym zdaniem (dev-plan 1.3)')
+  }
+  const ui = poleTekstowe(plan, 'dotyka_ui')
+  if (!ui || !TAK_NIE.test(ui)) w.bledy.push(`frontmatter: dotyka_ui ${ui ? `„${ui}”` : 'brak albo puste'} — tak | nie (dev-plan 1.6 krok A)`)
+  const uiIu = jednostki.filter((iu) => /^feature-builder-(?:ui|fullstack)/.test(iu.delegate)).map((iu) => iu.id)
+  if (ui && /^nie$/i.test(ui) && uiIu.length) {
+    w.uwagi.push(`frontmatter: dotyka_ui: nie, a ${uiIu.join(', ')} idą do buildera UI albo fullstack — klasyfikacja wstępna nie`
+      + ' trzyma: dotyka_ui: tak i kroki B–F kontekstu designerskiego (dev-plan 1.6)')
+  }
+}
+
+/** @param {Plan} plan @param {Jednostka[]} jednostki @param {Wynik} w */
+function struktura(plan, jednostki, w) {
+  w.bledy.push(...plan.problemy)
+  plan.fazy.forEach((f, i) => {
+    const etykieta = Number.isNaN(f.numer) ? `faza „${f.oznaczenie}”` : `faza ${f.numer}`
+    if (f.numer !== i + 1) w.bledy.push(`${etykieta}: numeracja faz liczbami od 1 bez luk (1, 2, …)`)
+    if (f.poziom !== 3) w.bledy.push(`${etykieta}: nagłówek „### Faza N — nazwa” (planner szuka w planie „### Faza N”)`)
+    if (!f.zalezyOd) w.bledy.push(`${etykieta}: brak linii „Zależy od:”`)
+    if (!f.iu.length) w.bledy.push(`${etykieta}: brak Implementation Units`)
+    if (f.nazwa.includes('|')) w.bledy.push(`${etykieta}: znak | w nazwie psuje tabelę „## Fazy”`)
+  })
+  if (!plan.fazy.length && !plan.bezFazy.length) w.bledy.push('plan bez faz i Implementation Units')
+  for (const iu of plan.bezFazy) w.bledy.push(`${iu.id}: jednostka poza nagłówkiem „### Faza N — nazwa”`)
+  const powtorzone = jednostki.filter((iu, i) => jednostki.findIndex((j) => j.numer === iu.numer) !== i)
+  for (const iu of powtorzone) w.bledy.push(`${iu.id}: numer jednostki powtórzony — każda IU ma własny numer (odnośniki IU-K w zadaniach)`)
+  if (jednostki.some((iu, i) => iu.numer !== i + 1) && !powtorzone.length) {
+    w.uwagi.push(`numeracja IU z luką albo poza kolejnością (${jednostki.map((iu) => iu.id).join(', ')}) — dopuszczalne, odnośniki IU-K zostają`)
+  }
+}
+
+/** @param {Jednostka} iu @param {Wynik} w */
+function znaczniki(iu, w) {
+  const teksty = [...iu.scenariusze.map((s) => s.tresc), ...iu.weryfikacja.filter((v) => !/^\[Manual\]/.test(v.tresc)).map((v) => v.tresc),
+    ...iu.operator.map((o) => o.replace(/^\[Manual\]\s*/, '')),
+    ...iu.pliki.flatMap((p) => [p.sciezka, p.akcja, p.wymiary, p.werdykt]), iu.nazwa]
+  for (const t of teksty) {
+    const m = ZNACZNIKI.exec(t)
+    if (m) {
+      w.bledy.push(`${iu.id}: „${t.slice(0, 100)}” zawiera znacznik ${m[0]} poza początkiem pozycji — grepy prechecku, testera`
+        + ' i completion-gate liczą linie po znaczniku; napisz to słowami')
+    }
+  }
+}
+
+const NUMER_MIGRACJI = /\b\d{14}\b/g
+
+/**
+ * Numery migracji (14 cyfr z poczatku nazwy pliku) z pola Pliki jednostek planu i z supabase/migrations/ projektu.
+ * @param {Jednostka[]} jednostki @param {string} projekt @returns {Set<string>}
+ */
+function numeryMigracji(jednostki, projekt) {
+  const katalog = join(projekt, 'supabase/migrations')
+  const nazwy = [
+    ...jednostki.flatMap((iu) => iu.pliki.map((p) => p.sciezka).filter((s) => s.startsWith('supabase/migrations/')).map((s) => s.slice(20))),
+    ...(existsSync(katalog) ? readdirSync(katalog) : []),
+  ]
+  return new Set(nazwy.map((n) => /^\d{14}/.exec(n)?.[0]).filter((n) => n !== undefined))
+}
+
+/**
+ * Projekt uzywa Supabase: sygnal projektu (katalog supabase/ albo zaleznosc @supabase/supabase-js, stack/projekt.mjs) albo migracja
+ * w supabase/migrations/ w planie (pierwsza migracja projektu). Bez zadnego z sygnalow uwaga o migracji jest
+ * falszywa (znaleziska 2026-11-02 pkt 31: dashboard z klientem w frontend/ i migracjami Pythona w backend/).
+ * @param {Jednostka[]} jednostki @param {string} projekt @returns {boolean}
+ */
+function uzywaSupabase(jednostki, projekt) {
+  return projektUzywaSupabase(projekt) || jednostki.some((iu) => iu.pliki.some((p) => p.sciezka.startsWith('supabase/migrations/')))
+}
+
+/**
+ * Opis wspomina migracje bez pliku w polu Pliki. Linia z numerem migracji z planu albo z repo to odwolanie (vibersi etap 6a IU-3:
+ * „test pilnuje zgodnosci kodow z migracja” przy CHECK-ach migracji IU-1), nie nowa migracja.
+ * @param {Jednostka} iu @param {Set<string>} migracje @returns {boolean}
+ */
+function migracjaBezPliku(iu, migracje) {
+  if (iu.pliki.some((p) => p.sciezka.startsWith('supabase/migrations/'))) return false
+  const odwolanie = (/** @type {string} */ l) => [...l.matchAll(NUMER_MIGRACJI)].some((m) => migracje.has(m[0]))
+  return iu.opis.split('\n').some((l) => /migracj/i.test(l) && !odwolanie(l))
+}
+
+/** @param {Jednostka} iu @param {Set<string> | null} migracje numery migracji; null = projekt bez Supabase @param {Wynik} w */
+function pliki(iu, migracje, w) {
+  w.bledy.push(...iu.problemy.map((p) => `${iu.id}: ${p}`))
+  if (!iu.pliki.length) {
+    w.bledy.push(`${iu.id}: brak plików w polu Pliki`)
+    return
+  }
+  if (!iu.tabelaPlikow) w.bledy.push(`${iu.id}: pole Pliki bez tabeli (Akcja | Plik | Linie dziś → po | Wymiary | Werdykt)`)
+  for (const p of iu.pliki) {
+    if (akcja(p).includes('e2e seed') && !SEED.test(p.sciezka)) w.bledy.push(`${iu.id}: seed \`${p.sciezka}\` poza wzorcem ${katalogSeedow}/<flow>-seed.sql`)
+  }
+  if (iu.pliki.some((p) => /^wydziel/i.test(p.werdykt.trim())) && !iu.pliki.some((p) => akcja(p) === 'stworz')) {
+    w.bledy.push(`${iu.id}: werdykt „wydziel” bez wiersza Stwórz dla nowego modułu`)
+  }
+  if (iu.scenariusze.some((s) => s.typ === 'Unit') && !iu.pliki.some((p) => akcja(p).startsWith('test') || PLIK_TESTU.test(p.sciezka))) {
+    w.bledy.push(`${iu.id}: scenariusze [Unit] bez pliku testu w polu Pliki`)
+  }
+  if (migracje && migracjaBezPliku(iu, migracje)) {
+    w.uwagi.push(`${iu.id}: opis wspomina migrację, a pole Pliki nie ma pliku w supabase/migrations/`)
+  }
+}
+
+/**
+ * @param {Jednostka} iu @param {string} projekt @param {{ seedy: Set<string>, pliki: Set<string> }} planu seedy i pliki flow z pól Pliki planu
+ * @param {Map<string, string>} flowy
+ * @param {Wynik} w
+ */
+function scenariusze(iu, projekt, planu, flowy, w) {
+  for (const s of iu.scenariusze) {
+    if (!s.typ) w.bledy.push(`${iu.id}: scenariusz bez typu [Unit] / [E2E] / [Manual]: „${s.tresc}”`)
+    if (s.typ !== 'E2E') continue
+    if (!s.flow) w.bledy.push(`${iu.id}: [E2E] bez identyfikatora flow w backtickach na początku linii`)
+    else if (flowy.has(s.flow)) w.bledy.push(`${iu.id}: flow \`${s.flow}\` ma już linię [E2E] w ${flowy.get(s.flow)} — jeden scenariusz = jedna linia`)
+    else flowy.set(s.flow, iu.id)
+    if (s.seed && !planu.seedy.has(s.seed) && !existsSync(join(projekt, s.seed))) {
+      w.bledy.push(`${iu.id}: seed ${s.seed} — nie ma go w polu Pliki (Stwórz (e2e seed)) ani w repo`)
+    }
+    // D17: tester uruchamia plik flow, ale go nie pisze; bez wiersza w polu Pliki nikt go nie stworzy.
+    const plik = s.flow && plikFlow ? plikFlow.replace('<flow>', s.flow) : null
+    if (plik && !planu.pliki.has(plik) && !existsSync(join(projekt, plik))) {
+      w.bledy.push(`${iu.id}: flow \`${s.flow}\` — pliku ${plik} nie ma w polu Pliki (Stwórz (e2e flow)) ani w repo`)
+    }
+  }
+}
+
+/** @param {Jednostka} iu @param {Map<string, string>} flowy wszystkie flow scenariuszy planu @param {Wynik} w */
+function weryfikacja(iu, flowy, w) {
+  for (const v of iu.weryfikacja) {
+    if (/^\[Manual\]/.test(v.tresc)) {
+      w.bledy.push(`${iu.id}: Weryfikacja [Manual] — kroki człowieka idą do Operator checklist albo Scenariusze testowe`)
+    } else if (v.e2e) {
+      const runner = [...v.tresc.matchAll(/`([^`]+)`/g)].map((m) => m[1]).find((s) => /\.sh$/.test(s))
+      if (!runner) w.bledy.push(`${iu.id}: Weryfikacja [E2E] „${v.tresc.slice(0, 60)}” — tylko runner .sh w backtickach, niebędący scenariuszem`)
+      else if (flowy.has(runner.replace(/^.*\//, '').replace(/\.sh$/, ''))) {
+        w.bledy.push(`${iu.id}: Weryfikacja [E2E] \`${runner}\` to scenariusz z linii [E2E] — drugi przebieg tego samego flow`)
+      }
+    } else if (uruchamiaRunner(v.tresc)) {
+      w.bledy.push(`${iu.id}: Weryfikacja „${v.tresc.slice(0, 60)}” uruchamia runner E2E bez znacznika [E2E] — scribe uruchomiłby go`
+        + ` bez środowiska e2e; zapis „[E2E] \`${katalogRunnerow}/<runner>.sh\` — <stan>”`)
+    } else if (!KOMENDA.test(v.tresc)) {
+      w.bledy.push(`${iu.id}: Weryfikacja „${v.tresc.slice(0, 60)}” bez komendy w backtickach z listy, którą uruchamia scribe`
+        + ` (${KOMENDY_CLI.join(', ')}, ${KOMENDY_GREP.join(', ')}, ./skrypt, *.sh, *.mjs) — krok człowieka idzie do Operator checklist`)
+    }
+  }
+}
+
+// P25 C5 (vibersi etap 5): faza 1 z 6 IU (3 migracje, serwer, E2E, Sentry) — po podziale dwa mniejsze review.
+const PROG_IU_FAZY = 5
+
+/**
+ * @param {{ numer: number, iu: unknown[] }[]} fazy
+ * @returns {string[]} uwaga na kazda faze powyzej PROG_IU_FAZY jednostek
+ */
+export function uwagiRozmiaruFaz(fazy) {
+  return fazy.filter((f) => f.iu.length > PROG_IU_FAZY).map((f) => `faza ${f.numer}: ${f.iu.length} IU (próg ${PROG_IU_FAZY}) — review`
+    + ' takiej fazy czyta wszystkie zmiany naraz; podziel ją na granicy warstw, a migracje przepisujące istniejące funkcje bazy'
+    + ' postaw w fazie bez fundamentu serwera i klienta (dev-plan 3.3)')
+}
+
+// E5-14 (vibersi etapy 3–5, 51 IU): scenariusze IU ↔ ctx_max buildera Spearman +0,83, pliki ↔ tury +0,71; IU z 10+ plikami
+// tury p50 72 i ctx_max p50 227k, z 7–9 scenariuszami 80 i 263k (1–3 pliki: 27 i 89k).
+// Prog 8/12 (decyzja operatora): 7/10 lapal 29/51 IU, czyli srodek zwyklego rozmiaru; 8/12 — 17/51 najciezszych.
+// Analiza vibersi audyt-paczki-1-2 (decyzja operatora 2026-11-13): uwaga nie wystarczala — 6 IU ponad progiem bez decyzji
+// o podziale, a w poprawkach po przegladzie spojnosci urosly (IU-9 z 9 do 15 plikow). Jednostka ponad progiem bez pola
+// „Rozmiar” to blad; z polem — uwaga jak dawniej, a przyrost ponad liczby zapisane przy decyzji — osobna uwaga.
+const PROG_SCENARIUSZY_IU = 8
+const PROG_PLIKOW_IU = 12
+const DECYZJA_ROZMIARU = /^zostaje w ca[łl]o[śs]ci\b/i
+
+/**
+ * @param {{ id: string, scenariusze: unknown[], pliki: unknown[], rozmiar?: import('./pola-iu.mjs').Rozmiar | null }[]} jednostki
+ * @param {{ zadanieWToku?: boolean }} [opcje] zadanieWToku: plan zadania, ktore juz istnieje — brak decyzji to uwaga (zgodnosc wstecz)
+ * @returns {Wynik} blad na IU z co najmniej PROG_SCENARIUSZY_IU scenariuszami albo PROG_PLIKOW_IU plikami bez decyzji w polu
+ *   „Rozmiar” (albo z nieczytelnym polem); uwaga na IU ponad progiem z decyzja i na przyrost ponad liczby z decyzji
+ */
+export function rozmiarIu(jednostki, opcje = {}) {
+  /** @type {Wynik} */
+  const w = { bledy: [], uwagi: [] }
+  const bezDecyzji = opcje.zadanieWToku ? w.uwagi : w.bledy
+  for (const iu of jednostki) {
+    const s = iu.scenariusze.length
+    const p = iu.pliki.length
+    const ponad = s >= PROG_SCENARIUSZY_IU || p >= PROG_PLIKOW_IU
+    const r = iu.rozmiar ?? null
+    const opis = `${iu.id}: ${s} scenariuszy testowych, ${p} plików (próg: ${PROG_SCENARIUSZY_IU} scenariuszy albo ${PROG_PLIKOW_IU} plików)`
+    const wzor = `**Rozmiar:** zostaje w całości (${p} plików, ${s} scenariuszy) — <powód>`
+    const czytelne = r && DECYZJA_ROZMIARU.test(r.tresc) && r.pliki !== null && r.scenariusze !== null && r.powod
+    if (r && !czytelne) {
+      bezDecyzji.push(`${iu.id}: pole Rozmiar „${r.tresc.slice(0, 80)}” — zapis ${wzor}`
+        + ' (liczby z chwili decyzji i powód; dev-plan 3.3)')
+      continue
+    }
+    if (ponad && !r) {
+      bezDecyzji.push(`${opis} bez decyzji o rozmiarze — podziel ją na granicy zachowania`
+        + ` albo warstwy, jeśli obie części dają się zreviewować osobno, albo zapisz w jednostce ${wzor} (dev-plan 3.3)`)
+      continue
+    }
+    if (ponad) {
+      w.uwagi.push(`${opis}, decyzja „zostaje w całości” — builder takiej IU ma ~2–3× więcej tur i kontekstu (E5-14)`)
+    }
+    if (r && ((r.pliki ?? 0) < p || (r.scenariusze ?? 0) < s)) {
+      w.uwagi.push(`${iu.id}: urosła od decyzji o rozmiarze (${r.pliki} plików, ${r.scenariusze} scenariuszy → ${p} plików, ${s}`
+        + ' scenariuszy) — oceń podział od nowa i zaktualizuj liczby w polu Rozmiar (podział po przeglądzie spójności wymaga'
+        + ' ponownego przeglądu faz; dev-plan 3.3)')
+    }
+  }
+  return w
+}
+
+/**
+ * @param {Plan} plan sparsowany plan techniczny
+ * @param {string} projekt katalog projektu (sciezki planu sa wzgledne wobec niego)
+ * @param {{ wzgledemRepo?: boolean, zadanieWToku?: boolean }} [opcje] wzgledemRepo=false: bez regul budzetu i importerow wobec
+ *   stanu repo (bramka po fazie 1); zadanieWToku: plan zadania, ktore juz ma docs/active/ (bramka gotowosci, odswiez) — brak
+ *   decyzji startowych i decyzji o rozmiarze IU to uwagi, nie bledy (zadania zaplanowane przed tymi regulami)
+ * @returns {Wynik}
+ */
+export function sprawdzPlan(plan, projekt, opcje = {}) {
+  /** @type {Wynik} */
+  const w = { bledy: [], uwagi: [] }
+  const jednostki = [...plan.bezFazy, ...plan.fazy.flatMap((f) => f.iu)].sort((a, b) => a.start - b.start)
+  frontmatter(plan, projekt, w)
+  decyzjeStartowe(plan, jednostki, opcje.zadanieWToku ? { bledy: w.uwagi, uwagi: w.uwagi } : w)
+  struktura(plan, jednostki, w)
+  const plikiAkcji = (/** @type {string} */ znacznik) => new Set(jednostki.flatMap((iu) => iu.pliki.filter((p) => akcja(p).includes(znacznik)).map((p) => p.sciezka)))
+  const planu = { seedy: plikiAkcji('e2e seed'), pliki: plikiAkcji('e2e flow') }
+  /** @type {Map<string, string>} */
+  const flowy = new Map()
+  const migracje = uzywaSupabase(jednostki, projekt) ? numeryMigracji(jednostki, projekt) : null
+  for (const iu of jednostki) {
+    if (!DELEGACI.includes(iu.delegate)) {
+      w.bledy.push(`${iu.id}: Delegate to „${iu.delegate}” — dozwolone ${BUILDERZY.join(' | ')}`)
+    }
+    pliki(iu, migracje, w)
+    znaczniki(iu, w)
+    scenariusze(iu, projekt, planu, flowy, w)
+  }
+  for (const iu of jednostki) weryfikacja(iu, flowy, w)
+  for (const id of plan.wymagania.filter((r) => !jednostki.some((iu) => new RegExp(`\\b${r}\\b`).test(iu.wymagania)))) {
+    w.uwagi.push(`${id}: wymaganie ze „Śledzenia wymagań” bez IU (pole Wymagania żadnej jednostki go nie wymienia)`)
+  }
+  sprawdzBudzet(jednostki, projekt, w, opcje.wzgledemRepo !== false)
+  if (opcje.wzgledemRepo !== false) w.uwagi.push(...uwagiImporterow(jednostki, projekt))
+  w.uwagi.push(...uwagiRozmiaruFaz(plan.fazy))
+  const rozmiar = rozmiarIu(jednostki, opcje)
+  w.bledy.push(...rozmiar.bledy)
+  w.uwagi.push(...rozmiar.uwagi)
+  w.uwagi.push(...uwagiRejestru(plan, jednostki))
+  const makiety = sprawdzMakiety(plan, jednostki, projekt)
+  w.bledy.push(...makiety.bledy)
+  w.uwagi.push(...makiety.uwagi)
+  const czesci = sprawdzCzesci(plan, projekt)
+  w.bledy.push(...czesci.bledy)
+  w.uwagi.push(...czesci.uwagi)
+  const e2e = jednostki.some((iu) => iu.scenariusze.some((s) => s.typ === 'E2E'))
+  if (e2e && !existsSync(join(projekt, '.env.e2e')) && !poleTekstowe(plan, 'operator_prep')) {
+    w.bledy.push('plan ma scenariusze [E2E], a projekt nie ma .env.e2e — pozycja setupu w checkliście przygotowania (operator_prep) albo [E2E] → [Manual]')
+  }
+  return w
+}

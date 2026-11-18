@@ -1,0 +1,149 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# Konfiguracja CodeRabbit AI code review
+# Dokumentacja: https://docs.coderabbit.ai/reference/configuration
+
+language: pl-PL
+
+tone_instructions: "Pisz po polsku, konkretnie, 1-3 zdania. Łap realne bugi, type safety i bezpieczeństwo. Nie zgłaszaj nazewnictwa, układu Arrange-Act-Assert, docstringów ani DRY w testach. Cytuj regułę projektu, gdy kod ją łamie."
+
+early_access: false
+
+reviews:
+  profile: assertive # bardziej dociekliwy review (drugi tryb to 'chill')
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  review_status: true
+  collapse_walkthrough: false
+  changed_files_summary: true
+  sequence_diagrams: false
+  estimate_code_review_effort: true
+  assess_linked_issues: true
+  related_issues: true
+  related_prs: true
+  suggested_labels: true
+  suggested_reviewers: false
+
+  auto_review:
+    enabled: true
+    auto_incremental_review: true
+    drafts: false
+    base_branches:
+      - main
+    ignore_title_keywords:
+      - "WIP"
+      - "DO NOT MERGE"
+      # PR synca szablonu niesie samą maszynerię: bot pominął filtrami 146 ze 147 plików, a PR czekał na recenzję (aa-exam PR #52).
+      - "chore(szablon)"
+
+  # Check nie zgłasza defektu, a wraca w każdej recenzji i zajmuje decyzję operatora (aa-exam PR #51).
+  pre_merge_checks:
+    docstrings:
+      mode: "off"
+
+  # Filtry wspólne. STACK: dołącz dodatkowe wykluczenia z reference/stack-blocks.md.
+  path_filters:
+    - "!node_modules/**"
+    - "!docs/**"
+    - "!.claude/**"
+    # CLAUDE.md bot czyta jako wytyczne (code_guidelines), ale go nie recenzuje: jedna edycja wracala 4 turami (dashboard PR #110).
+    - "!**/CLAUDE.md"
+    - "!package-lock.json"
+    - "!*.lock"
+
+  # Instrukcje uniwersalne. STACK: dołącz bloki per-katalog z reference/stack-blocks.md.
+  path_instructions:
+    - path: "**/*.{ts,tsx}"
+      instructions: |
+        Trzymaj się reguł z {{CODING_RULES}}, {{STACK_RULES}} i CLAUDE.md.
+        Krytyczne:
+        - Zero `any` — używaj `unknown` + type guards
+        - Zero `!` (non-null assertion) — obsłuż null/undefined jawnie
+        - Zero `as` type assertions poza wyjątkami z {{STACK_RULES}}
+          (sekcja Type safety). `as const`
+          i `satisfies` nie są type assertion — nie zgłaszaj ich
+        - Próg rozmiaru z reguły 1. stosuj z tolerancją 20%: sygnalizuj
+          dopiero plik > 360 linii albo funkcję > 60 linii
+        - Boolean: prefix `is`/`has`/`should`/`can`
+        - Event handlers: prefix `handle`
+        - useEffect z async = AbortController w cleanup
+        - setTimeout/setInterval = clearTimeout/clearInterval w cleanup
+        Instrukcje węższych ścieżek niżej SUMUJĄ się z tą, nie nadpisują
+        jej — dlatego wyjątki od listy stoją tutaj:
+        - Pliki testowe (`*.test.*`, `*.spec.*`) i katalogi tekstów
+          interfejsu (`**/texts.ts`): próg rozmiaru ich nie dotyczy.
+        - W plikach testowych rzutowania w atrapach i fixture'ach
+          (`as unknown as Session`, `as never`) nie są uwagą.
+    - path: "**/*.test.{ts,tsx}"
+      instructions: |
+        Min 1 asercja per test. NIE mockuj testowanego kodu — mockuj tylko
+        zewnętrzne serwisy. NIE osłabiaj asercji żeby test przeszedł.
+    # Seedy E2E pisze pipeline (konwencja e2e/seeds/) — wpis zostaje także
+    # w świeżym projekcie, zanim pojawi się pierwszy seed
+    - path: "e2e/seeds/**/*.sql"
+      instructions: |
+        Seed E2E to granica zaufania: działa na bazie z prawdziwymi kontami.
+        Zanim usunie albo nadpisze dane (np. `delete from auth.users`),
+        potwierdza, że działa na bazie testowej, a konto pochodzi z tego
+        seeda (np. testowy e-mail), nie od użytkownika. Wstawiane kolumny
+        i wartości zgodne z ograniczeniami migracji; wartość nieosiągalna
+        w produkcji = uwaga.
+    - path: ".github/workflows/**/*.yml"
+      instructions: |
+        GitHub Actions: nigdy nie wstawiaj `${{ github.event.* }}`
+        bezpośrednio do `run:` — przekaż przez env z cudzysłowem. Pinuj
+        wersje akcji do major (np. @v4) lub SHA.
+
+  tools:
+    # JavaScript/TypeScript
+    eslint:
+      enabled: true
+    biome:
+      enabled: false # nie używamy biome — eslint wystarczy
+    oxc:
+      enabled: false # nie używamy oxlint — eslint wystarczy
+    # GitHub Actions + YAML
+    actionlint:
+      enabled: true
+    yamllint:
+      enabled: true
+    # Security
+    gitleaks:
+      enabled: true
+    trufflehog:
+      enabled: true
+    semgrep:
+      enabled: true
+    osvScanner:
+      enabled: true
+    # Disabled — szum dla nas
+    markdownlint:
+      enabled: false
+    languagetool:
+      enabled: false
+
+chat:
+  auto_reply: true
+  art: false
+
+knowledge_base:
+  opt_out: false
+  web_search:
+    enabled: true
+  code_guidelines:
+    enabled: true
+    # UZUPEŁNIJ: wpisz TYLKO pliki, które istnieją w projekcie docelowym.
+    filePatterns:
+      - "{{CODING_RULES}}"
+      - "{{STACK_RULES}}"
+      - "CLAUDE.md"
+  learnings:
+    scope: auto
+  issues:
+    scope: auto
+  pull_requests:
+    scope: auto
+
+code_generation:
+  docstrings:
+    language: pl-PL

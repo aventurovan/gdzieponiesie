@@ -1,0 +1,5 @@
+
+# Claude Code Starter
+.claude/settings.local.json
+.claude/.backups/
+.claude/tsc-cache/

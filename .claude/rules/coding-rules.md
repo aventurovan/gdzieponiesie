@@ -1,0 +1,148 @@
+---
+paths:
+  - "**/*.{ts,tsx,js,jsx,mjs,cjs}"
+  - "**/*.sql"
+---
+
+# Reguły kodu
+
+Reguły pisania, testowania i naprawiania kodu projektu. Do reguły odwołujesz się po nazwie sekcji. Mechanizmy zależne od stacku (limit czasu żądania, rozpoznanie trybu aplikacji, budżet paczki) opisuje `.claude/rules/stack.md` w sekcji o tej samej nazwie; przy sprzeczności w kodzie aplikacji wygrywa `stack.md`.
+
+## Pilnuje ESLint i bramki domknięcia
+
+W projekcie z konfiguracją ESLint z szablonu te reguły sprawdza maszyna; bez niej obowiązują tak samo. Błąd lintera naprawiasz w kodzie.
+
+- Próg rozmiaru: 360 linii na plik TS/TSX i 60 na funkcję (bez pustych linii i komentarzy); większe dzielisz na moduły i pod-funkcje.
+- Zamiast `any` — `unknown` z type guardem albo własny typ.
+- Bez pustego bloku `catch` i bez `console.*` w kodzie produkcyjnym.
+- Importy w grupach (wbudowane, zewnętrzne, lokalne), alfabetycznie; bez cykli importów między modułami.
+- Każdy promise ma `await`, `return`, `.catch` albo `void`.
+- Bez nieużywanych importów, zmiennych, funkcji i eksportów.
+- Test ma asercję `expect` poza warunkiem; wywołanie atrapy sprawdzasz z argumentami (`toHaveBeenCalledWith`).
+
+## Rozmiar i struktura
+
+- Funkcja z więcej niż 6 argumentami dostaje obiekt opcji.
+- Przy zagnieżdżeniu głębszym niż 2 poziomy wychodzisz wcześniej (early return).
+- Jedna odpowiedzialność na moduł, klasę i funkcję; funkcja działa na jednym poziomie abstrakcji; plik komponentu nie zawiera logiki biznesowej.
+
+## Testowanie
+
+- Czerwony test naprawiasz w implementacji. Test zmieniasz tylko wtedy, gdy zmienia się zamówione zachowanie, i nazywasz tę zmianę w raporcie albo commicie.
+- Test usuwasz razem z funkcjonalnością, którą sprawdza. Jedyny inny przypadek: zielony test niefalsyfikowalny, którego asercji nie da się przepisać — usuwasz go z wpisem w raporcie fazy. Czerwonego testu nie usuwasz.
+- Asercji nie osłabiasz (`toBe(429)` → `toBeDefined()`): słabsza asercja przepuszcza błąd, który test miał łapać.
+- Atrapy tylko dla usług zewnętrznych; testowany moduł działa naprawdę, inaczej test sprawdza atrapę. Atrapa usługi z kluczem testowym (Turnstile, reCAPTCHA, Stripe test mode, Resend test) ma też wariant odpowiedzi tego klucza wg dokumentacji dostawcy (brakujące pola, stałe wartości), a kod rozpoznający klucz testowy ma test na tej odpowiedzi — atrapa znająca tylko odpowiedź produkcyjną przepuszcza kod, który na e2e odrzuca każde żądanie. Kształt odpowiedzi w atrapie bierzesz z dokumentacji albo serializera SDK (pełny, per platforma, z realnymi stałymi), nie z pamięci.
+- Zanim zostawisz test, pytasz, czy przeszedłby, gdyby każda importowana funkcja zwracała `undefined`. Jeśli tak — dajesz jedno konkretne wejście i dosłowny wynik albo obserwowalny skutek. Wartość oczekiwaną wyprowadzasz niezależnie od implementacji (z jednostek, z ręcznego rachunku), nie tym samym helperem — fixture spójny z błędną implementacją przechodzi.
+- Każda nowa funkcja publiczna ma test ścieżki poprawnej i test błędu.
+- Unit testy pracują na małych fixture'ach w `tests/fixtures/`, nie na pełnych zbiorach danych.
+- Układ testu: Arrange-Act-Assert w blokach describe/it.
+- Testujesz zachowanie widoczne z zewnątrz (wynik, wyrenderowany interfejs, zapis w bazie), nie stan wewnętrzny; komponent — tak, jak używa go użytkownik (narzędzie: `.claude/rules/stack.md`, sekcja „Testowanie”).
+- Callback `waitFor` kończy każdą ścieżkę asercją albo `throw`; cichy `return` kończy czekanie przed zmianą stanu i daje test niestabilny.
+- Testy piszesz wertykalnie: jeden test → jego implementacja → następny test. Wszystkie testy naraz, a potem cała implementacja, dają testy kształtu (struktur i sygnatur), które przechodzą, gdy zachowanie się psuje.
+- Refaktoryzujesz przy zielonych testach; czerwony najpierw doprowadzasz do zielonego.
+
+## Organizacja kodu
+
+- Testy leżą tam, gdzie wskazuje `.claude/rules/stack.md`, sekcja „Organizacja kodu”.
+- Wspólny moduł wydzielasz przy trzecim użyciu tej samej logiki; przy dwóch prosta duplikacja jest lepsza niż abstrakcja. Wyjątek: stała albo kontrakt (schemat, typ, próg) w dwóch miejscach — od razu jedno źródło, bo kopie rozjeżdżają się po cichu.
+- Nową logikę wydzielasz do nowego modułu zamiast rozbudowywać istniejący, gdy rozbudowa utrudnia jego zrozumienie.
+- Konfiguracja tylko dla wartości, które się zmieniają.
+- Przed napisaniem funkcji szukasz istniejącej (grep).
+- Liczby o znaczeniu domenowym trzymasz w nazwanych stałych.
+- Wartości zależnej od czasu (`Date.now()`, bieżący rok) nie liczysz na poziomie modułu ani w stałej schematu — liczy się raz przy imporcie; w Zod idzie do `refine` / `superRefine`.
+
+## Obsługa błędów
+
+- Każdy `catch` (także `.catch(() => …)`) zostawia ślad dla operatora — log z kodem błędu i przyczyną — albo rzuca błąd dalej.
+- Rzucasz typowany błąd (klasa z kodem), nie string.
+- Łapiesz konkretne typy błędów, nie ogólny `Error`.
+- Wejście walidujesz na początku funkcji (fail fast).
+- Trasy API odpowiadają kopertą `{ data, error: { code, message } }`. W Hono `app.onError` mapuje `HTTPException` (status, message) na kopertę zamiast zwracać `err.getResponse()`; trasy z własnym protokołem (MCP, JSON-RPC) mają własny format.
+- Logujesz strukturalnie (JSON z kodem błędu; serwer: np. pino; klient: logger albo Sentry projektu).
+
+## Zakres zmian i bramki
+
+- Obsługujesz scenariusze, które mogą wystąpić w tym kodzie; dla niemożliwych nie dodajesz gałęzi, konfiguracji ani abstrakcji.
+- Zmianę szerszą niż zadanie (refaktor wielu plików) najpierw uzgadniasz z operatorem; w workflowie zgłaszasz ją jako następny krok.
+- Reguł z tego pliku i konfiguracji bramek (ESLint, tsconfig, progi, hooki) nie luzujesz, żeby zmiana przeszła, i nie wyłączasz ich w linii (`eslint-disable`, `@ts-expect-error`) — błąd naprawiasz w kodzie; regułę zmienia operator. Wiedzę projektu zapisuje compound według swojego skilla.
+- Zablokowane narzędzie albo hook to sygnał do zatrzymania i zgłoszenia, nie do obejścia innym narzędziem (sed, python -c).
+- Przy niejasnej instrukcji pytasz; w workflowie zwracasz status `blocked` z pytaniem.
+- Defekt w kodzie sprzed zmiany nie jest powodem do pominięcia — naprawiasz go albo zgłaszasz z miejscem (plik:linia).
+- Zanim zgłosisz koniec: typecheck, testy i lint dla zmienionych plików; pełny zestaw robi domknięcie fazy.
+- Commit robisz, gdy prosi o to operator albo polecenie workflowu; commit nie zawiera plików `.env` ani nowych TODO/FIXME.
+
+## Nazewnictwo
+
+- Boolean: prefiks `is` / `has` / `should` / `can` (`isActive`, `hasPermission`, `shouldRetry`).
+- Obsługa zdarzeń: prefiks `handle` (`handleClick`, `handleSubmit`).
+- Stałe: `UPPER_SNAKE_CASE`.
+- Typy i interfejsy: `PascalCase`, bez prefiksu `I`.
+- Funkcje i zmienne: `camelCase`.
+- Pliki: kebab-case (`user-service.ts`, nie `UserService.ts`), chyba że framework wymusza inną konwencję.
+- Nazwa mówi, co robi, nie jak (`getUserById`, nie `fetchAndParseAndValidateUser`); rozumiesz ją w 5 sekund.
+- Bez akronimów i skrótów poza powszechnie znanymi (`url`, `id` tak; `usrMgr` nie).
+
+## Zależności
+
+- Przed użyciem biblioteki sprawdzasz manifest (package.json, requirements.txt, go.mod).
+- Nową zależność zgłaszasz operatorowi (w workflowie: w odchyleniach); pierwszeństwo mają biblioteki, które projekt już ma.
+- Jeden menedżer pakietów — ten z lockfile projektu.
+- W monorepo pakiety importują się przez warstwę wspólną, nie bezpośrednio.
+- Wersje w package.json przypinasz tak, jak mówi `.claude/rules/stack.md`, sekcja „Zależności”.
+
+## Bezpieczeństwo
+
+- Sekrety tylko w zmiennych środowiska poza repo.
+- Klucz testowy dostawcy (odpowiedź bez `action`, host testowy) kod przyjmuje tylko w konfiguracji lokalnej albo e2e (jak ją rozpoznać: `.claude/rules/stack.md`, sekcja „Bezpieczeństwo”), z testem odmowy w konfiguracji produkcyjnej — bez warunku klucz testowy w produkcji omija weryfikację.
+- Sekretów i danych osobowych nie logujesz — także do Sentry: redakcja przed wysłaniem.
+- Sekret w obiekcie konfiguracji ma typ, który nie wypisuje wartości w reprezentacji tekstowej, logu ani komunikacie błędu walidacji (`SecretStr` w Pydantic, opakowanie z maską w `toString` i `toJSON`), bo błąd walidacji wypisuje cały obiekt do wyjścia testu i transkryptu agenta.
+- SQL tylko z parametrami, bez sklejania z danymi użytkownika.
+- Bez dynamicznego wykonania kodu z danych użytkownika.
+- Dane z zewnątrz (ciało, query, parametry ścieżki, nagłówki, cookies, pliki, odpowiedzi usług zewnętrznych) parsujesz schematem Zod przed użyciem; kopertę — `z.strictObject`. W Hono walidator (`validator` albo `zValidator`, jeśli projekt go ma) dostaje hook zwracający kopertę błędu; bez pasującego Content-Type ciało przychodzi jako `{}`, więc test na brak nagłówka.
+- Rola pochodzi z tabeli ról (w polityce przez funkcję albo claim z Custom Access Token Hook) albo z `app_metadata` ustawianego po stronie serwera; nie z `user_metadata` — użytkownik zmienia je przez `updateUser` — ani z top-level claimu `role`.
+- Polityki RLS: `(select auth.uid())` i `(select auth.jwt())` zamiast wywołania wprost (wynik liczony raz na zapytanie), indeks na kolumnie filtra polityki, każda polityka z `TO <rola>`.
+- Nowa tabela, widok albo sekwencja w schemacie API dostaje w tej samej migracji `GRANT` dla ról, które jej używają (zwykle `authenticated`; `anon` tylko świadomie) — Supabase nie wystawia już nowych obiektów automatycznie, a bez `GRANT` klient dostaje 403 mimo poprawnego RLS.
+- Funkcja `security definer`: `set search_path = ''`, EXECUTE odebrane od `public` i `anon` i nadane roli, która ją woła, kontrola uprawnień w ciele funkcji.
+- Skrypty migracyjne, ETL, importy i seedy walidują dane źródłowe jak wejście z granicy API — tożsamość (`from_user`/`owner_id` nie przepisujesz z danych źródłowych), limity długości, kształt payloadu, przynależność do zasobu. „Jednorazowy” albo „usuwany później” nie znosi walidacji ani nie obniża wagi findingu.
+- Uprawnienia minimalne — tyle, ile potrzeba.
+- `rm -rf` tylko za wyraźną zgodą operatora.
+- Produkcyjnej bazy nie zmieniasz bezpośrednio.
+- Każdy publiczny endpoint ma limit częstości, limit rozmiaru ciała i limit rozmiaru strony; operacje wrażliwe (logowanie, reset hasła, wysyłka) — osobny, niższy limit.
+
+## Type safety
+
+- Zamiast `as` — `satisfies` albo type guard; `as` tylko przy `as const` i w wyjątkach z `.claude/rules/stack.md`, sekcja „Type safety”.
+- Zamiast `!` — zawężenie albo early return.
+- Stan opisujesz unią dyskryminowaną, nie zestawem flag boolean. Awaria odczytu jest osobnym wariantem unii, nie pustym wynikiem (`[]`, `EMPTY_STATS`), który wygląda jak brak danych.
+- Kontekst bez sensownej wartości domyślnej tworzysz z `null`, a hook kontekstu poza providerem rzuca typowany błąd — domyślny obiekt stanu nie odróżnia się od ładowania.
+- Funkcje publiczne mają jawny typ zwracany; komponent React i hook, który zwraca wynik hooka biblioteki (`useQuery`, `useForm`), mają typ wywnioskowany z JSX albo z tego wywołania, bo ręczny zapis tylko go powtarza.
+- tsconfig: `strict` i `verbatimModuleSyntax`; w nowym projekcie także `erasableSyntaxOnly` (bez `enum`, `namespace` z kodem i parameter properties).
+
+## Performance
+
+- Złożoność O(n²) i gorsza ma komentarz, dlaczego nie da się lepiej.
+- Zapytanie do bazy w pętli to N+1 — zamiast tego batch, join albo include.
+- Pobierasz tylko potrzebny podzbiór: paginacja, limit, wybrane kolumny.
+- Nową zależność w kodzie klienta sprawdzasz pod kątem rozmiaru przed dodaniem; budżet paczki i ładowanie leniwe: `.claude/rules/stack.md`, sekcja „Performance”.
+- Optymalizujesz po pomiarze, nie na zapas.
+
+## Async i React
+
+- Efekt z async w cleanupie unieważnia wynik: flaga `ignore` albo abort i sprawdzenie, czy odpowiedź dotyczy bieżących parametrów. Gdy projekt ma bibliotekę cache (TanStack Query) albo loader routera, nowy kod pobierający dane idzie przez nią.
+- Gdy kilka źródeł async zapisuje ten sam stan (start sesji i `onAuthStateChange`, odczyt i mutacja), każdy zapis po `await` sprawdza licznik generacji w `useRef` albo identyfikator bieżącego kontekstu (`[zasób, użytkownik]`) — także przed każdym zapisem w pętli `await`; flaga `ignore` jednego efektu tego nie pokrywa. Sprzątanie danych użytkownika wisi na wygaśnięciu sesji, nie na przycisku „Wyloguj”.
+- Zależności efektu to prymitywy (`user?.id`), nie obiekt sesji ani użytkownika — Supabase tworzy nowy obiekt przy każdym odświeżeniu tokenu (TOKEN_REFRESHED), więc efekt na obiekcie uruchamia się co godzinę.
+- Hook danych użytkownika przy braku `userId` zwraca stan pusty synchronicznie, już w renderze; czyszczenie w efekcie to druga warstwa, bo między renderem a efektem widać dane poprzedniego użytkownika.
+- Każde wywołanie sieciowe ma limit czasu (mechanizm: `.claude/rules/stack.md`, sekcja „Async i React”). W efekcie, który przerywa żądanie w cleanupie, limit łączysz z flagą `ignore` zamiast łączyć dwa sygnały; w supabase-js limit daje opakowany `fetch` w `createClient({ global: { fetch } })`.
+- `setTimeout` i `setInterval` w efekcie mają cleanup (`clearTimeout`, `clearInterval`).
+- Stan ładowania z więcej niż jedną flagą opisujesz unią dyskryminowaną; formularz — `useActionState` / `useOptimistic` zamiast ręcznych flag.
+- Równoległe operacje, które mogą zawieść niezależnie — `Promise.allSettled`.
+- Sprzątanie i przejścia stanu w `Promise.finally()`, bez powielania logiki w gałęziach sukcesu i błędu.
+- Pętla `requestAnimationFrame` sprawdza flagę anulowania przed kolejną klatką.
+- Operację wykluczającą się z poprzednią (np. ładowanie podglądu) uruchamiasz dopiero po zakończeniu albo porażce poprzedniej.
+- Przy włączonym React Compilerze (jak go rozpoznać: `.claude/rules/stack.md`, sekcja „Async i React”) nie dodajesz ręcznie `useMemo` ani `useCallback` — kompilator memoizuje; wyjątek: stabilna zależność efektu.
+
+## Architektura
+
+- Warstwy: trasa (strona albo ekran) → komponent → hook → serwis → klient bazy; komponent nie woła bazy bezpośrednio.
+- Kontrakty API (interfejsy, typy propsów) są stabilne — zmiana interfejsu to świadoma decyzja, nie skutek uboczny refaktoru.
+- Nową zależność między modułami sprawdzasz pod kątem nieodwracalnego couplingu.
